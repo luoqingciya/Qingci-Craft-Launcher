@@ -5,8 +5,8 @@
 
 用 **Tauri 2 + Rust** 构建的跨平台、轻量级 Minecraft Java 版启动器。
 
-> 项目状态：**Phase 0（工程基建）**。功能尚未可用，当前仓库包含开发规划与 CI 门禁。
-> 完整路线图见 [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)。
+> 项目状态：**Phase 1（核心库）**。功能尚未可用，当前已建立版本元数据模型与 CI 门禁。
+> 完整路线图见 [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 设计取向
 
