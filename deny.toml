@@ -28,6 +28,13 @@ allow = [
 ]
 exceptions = []
 
+# 工作区自有 crate（publish = false）不参与许可证校验：
+# 本项目自身以 GPL-3.0 发布，无需再与依赖白名单比对。
+# 注意：这不会放宽对第三方依赖的要求——GPL 系许可证仍被排除在 allow 之外，
+# 引入 GPL 依赖时必须显式修改白名单，从而形成一次有意识的决策。
+[licenses.private]
+ignore = true
+
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
