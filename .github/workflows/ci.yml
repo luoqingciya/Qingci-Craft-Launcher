@@ -1,0 +1,175 @@
+name: CI
+
+# PR 门禁：任何改动在合并前必须通过本文件定义的全部 job。
+# 这些 job 名称同时是 main 分支保护的 required status checks，重命名需同步修改分支保护配置。
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  # 最快的反馈放在最前面：格式错误不该等三平台编译完才报出来。
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          # 与 rust-toolchain.toml 保持一致，升级时两处同改
+          toolchain: "1.99.1"
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99.1"
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: 安装 Linux 构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  # 三平台矩阵：跨平台项目最常见的失败模式是"本机通过、其他平台失败"，
+  # 因此测试必须在三个真实操作系统上跑，而不是只跑 Linux。
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99.1"
+      - uses: Swatinem/rust-cache@v2
+      - name: 安装 Linux 构建依赖
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+      - run: cargo test --workspace --all-features
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99.1"
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: 安装 Linux 构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+      - run: cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
+      - uses: codecov/codecov-action@v7
+        with:
+          files: lcov.info
+          # 覆盖率只做趋势观察，不阻断合并；达标要求由评审把关。
+          fail_ci_if_error: false
+
+  # 前端尚未落地（Phase 2）。步骤按 package.json 是否存在自动跳过，
+  # 引入前端后无需改动本文件即可生效。
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        if: hashFiles('package.json') != ''
+      - uses: actions/setup-node@v7
+        if: hashFiles('package.json') != ''
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: 安装依赖
+        if: hashFiles('package.json') != ''
+        run: pnpm install --frozen-lockfile
+      - name: 类型检查
+        if: hashFiles('package.json') != ''
+        run: pnpm exec tsc --noEmit
+      - name: Lint
+        if: hashFiles('package.json') != ''
+        run: pnpm exec eslint .
+      - name: 单元测试
+        if: hashFiles('package.json') != ''
+        run: pnpm exec vitest run
+      - name: 构建
+        if: hashFiles('package.json') != ''
+        run: pnpm exec vite build
+
+  deny:
+    name: deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  # 验证三平台是否真的能编译出 Tauri 应用。此 job 的存在是为了让
+  # "签名 / WebView 依赖 / 交叉编译"这类问题在合并前暴露，而不是在发版时。
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        if: hashFiles('src-tauri/tauri.conf.json') != ''
+        with:
+          toolchain: "1.99.1"
+      - uses: Swatinem/rust-cache@v2
+        if: hashFiles('src-tauri/tauri.conf.json') != ''
+      - name: 安装 Linux 构建依赖
+        if: hashFiles('src-tauri/tauri.conf.json') != '' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+      - uses: pnpm/action-setup@v6
+        if: hashFiles('package.json') != ''
+      - uses: actions/setup-node@v7
+        if: hashFiles('package.json') != ''
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: 安装前端依赖
+        if: hashFiles('package.json') != ''
+        run: pnpm install --frozen-lockfile
+      - name: 编译（不打包，仅验证可编译）
+        if: hashFiles('src-tauri/tauri.conf.json') != ''
+        run: pnpm tauri build --no-bundle
