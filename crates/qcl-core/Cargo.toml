@@ -1,0 +1,15 @@
+[package]
+name = "qcl-core"
+description = "Qingci Craft Launcher 领域核心：版本解析、依赖求值与启动参数组装"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

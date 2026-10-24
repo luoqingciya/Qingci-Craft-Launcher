@@ -1,0 +1,74 @@
+# 贡献指南
+
+本项目采用**严格的 PR 流程**：`main` 受保护，任何改动都必须通过分支 + Pull Request 合入。
+
+## 1. 环境准备
+
+| 依赖 | 版本 | 说明 |
+|---|---|---|
+| Rust | 1.99.1 | 由 `rust-toolchain.toml` 固定，`rustup` 首次执行 `cargo` 时自动安装 |
+| Node.js | ≥ 22 | 前端与 Tauri CLI |
+| pnpm | ≥ 10 | 包管理器，禁止混用 npm / yarn 产生其他锁文件 |
+
+Windows 需要 MSVC Build Tools；Linux 需要 `libwebkit2gtk-4.1-dev`、`libappindicator3-dev`、`librsvg2-dev`、`patchelf`。
+
+## 2. 提交前自检
+
+提交 PR 前，本地必须通过以下命令（与 CI 完全一致）：
+
+```bash
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace --all-features
+cargo deny check
+```
+
+## 3. 分支命名
+
+| 前缀 | 用途 | 示例 |
+|---|---|---|
+| `feat/` | 新功能 | `feat/core-rules-eval` |
+| `fix/` | 缺陷修复 | `fix/java-path-with-spaces` |
+| `refactor/` | 不改变行为的重构 | `refactor/downloader-split` |
+| `docs/` | 文档 | `docs/development-plan` |
+| `ci/` | CI / 构建 | `ci/pr-gates` |
+| `chore/` | 依赖、配置、脚手架 | `chore/repo-bootstrap` |
+
+分支生命周期目标 ≤ 3 天。大特性请拆成**堆叠 PR（stacked PR）**，在描述中注明依赖顺序与目标分支。
+
+## 4. 提交信息规范
+
+遵循 [Conventional Commits](https://www.conventionalcommits.org/)：
+
+```
+<type>(<scope>): <subject>
+```
+
+允许的 `type`：`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
+常用 `scope`：`core` `net` `auth` `java` `app` `ui` `loader` `mods` `ci` `deps`
+
+PR 标题必须符合该格式，因为合并时使用 **Squash merge**，PR 标题即最终的提交信息。
+
+## 5. PR 硬性规则
+
+1. **一 PR 一事**。功能变更与重构不得混在同一个 PR。
+2. **有效 diff ≤ 400 行**（不含测试、生成代码、锁文件）。超限须拆分。
+   仓库基建类 PR（模板、配置文件、文档）不受此限，但须在描述中说明构成。
+3. **必须含测试**：新逻辑要有单测；修 bug 要有能复现该 bug 的回归测试。
+4. **必须更新文档**：涉及架构、IPC 契约或配置格式的变更，同步更新 `docs/`；重大技术选型补一篇 ADR（`docs/adr/`）。
+5. **禁止提交**：注释掉的代码、`dbg!` / `println!` 调试输出、密钥与本地绝对路径、未使用的依赖。
+6. **CI 全绿 + 完成 PR 模板自检清单**后才可请求评审。
+
+## 6. 评审与合并
+
+- 至少 1 个 approval，且必须解决全部评审意见。
+- 分支必须与 `main` 同步（`Require branches to be up to date`）。
+- 使用 **Squash and merge**，合并后自动删除分支。
+- 禁止 force push 到受保护分支。
+
+## 7. 代码风格
+
+- Rust 格式由 `rustfmt.toml` 决定，不接受格式化争论。
+- `clippy -D warnings` 视为错误；确有必要的例外需在代码处 `#[allow(...)]` 并写明理由。
+- 错误类型：库层用 `thiserror` 定义可分类错误，应用层用 `anyhow` 附加上下文。
+- 公共 API 必须有文档注释（`missing_docs` 为 warning，CI 会将其提升为错误）。

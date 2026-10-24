@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 报告安全漏洞
+    url: https://github.com/luoqingciya/Qingci-Craft-Launcher/security/advisories/new
+    about: 请勿通过公开 Issue 披露安全问题
+  - name: 阅读开发规划
+    url: https://github.com/luoqingciya/Qingci-Craft-Launcher/blob/main/docs/DEVELOPMENT_PLAN.md
+    about: 提交建议前先确认是否已在路线图中
