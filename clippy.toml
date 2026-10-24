@@ -1,0 +1,2 @@
+# 与 Cargo.toml 的 rust-version 保持一致，供 clippy 判断可用语法与标准库 API。
+msrv = "1.90"

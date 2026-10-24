@@ -1,0 +1,8 @@
+# 仅使用 stable 通道支持的选项。nightly-only 选项（如 imports_granularity）
+# 会让 `cargo fmt` 在 stable 上输出警告，故不启用。
+edition = "2024"
+max_width = 100
+tab_spaces = 4
+newline_style = "Unix"
+use_field_init_shorthand = true
+use_try_shorthand = true

@@ -1,0 +1,9 @@
+# 固定工具链：保证本机与 CI 使用完全相同的编译器版本，
+# 避免"本机通过、CI 失败"这类平台差异问题。
+#
+# 升级方式：单独提 PR 修改 channel，并同步 .github/workflows/ci.yml 中的 RUST_VERSION。
+# MSRV 基线为 Rust 1.90（tauri 2.12.5 的要求），此处固定在更新的稳定版。
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

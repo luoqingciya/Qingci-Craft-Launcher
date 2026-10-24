@@ -1,0 +1,39 @@
+# cargo-deny 配置（适配 cargo-deny 0.20.x）
+# 校验目标：许可证合规、依赖来源可信、无重复/通配依赖。
+# 安全公告（advisories）使用默认策略，不额外配置。
+
+[licenses]
+# 白名单策略：未列出的许可证一律拒绝。
+# GPL-3.0 项目可兼容下列宽松/弱著佐权许可证；MPL-2.0 与 GPLv3 兼容。
+confidence-threshold = 0.9
+# 白名单中暂未出现的许可证只记录、不报错，避免骨架期误报。
+unused-allowed-license = "allow"
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+    "Unlicense",
+    "BSL-1.0",
+    "MPL-2.0",
+    "CDLA-Permissive-2.0",
+    "OpenSSL",
+]
+exceptions = []
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

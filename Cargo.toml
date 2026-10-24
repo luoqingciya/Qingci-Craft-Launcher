@@ -1,0 +1,32 @@
+[workspace]
+resolver = "3"
+members = ["crates/qcl-core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "GPL-3.0-only"
+repository = "https://github.com/luoqingciya/Qingci-Craft-Launcher"
+authors = ["luoqingci <luoqingci@luoqingciya.com.cn>"]
+publish = false
+
+[workspace.dependencies]
+# 第三方依赖统一在此声明版本，成员 crate 通过 `xxx.workspace = true` 引入，
+# 保证整个 workspace 的版本只有一个来源。
+# Phase 1 起按需补充：serde / serde_json / tokio / reqwest / sha1 / thiserror / tracing。
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "warn"
+
+[profile.release]
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+strip = true
+# panic = "abort"：需先确认 Tauri 插件不依赖 catch_unwind，Phase 2 验证通过后再启用。
