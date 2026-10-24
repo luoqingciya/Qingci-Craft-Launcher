@@ -33,6 +33,14 @@
 - 只调用官方公开端点：`piston-meta.mojang.com`、`resources.download.minecraft.net`、`api.minecraftservices.com`、`launchermeta.mojang.com`。
 - 项目沿用已有 `LICENSE`（GPL-3.0）。依赖许可证由 `cargo-deny` 白名单管控；Tauri 生态（Apache-2.0 / MIT）与 GPLv3 兼容，无需特殊处理。
 
+### 1.4 已确认决策（2026-10-24）
+
+| # | 待决事项 | 结论 | 落地影响 |
+|---|---|---|---|
+| D1 | 是否支持 Forge / NeoForge | **支持** | Phase 4 保留对应 PR，拆为独立 PR 置于末尾；Fabric / Quilt 先行交付 |
+| D2 | 前端框架 | **React 19** | 取代原 Svelte 5 方案；首屏 gzip 预算上调至 150 KB，换取生态与可维护性 |
+| D3 | 是否先验证三平台打包链路 | **是** | Phase 0 先产出 `v0.0.1-alpha` 三平台安装包，再进入业务开发 |
+
 ---
 
 ## 2. 技术选型与依据
@@ -42,7 +50,7 @@
 | 层次 | 选型 | 依据 |
 |---|---|---|
 | 应用框架 | **Tauri 2.12.x** | 复用系统 WebView（Windows 用 WebView2），Rust 后端常驻内存仅约 10 MB 量级，包体积远小于 Electron |
-| 前端 | **Svelte 5 + TypeScript + Vite + Tailwind CSS v4** | 编译期框架，产物 gzip 后约 10–15 KB；无 VDOM 运行时开销；与 Tauri 的 IPC 集成简单 |
+| 前端 | **React 19 + TypeScript + Vite + Tailwind CSS v4** | 生态成熟、类型定义完善、可维护性优先；配合路由级代码分割把首屏 gzip 控制在 150 KB 内（相对 12 MB 安装包影响 < 1.5%），体积代价可接受 |
 | 异步运行时 | `tokio`（`rt-multi-thread`, `fs`, `process`, `sync`） | 下载并发与子进程管理是核心路径 |
 | HTTP | `reqwest`（`rustls-tls`, `http2`, `gzip`） | 用 rustls 规避 OpenSSL，三平台交叉编译无需额外系统依赖 |
 | 序列化 | `serde` + `serde_json` | Mojang 全部接口为 JSON |
@@ -52,7 +60,7 @@
 | 令牌存储 | `keyring`（v3） | 走系统凭据库（Windows Credential Manager / macOS Keychain / Linux Secret Service），**不落明文** |
 | 配置存储 | JSON 文件（`serde`） | 实例量级为个位数到几十，引入 SQLite 属于过度设计 |
 | 单实例 / 自动更新 | `tauri-plugin-single-instance` / `tauri-plugin-updater` | 官方插件，签名校验内置 |
-| 前端测试 | `vitest` + `@testing-library/svelte` | 与 Vite 同源，零额外构建配置 |
+| 前端测试 | `vitest` + `@testing-library/react` | 与 Vite 同源，零额外构建配置 |
 | E2E | WebdriverIO + `tauri-driver` | 官方推荐路径；仅 Windows/Linux 纳入 CI（macOS 需要额外辅助功能授权） |
 
 ### 2.2 上游实测数据（2026-10-24 采集，作为设计输入）
@@ -60,6 +68,7 @@
 | 项目 | 实测值 | 对设计的影响 |
 |---|---|---|
 | `tauri` crate 最新稳定版 | **2.12.5**（2026-10-21 发布） | 锁 `2.12`，不使用 `3.0.0-alpha.5` |
+| `tauri` 2.12.5 的 MSRV / edition | **Rust 1.90** / **edition 2024** | workspace 的 `rust-version` 与 `edition` 以此为准 |
 | 官方最新正式版 | **26.3**（2026-09-15）；快照 `26.4-snapshot-5` | 版本号已是 `26.x` 新方案，**不得硬编码版本列表**，必须完全由 manifest 驱动 |
 | 26.3 的 `javaVersion` | `majorVersion: 25`，`component: java-runtime-epsilon` | 需要按版本动态选择 JRE（8 / 17 / 21 / 25） |
 | 26.3 依赖规模 | 114 个 libraries，client jar 39.6 MB，assetIndex `34` 合计 462 MB | 首次启动下载量约 500 MB，下载子系统是性能关键路径 |
@@ -77,7 +86,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  Svelte 5 + Vite（系统 WebView）                             │
+│  React 19 + Vite（系统 WebView）                             │
 │  Views: 版本列表 / 实例管理 / 账号 / 设置 / 控制台            │
 └──────────────▲───────────────────────────┬───────────────────┘
                │ invoke(cmd)               │ emit(event)
@@ -268,14 +277,14 @@ Qingci-Craft-Launcher/
 ├─ crates/
 │  ├─ qcl-core/  qcl-net/  qcl-auth/  qcl-java/  qcl-cli/
 ├─ src-tauri/          # Tauri 应用（Cargo 包名 qcl-app）
-├─ src/                # Svelte 前端
+├─ src/                # React 前端
 ├─ docs/
 │  ├─ DEVELOPMENT_PLAN.md   # 本文件
 │  └─ adr/                  # 架构决策记录（每个重大选型一篇）
 ├─ Cargo.toml          # workspace
 ├─ rust-toolchain.toml # 固定工具链，CI 与本机一致
 ├─ clippy.toml / rustfmt.toml / deny.toml
-├─ package.json / vite.config.ts / svelte.config.js
+├─ package.json / vite.config.ts / tsconfig.json / eslint.config.js
 ├─ CONTRIBUTING.md  SECURITY.md  CHANGELOG.md
 └─ LICENSE (GPL-3.0)
 ```
@@ -290,17 +299,19 @@ Qingci-Craft-Launcher/
 
 | PR | 内容 | 验收标准 |
 |---|---|---|
-| #1 | `chore: 仓库基建` — README、CONTRIBUTING、PR/Issue 模板、CODEOWNERS、`.gitignore`、`rust-toolchain.toml`、rustfmt/clippy 配置、dependabot | 模板生效，`cargo fmt --check` 可跑 |
+| #1 | `chore: 仓库基建 + workspace 骨架` — README、CONTRIBUTING、SECURITY、PR/Issue 模板、CODEOWNERS、`.gitignore`、`rust-toolchain.toml`、rustfmt/clippy/deny 配置、dependabot，以及根 `Cargo.toml` 与 `qcl-core` 空 crate | 模板生效；`cargo fmt --check` 与 `cargo test` 在本地和 CI 均可执行 |
 | #2 | `ci: PR 质量门禁` — fmt / clippy / test 三平台矩阵 / 前端检查 / cargo-deny | 三平台 job 全绿，耗时 < 12 min |
 | #3 | `ci: 发布流水线 + Tauri 最小骨架` — hello-world 窗口 + tag 触发三平台打包 | 打 `v0.0.1-alpha` 能产出三平台未签名安装包（draft release） |
 
 > Phase 0 的 PR #3 同时验证"打包链路是否真的三平台可用"。这一步不放后面做，因为签名、WebView 依赖、交叉编译问题一旦在 Phase 4 才暴露，返工成本最高。
+>
+> PR #1 之所以包含 workspace 骨架：没有可编译的代码，CI 门禁就是空转。骨架只放最小可编译单元，领域模型仍按 PR #4 起逐步落地。
 
 ### Phase 1 · 核心库（无 UI，纯 Rust，CI 全覆盖）
 
 | PR | 内容 | 验收标准 |
 |---|---|---|
-| #4 | `feat(core): workspace + 领域模型 + manifest 拉取与缓存` | 单测覆盖缓存命中/失效；`insta` 快照固定 26.3 解析结果 |
+| #4 | `feat(core): 领域模型 + manifest 拉取与缓存` | 单测覆盖缓存命中/失效；`insta` 快照固定 26.3 解析结果 |
 | #5 | `feat(core): rules 求值 + 库解析 + classpath 组装` | 对 26.3 真实 json 断言库数量与顺序；覆盖 pre-1.13 `minecraftArguments` 分支 |
 | #6 | `feat(net): 并发下载器` — 校验/重试/进度/断点 | `wiremock` 注入 500、超时、哈希不匹配三种故障，断言重试与失败语义 |
 | #7 | `feat(core): 资产索引 + natives 解压 + 参数模板替换` | 断言 `virtual` 资产映射与 `${}` 变量全部替换完毕（无残留 `${`） |
@@ -350,7 +361,7 @@ Qingci-Craft-Launcher/
 | `fmt` | ubuntu-latest | `cargo fmt --all --check`（最快失败，先跑） |
 | `clippy` | ubuntu-latest | `cargo clippy --workspace --all-targets -- -D warnings` |
 | `test` | **matrix: ubuntu / windows / macos** | `cargo test --workspace --all-features`；ubuntu 额外跑 `cargo llvm-cov` 并上传 Codecov |
-| `frontend` | ubuntu-latest | `pnpm install --frozen-lockfile` → `svelte-check` → `eslint` → `vitest run` → `vite build` |
+| `frontend` | ubuntu-latest | `pnpm install --frozen-lockfile` → `tsc --noEmit` → `eslint` → `vitest run` → `vite build` |
 | `deny` | ubuntu-latest | `cargo deny check`（许可证白名单 + 已知漏洞 + 重复依赖） |
 | `build` | **matrix: 三平台** | `pnpm tauri build --no-bundle`（PR 只编译不打包，约 6–8 min） |
 
@@ -427,7 +438,7 @@ tag v0.1.0
 | 格式 | `cargo fmt` | 零差异 |
 | 静态检查 | `cargo clippy -D warnings` | 零告警 |
 | 单测 | `cargo test` | 全绿；`qcl-core` / `qcl-net` 行覆盖 ≥ 70% |
-| 前端类型 | `svelte-check` | 零错误 |
+| 前端类型 | `tsc --noEmit` | 零错误 |
 | 依赖合规 | `cargo deny` | 许可证白名单；无已知 RUSTSEC 漏洞 |
 | 依赖更新 | Dependabot | 每周分组 PR，CI 全绿自动合并（patch 级） |
 | 发布体积 | CI 断言 | 超预算则 Release job 失败 |
@@ -441,7 +452,7 @@ tag v0.1.0
 | 项 | 预算 | 手段 |
 |---|---|---|
 | Release profile | `opt-level = "s"`、`lto = "fat"`、`codegen-units = 1`、`strip = true` | 体积优先；`panic = "abort"` 需先确认插件不依赖 `catch_unwind`，验证后再开 |
-| 前端产物 | 首屏 JS ≤ 60 KB gzip | Svelte 编译期框架 + 按需引入图标 |
+| 前端产物 | 首屏 JS ≤ 150 KB gzip | React 19 + 路由级 `lazy()` 代码分割 + 按需引入图标 |
 | 启动路径 | 冷启动不阻塞 UI：manifest 请求异步化，先渲染本地缓存 | 首屏读缓存 → 后台刷新 |
 | 下载吞吐 | 16 并发；单文件大流量走 Range | 避免小文件挤占连接池 |
 | 事件频率 | 进度事件 200 ms 节流 | 防止 IPC 洪泛拖垮 WebView |
@@ -456,7 +467,7 @@ tag v0.1.0
 | R2 | Windows 未签名 exe 被 Defender/SmartScreen 拦截 | 用户流失 | 尽早接入代码签名（SignPath 开源免费额度 / Azure Trusted Signing） |
 | R3 | macOS 公证需要付费开发者账号 | 无法分发 | Phase 0 即确认账号状态；未就绪则先发未签名 dmg 并在 README 说明 `xattr` 处理 |
 | R4 | WebView2 在旧版 Win10 缺失 | 启动白屏 | 使用 Tauri 的 `downloadBootstrapper` 安装模式 |
-| R5 | Forge/NeoForge 安装器流程复杂（需先起 JVM 跑 installer） | 工期不可控 | 排在 Phase 4 末尾，独立 PR；Fabric/Quilt 先行覆盖主流需求 |
+| R5 | Forge/NeoForge 安装器流程复杂（需先起 JVM 跑 installer） | 工期不可控 | **已决策支持（D1）**：拆为独立 PR 置于 Phase 4 末尾，Fabric/Quilt 先行交付；若显著超期则先发布不含 Forge 的版本 |
 | R6 | 微软 OAuth 需要注册 Azure 应用（client_id） | 阻塞登录 | 立即注册（`consumers` 租户、允许公共客户端流、无需 secret） |
 | R7 | 中文/空格路径导致 JVM 参数解析失败 | 区域性高频问题 | 全程参数数组传参；CI 增加含空格与中文的路径用例 |
 | R8 | 首次下载 500 MB 体验差 | 留存 | 分阶段进度 + 可中断续传 + 复用已有 `.minecraft` 资源（去重校验） |
@@ -479,6 +490,6 @@ tag v0.1.0
 | ADR | 主题 | 状态 |
 |---|---|---|
 | ADR-0001 | 选择 Tauri 2 而非 Electron | 待撰写（Phase 0） |
-| ADR-0002 | 前端选用 Svelte 5 | 待撰写（Phase 0） |
+| ADR-0002 | 前端选用 React 19 | 待撰写（Phase 0） |
 | ADR-0003 | 配置用 JSON 而非 SQLite | 待撰写（Phase 2） |
 | ADR-0004 | 认证采用设备码流程 | 待撰写（Phase 3） |
