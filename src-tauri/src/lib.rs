@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use qcl_install::fetch_manifest;
 use qcl_net::HttpDownloader;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
 use crate::game::GameSession;
@@ -61,6 +61,15 @@ impl AppState {
             .map_err(|_| "内部状态锁已中毒".to_owned())?;
         Ok((Arc::clone(&inner.downloader), inner.game_dir.clone()))
     }
+
+    /// 取一份设置副本。启动游戏时需要玩家名、内存与 Java 选择。
+    fn settings_snapshot(&self) -> Result<settings::Settings, String> {
+        let inner = self
+            .inner
+            .read()
+            .map_err(|_| "内部状态锁已中毒".to_owned())?;
+        Ok(inner.settings.clone())
+    }
 }
 
 /// 传给前端的设置视图。
@@ -75,6 +84,45 @@ struct SettingsView {
     is_custom: bool,
     /// 默认目录不可用时的回退原因。
     fallback_reason: Option<String>,
+    /// 实际使用的玩家名（已回退到默认值）。
+    player_name: String,
+    /// 最大堆内存（MB）。`None` 表示采用官方默认值。
+    memory_mb: Option<u32>,
+    /// 显式指定的 Java 可执行文件。`None` 表示自动选择。
+    java_path: Option<String>,
+    /// 允许的内存范围，前端据此校验输入。
+    memory_range: [u32; 2],
+}
+
+/// 前端提交的设置。
+///
+/// 全量提交而不是逐字段：设置页有「保存」按钮，一次写清更符合用户预期，
+/// 也避免 `Option` 无法区分「没传」与「清空」。
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SettingsInput {
+    /// 空字符串或 `None` 表示恢复默认目录。
+    game_dir: Option<String>,
+    /// 空字符串表示使用默认玩家名。
+    player_name: Option<String>,
+    /// `None` 表示采用官方默认内存。
+    memory_mb: Option<u32>,
+    /// `None` 表示自动选择 Java。
+    java_path: Option<String>,
+}
+
+/// 一个可用的 Java 安装，供设置页下拉选择。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct JavaOption {
+    /// 可执行文件路径（同时作为选项的值）。
+    path: String,
+    /// 版本字符串，如 `26.0.2`。
+    version: String,
+    /// 主版本号，便于界面按需求标注。
+    major: u32,
+    /// 来源描述，如「JAVA_HOME」「启动器管理」。
+    source: String,
 }
 
 /// 传给前端的版本条目。
@@ -128,6 +176,14 @@ impl AppState {
                 .to_string(),
             is_custom: inner.settings.game_dir.is_some(),
             fallback_reason: inner.fallback_reason.clone(),
+            player_name: inner.settings.player_name_or_default(),
+            memory_mb: inner.settings.memory_mb,
+            java_path: inner
+                .settings
+                .java_path
+                .as_ref()
+                .map(|path| path.display().to_string()),
+            memory_range: [settings::MIN_MEMORY_MB, settings::MAX_MEMORY_MB],
         }
     }
 }
@@ -168,26 +224,36 @@ fn get_settings(state: tauri::State<'_, AppState>) -> Result<SettingsView, Strin
     Ok(state.view(&inner))
 }
 
-/// 设置游戏目录。传入 `None` 或空串表示恢复默认。
+/// 保存设置。整体提交，一次写清。
 #[tauri::command]
-async fn set_game_dir(
+async fn save_settings(
     state: tauri::State<'_, AppState>,
-    path: Option<String>,
+    input: SettingsInput,
 ) -> Result<SettingsView, String> {
-    let requested = path
-        .map(|raw| raw.trim().to_owned())
-        .filter(|raw| !raw.is_empty())
-        .map(PathBuf::from);
+    let normalize = |value: Option<String>| {
+        value
+            .map(|raw| raw.trim().to_owned())
+            .filter(|raw| !raw.is_empty())
+    };
+
+    let requested_dir = normalize(input.game_dir).map(PathBuf::from);
 
     // 自定义目录不可写时直接报错，而不是静默回退——用户刚选完就回退会让人困惑。
-    if let Some(dir) = &requested {
+    if let Some(dir) = &requested_dir {
         settings::ensure_writable(dir)
             .map_err(|error| format!("{} 不可写：{error}", dir.display()))?;
     }
 
     let saved = settings::Settings {
-        game_dir: requested,
+        game_dir: requested_dir,
+        player_name: normalize(input.player_name),
+        memory_mb: input.memory_mb,
+        java_path: normalize(input.java_path).map(PathBuf::from),
     };
+
+    // 校验放在写盘之前：任何一项不合法都不该留下半套配置。
+    saved.validate()?;
+
     let (game_dir, fallback_reason) =
         resolve_game_dir(&saved, &state.install_dir, &state.fallback_dir);
 
@@ -206,6 +272,34 @@ async fn set_game_dir(
     inner.downloader = Arc::new(downloader);
 
     Ok(state.view(&inner))
+}
+
+/// 列出本机可用的 Java，供设置页选择。
+///
+/// 探测顺序与自动选择一致（JAVA_HOME → PATH → 自管目录 → 平台常见目录），
+/// 因此下拉里的顺序本身就能说明「自动会选哪个」。
+#[tauri::command]
+fn list_java(state: tauri::State<'_, AppState>) -> Result<Vec<JavaOption>, String> {
+    let (_, game_dir) = state.context()?;
+
+    let installations = qcl_java::detect(&[], Some(&game_dir.join("runtime")));
+
+    Ok(installations
+        .into_iter()
+        .map(|installation| JavaOption {
+            path: installation.executable.display().to_string(),
+            version: installation.version.raw.clone(),
+            major: installation.version.major,
+            source: match installation.source {
+                qcl_java::JavaSource::Explicit => "手动指定",
+                qcl_java::JavaSource::JavaHome => "JAVA_HOME",
+                qcl_java::JavaSource::Path => "PATH",
+                qcl_java::JavaSource::Managed => "启动器管理",
+                qcl_java::JavaSource::PlatformDirectory => "系统安装目录",
+            }
+            .to_owned(),
+        })
+        .collect())
 }
 
 /// 启动应用。
@@ -251,7 +345,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_versions,
             get_settings,
-            set_game_dir,
+            save_settings,
+            list_java,
             install::install_game_version,
             game::launch_game,
             game::stop_game,

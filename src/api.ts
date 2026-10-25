@@ -31,6 +31,34 @@ export interface SettingsView {
   isCustom: boolean;
   /** 默认目录不可用时的回退原因。 */
   fallbackReason: string | null;
+  /** 实际使用的玩家名（已回退到默认值）。 */
+  playerName: string;
+  /** 最大堆内存（MB）；`null` 表示采用官方默认值。 */
+  memoryMb: number | null;
+  /** 显式指定的 Java 可执行文件；`null` 表示自动选择。 */
+  javaPath: string | null;
+  /** 允许的内存范围 `[最小, 最大]`，前端据此校验。 */
+  memoryRange: [number, number];
+}
+
+/** 提交给 Rust 的设置。空字符串表示「用默认值」。 */
+export interface SettingsInput {
+  gameDir: string | null;
+  playerName: string | null;
+  memoryMb: number | null;
+  javaPath: string | null;
+}
+
+/** 一个可用的 Java 安装。 */
+export interface JavaOption {
+  /** 可执行文件路径，同时作为选项的值。 */
+  path: string;
+  /** 版本字符串，如 `26.0.2`。 */
+  version: string;
+  /** 主版本号。 */
+  major: number;
+  /** 来源描述，如「JAVA_HOME」。 */
+  source: string;
 }
 
 /** 安装结果摘要。 */
@@ -91,13 +119,14 @@ export function getSettings(): Promise<SettingsView> {
   return invoke<SettingsView>("get_settings");
 }
 
-/**
- * 设置游戏目录。
- *
- * `path` 传 `null` 表示恢复默认（安装目录下的 `game`）。
- */
-export function setGameDir(path: string | null): Promise<SettingsView> {
-  return invoke<SettingsView>("set_game_dir", { path });
+/** 保存设置。整体提交，一次写清。 */
+export function saveSettings(input: SettingsInput): Promise<SettingsView> {
+  return invoke<SettingsView>("save_settings", { input });
+}
+
+/** 列出本机可用的 Java。 */
+export function listJava(): Promise<JavaOption[]> {
+  return invoke<JavaOption[]>("list_java");
 }
 
 /** 安装指定版本。幂等，可重复调用。 */

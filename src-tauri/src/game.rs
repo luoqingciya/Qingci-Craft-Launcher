@@ -10,11 +10,12 @@
 //! 2. 把日志与退出结果转成事件推给界面
 //! 3. 让界面上的「停止」能真正终止进程
 
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use qcl_core::launch::{AccountInfo, LaunchLayout, LaunchOptions, build_launch_command};
-use qcl_java::{detect, select};
+use qcl_java::{JavaSource, detect, inspect, select};
 use qcl_platform::launch_context;
 use qcl_runtime::{LogStream, spawn};
 use serde::Serialize;
@@ -111,6 +112,7 @@ pub async fn launch_game(
     version: String,
 ) -> Result<(), String> {
     let (downloader, game_dir) = state.context()?;
+    let settings = state.settings_snapshot()?;
 
     if state.game.lock().map_err(|_| "状态锁已中毒")?.is_some() {
         return Err("游戏已在运行".to_owned());
@@ -120,33 +122,57 @@ pub async fn launch_game(
 
     // 选 Java。缺版本时明确失败——用低版本硬跑只会得到 UnsupportedClassVersionError。
     let required = meta.required_java_major().unwrap_or(8);
-    let installations = detect(&[], Some(&game_dir.join("runtime")));
-    let Some(java) = select(&installations, required) else {
-        let found = if installations.is_empty() {
-            "（无）".to_owned()
-        } else {
-            installations
-                .iter()
-                .map(|java| java.version.to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        };
-        return Err(format!(
-            "需要 Java {required}，但本机未找到。已探测到：{found}"
-        ));
+    let java = match &settings.java_path {
+        // 手动指定时仍要校验版本：「我选的」不等于「能跑」，否则错误会推迟到游戏启动后。
+        Some(executable) => {
+            let home = executable
+                .parent()
+                .and_then(Path::parent)
+                .ok_or_else(|| format!("无法从 {} 推断 Java 目录", executable.display()))?;
+            let installation = inspect(home, JavaSource::Explicit)
+                .ok_or_else(|| format!("无法识别指定的 Java：{}", executable.display()))?;
+
+            if installation.version.major < required {
+                return Err(format!(
+                    "指定的 Java {} 低于该版本所需的 {required}，请更换或改为自动选择",
+                    installation.version
+                ));
+            }
+            installation
+        }
+        None => {
+            let installations = detect(&[], Some(&game_dir.join("runtime")));
+            let Some(selected) = select(&installations, required) else {
+                let found = if installations.is_empty() {
+                    "（无）".to_owned()
+                } else {
+                    installations
+                        .iter()
+                        .map(|java| java.version.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                };
+                return Err(format!(
+                    "需要 Java {required}，但本机未找到。已探测到：{found}"
+                ));
+            };
+            selected.clone()
+        }
     };
 
     let mut layout = LaunchLayout::standard(&meta.id);
     // `${game_directory}` 传绝对路径：游戏会用它拼存档与日志路径。
     layout.game_dir = game_dir.display().to_string();
 
+    let launch_options = launch_options_from(&settings);
+
     let command = build_launch_command(
         &java.executable,
         &meta,
         &launch_context(),
         &layout,
-        &offline_account(),
-        &LaunchOptions::default(),
+        &offline_account(&settings.player_name_or_default()),
+        &launch_options,
     )
     .map_err(|error| format!("组装启动命令失败：{error}"))?;
 
@@ -245,14 +271,63 @@ pub fn game_status(state: tauri::State<'_, AppState>) -> Result<GameStatus, Stri
 }
 
 /// 离线账户。账号体系尚未接入，先用占位凭据。
-fn offline_account() -> AccountInfo {
+fn offline_account(player_name: &str) -> AccountInfo {
     AccountInfo {
-        player_name: "Player".to_owned(),
+        player_name: player_name.to_owned(),
         // 全零 UUID 是离线模式的常见约定；正版服务器会拒绝，单机与离线服可用。
         uuid: "00000000000000000000000000000000".to_owned(),
         access_token: "0".to_owned(),
         user_type: "legacy".to_owned(),
         client_id: None,
         xuid: None,
+    }
+}
+
+/// 把设置映射成启动选项。
+///
+/// 单独抽出来是为了能测：这段映射是「设置页改了内存，游戏却还用默认值」这类
+/// 缺陷的唯一发生地，而它本身是纯函数。
+fn launch_options_from(settings: &crate::settings::Settings) -> LaunchOptions {
+    LaunchOptions {
+        memory_mb: settings.memory_mb,
+        ..LaunchOptions::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{launch_options_from, offline_account};
+    use crate::settings::{DEFAULT_PLAYER_NAME, Settings};
+
+    #[test]
+    fn memory_setting_reaches_launch_options() {
+        let settings = Settings {
+            memory_mb: Some(6144),
+            ..Settings::default()
+        };
+        assert_eq!(launch_options_from(&settings).memory_mb, Some(6144));
+    }
+
+    #[test]
+    fn unset_memory_keeps_official_default() {
+        // `None` 表示「交给官方 default-user-jvm」，不能变成 0 或某个写死的值。
+        assert_eq!(launch_options_from(&Settings::default()).memory_mb, None);
+    }
+
+    #[test]
+    fn player_name_reaches_offline_account() {
+        assert_eq!(offline_account("清辞").player_name, "清辞");
+        assert_eq!(
+            offline_account(DEFAULT_PLAYER_NAME).player_name,
+            DEFAULT_PLAYER_NAME
+        );
+    }
+
+    #[test]
+    fn offline_account_has_no_real_credentials() {
+        let account = offline_account("x");
+        assert_eq!(account.access_token, "0");
+        assert_eq!(account.user_type, "legacy");
+        assert!(account.client_id.is_none());
     }
 }
