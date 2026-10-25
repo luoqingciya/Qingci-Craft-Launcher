@@ -4,7 +4,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
 
 import {
   GAME_EXIT_EVENT,
@@ -14,17 +13,20 @@ import {
   getSettings,
   installGameVersion,
   launchGame,
+  listJava,
   listVersions,
-  setGameDir,
+  saveSettings,
   stopGame,
   type GameExitEvent,
   type GameLogEvent,
   type GameStatus,
   type InstallProgressEvent,
+  type JavaOption,
+  type SettingsInput,
   type SettingsView,
   type VersionSummary,
 } from "./api";
-import { GameDirectory, InstallProgressBar } from "./components/GameDirectory";
+import { InstallProgressBar, SettingsPanel } from "./components/SettingsPanel";
 import { LogPanel } from "./components/LogPanel";
 import { appendLog, type LogEntry, type LogStreamKind } from "./lib/logs";
 import { VersionList } from "./components/VersionList";
@@ -38,7 +40,9 @@ type LoadState =
 export default function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [settings, setSettings] = useState<SettingsView | null>(null);
-  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [javaOptions, setJavaOptions] = useState<JavaOption[]>([]);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -80,8 +84,18 @@ export default function App() {
       })
       .catch((cause: unknown) => {
         if (!cancelled) {
-          setError(String(cause));
+          setSettingsError(String(cause));
         }
+      });
+
+    listJava()
+      .then((options) => {
+        if (!cancelled) {
+          setJavaOptions(options);
+        }
+      })
+      .catch(() => {
+        // 探测失败不影响设置页其它项，用户仍可手动填路径。
       });
 
     gameStatus()
@@ -145,25 +159,26 @@ export default function App() {
     };
   }, [pushLog]);
 
-  const applyGameDir = useCallback(async (path: string | null) => {
-    setSettingsBusy(true);
-    setError(null);
+  const saveSettingsInput = useCallback(async (input: SettingsInput) => {
+    setSavingSettings(true);
+    setSettingsError(null);
     try {
-      setSettings(await setGameDir(path));
-      setMessage("游戏目录已更新");
+      setSettings(await saveSettings(input));
+      setMessage("设置已保存");
     } catch (cause: unknown) {
-      setError(String(cause));
+      setSettingsError(String(cause));
     } finally {
-      setSettingsBusy(false);
+      setSavingSettings(false);
     }
   }, []);
 
-  const pickDirectory = useCallback(async () => {
-    const picked = await open({ directory: true, multiple: false, title: "选择游戏目录" });
-    if (typeof picked === "string") {
-      await applyGameDir(picked);
+  const refreshJava = useCallback(async () => {
+    try {
+      setJavaOptions(await listJava());
+    } catch (cause: unknown) {
+      setSettingsError(String(cause));
     }
-  }, [applyGameDir]);
+  }, []);
 
   const install = useCallback(async () => {
     if (!selected) {
@@ -223,12 +238,20 @@ export default function App() {
         <span className="text-xs text-[var(--color-text-secondary)]">{runningLabel}</span>
       </header>
 
-      <GameDirectory
-        settings={settings}
-        busy={settingsBusy}
-        onChange={pickDirectory}
-        onReset={() => void applyGameDir(null)}
-      />
+      {settings ? (
+        <SettingsPanel
+          settings={settings}
+          javaOptions={javaOptions}
+          saving={savingSettings}
+          error={settingsError}
+          onSave={(input) => void saveSettingsInput(input)}
+          onRefreshJava={() => void refreshJava()}
+        />
+      ) : (
+        <section className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] px-4 py-3 text-xs text-[var(--color-text-secondary)]">
+          {settingsError ? `读取设置失败：${settingsError}` : "正在读取设置…"}
+        </section>
+      )}
 
       <section className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
