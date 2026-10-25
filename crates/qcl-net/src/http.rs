@@ -83,6 +83,34 @@ impl HttpDownloader {
         Ok(path)
     }
 
+    /// 把文本内容读入内存，用于清单类小文件（版本 JSON、运行时清单等）。
+    ///
+    /// 与 [`DownloadOps::fetch_once`] 的区别：不落盘、不做 SHA-1 校验。
+    /// 需要校验时由调用方拿返回值自行比对——清单文件很小，留在内存里更直接。
+    pub async fn fetch_text(&self, url: &str) -> Result<String, DownloadError> {
+        let response = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(|error| DownloadError::Network(error.to_string()))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let code = status.as_u16();
+            return Err(if is_retryable_status(code) {
+                DownloadError::Network(format!("HTTP {code}"))
+            } else {
+                DownloadError::Other(format!("HTTP {code}"))
+            });
+        }
+
+        response
+            .text()
+            .await
+            .map_err(|error| DownloadError::Network(error.to_string()))
+    }
+
     /// 主动校验磁盘上的文件是否与期望摘要一致。
     ///
     /// 与 [`DownloadOps::is_present`] 的区别：本方法**总是**做完整哈希，

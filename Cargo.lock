@@ -946,9 +946,13 @@ dependencies = [
 name = "qcl-java"
 version = "0.1.0"
 dependencies = [
+ "qcl-net",
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror",
+ "tokio",
+ "wiremock",
 ]
 
 [[package]]

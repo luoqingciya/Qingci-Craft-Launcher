@@ -1,6 +1,6 @@
 [package]
 name = "qcl-java"
-description = "Qingci Craft Launcher 的 Java 运行时探测与选择"
+description = "Qingci Craft Launcher 的 Java 运行时探测、选择与安装"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,8 +13,13 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# 同时给出 version 与 path：只写 path 会被 cargo-deny 判为通配依赖（wildcard）。
+qcl-net = { version = "0.1.0", path = "../qcl-net" }
 serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
 tempfile = "3.27.0"
+wiremock = "0.6.5"
