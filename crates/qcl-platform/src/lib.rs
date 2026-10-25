@@ -14,6 +14,10 @@
 //! 但与官方启动器不一致，性能特征也不同。
 
 use std::collections::BTreeMap;
+
+// Linux 分支读 /proc 而不起进程，所以这个导入只在 Windows 与 macOS 上需要。
+// 无条件导入会让 `-D warnings` 在 Linux CI 上直接失败——本机（Windows）编译不出来。
+#[cfg(any(windows, target_os = "macos"))]
 use std::process::Command;
 
 use qcl_core::version::{LaunchContext, current_arch, current_os_name};
