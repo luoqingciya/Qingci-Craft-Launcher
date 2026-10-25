@@ -12,7 +12,7 @@ pub mod version;
 
 pub use assets::{
     ASSET_OBJECTS_BASE, AssetObject, AssetObjects, LEGACY_INDEX_IDS, is_legacy_index,
-    maps_to_resources, object_relative_path, object_url,
+    is_safe_logical_path, maps_to_resources, object_relative_path, object_url,
 };
 pub use error::{CoreError, Result};
 pub use version::{

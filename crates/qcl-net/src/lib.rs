@@ -15,6 +15,9 @@ pub use executor::{
     execute_plan,
 };
 pub use http::HttpDownloader;
-pub use plan::{DownloadPlan, DownloadTask, asset_index_task, plan_assets, plan_version_files};
+pub use plan::{
+    DownloadPlan, DownloadTask, asset_index_task, plan_assets, plan_assets_with_base,
+    plan_version_files,
+};
 pub use retry::{RetryPolicy, is_retryable_status};
 pub use verify::{Sha1Hasher, hex_sha1, verify_sha1};

@@ -943,6 +943,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "qcl-install"
+version = "0.1.0"
+dependencies = [
+ "qcl-core",
+ "qcl-net",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "wiremock",
+]
+
+[[package]]
 name = "qcl-java"
 version = "0.1.0"
 dependencies = [

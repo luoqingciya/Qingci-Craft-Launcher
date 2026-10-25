@@ -1,0 +1,25 @@
+[package]
+name = "qcl-install"
+description = "Qingci Craft Launcher 安装编排：资产安装与旧版虚拟目录展开"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# 同时给出 version 与 path：只写 path 会被 cargo-deny 判为通配依赖（wildcard）。
+qcl-core = { version = "0.1.0", path = "../qcl-core" }
+qcl-net = { version = "0.1.0", path = "../qcl-net" }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"
+wiremock = "0.6.5"

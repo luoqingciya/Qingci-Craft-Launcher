@@ -5,8 +5,8 @@
 //! - `asset-index-1.7.10.json` 是 1.7.10 的索引（72 KB，686 个逻辑路径 / 674 个对象）
 
 use qcl_core::assets::{
-    ASSET_OBJECTS_BASE, AssetObjects, LEGACY_INDEX_IDS, is_legacy_index, maps_to_resources,
-    object_relative_path, object_url,
+    ASSET_OBJECTS_BASE, AssetObjects, LEGACY_INDEX_IDS, is_legacy_index, is_safe_logical_path,
+    maps_to_resources, object_relative_path, object_url,
 };
 use qcl_core::version::VersionMeta;
 
@@ -157,4 +157,50 @@ fn empty_index_is_not_an_error() {
     assert!(index.is_empty());
     assert_eq!(index.total_size(), 0);
     assert_eq!(index.unique_hash_count(), 0);
+}
+
+#[test]
+fn logical_paths_must_stay_inside_the_target_directory() {
+    for good in [
+        "icons/icon_16x16.png",
+        "minecraft/sounds/block/stone/break1.ogg",
+        "minecraft/lang/zh_cn.json",
+        "a.txt",
+    ] {
+        assert!(is_safe_logical_path(good), "`{good}` 应被接受");
+    }
+
+    for bad in [
+        "",
+        "/etc/passwd",
+        "../evil.txt",
+        "minecraft/../../evil.txt",
+        "a/./b",
+        "a//b",
+        "C:/Windows/system32/evil.dll",
+        "minecraft\\..\\..\\evil.txt",
+        "minecraft/sounds/a\0.ogg",
+        "trailing/",
+    ] {
+        assert!(!is_safe_logical_path(bad), "`{bad}` 必须被拒绝");
+    }
+}
+
+#[test]
+fn official_logical_paths_are_all_safe() {
+    // 官方索引里不应出现任何会被拒绝的键——这条同时是对校验规则的反向约束：
+    // 若规则过严，这里会失败。
+    for raw in [INDEX_26_3, INDEX_1_7_10] {
+        let index = parse(raw);
+        let unsafe_keys: Vec<&str> = index
+            .objects
+            .keys()
+            .map(String::as_str)
+            .filter(|key| !is_safe_logical_path(key))
+            .collect();
+        assert!(
+            unsafe_keys.is_empty(),
+            "存在不安全的官方键：{unsafe_keys:?}"
+        );
+    }
 }

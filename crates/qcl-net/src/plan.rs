@@ -172,6 +172,20 @@ pub fn asset_index_task(meta: &VersionMeta, assets_dir: &str) -> Option<Download
 /// 哈希非法的条目被跳过：路径由哈希拼出，不做校验等于允许索引文件指定任意写入位置。
 #[must_use]
 pub fn plan_assets(index: &AssetObjects, assets_dir: &str) -> DownloadPlan {
+    plan_assets_with_base(index, assets_dir, ASSET_OBJECTS_BASE)
+}
+
+/// 同 [`plan_assets`]，但可指定对象仓库的根地址。
+///
+/// 镜像站与测试都依赖这一点：对象 URL 不是配置项而是常量的话，
+/// 想验证下载路径就只能真的访问公网。
+#[must_use]
+pub fn plan_assets_with_base(
+    index: &AssetObjects,
+    assets_dir: &str,
+    objects_base: &str,
+) -> DownloadPlan {
+    let base = objects_base.trim_end_matches('/');
     let mut tasks = Vec::with_capacity(index.object_count());
     let mut seen: BTreeSet<String> = BTreeSet::new();
 
@@ -185,7 +199,7 @@ pub fn plan_assets(index: &AssetObjects, assets_dir: &str) -> DownloadPlan {
             continue;
         }
         tasks.push(DownloadTask {
-            url: format!("{ASSET_OBJECTS_BASE}/{relative}"),
+            url: format!("{base}/{relative}"),
             path,
             sha1: object.hash.clone(),
             size: object.size,
