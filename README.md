@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/branding/app-icon.png" width="120" alt="Qingci Craft Launcher">
+</p>
+
 # Qingci Craft Launcher
 
 [![CI](https://github.com/luoqingciya/Qingci-Craft-Launcher/actions/workflows/ci.yml/badge.svg)](https://github.com/luoqingciya/Qingci-Craft-Launcher/actions/workflows/ci.yml)
@@ -5,8 +9,8 @@
 
 用 **Tauri 2 + Rust** 构建的跨平台、轻量级 Minecraft Java 版启动器。
 
-> 项目状态：**Phase 1（核心库）**。功能尚未可用，当前已建立版本元数据模型与 CI 门禁。
-> 完整路线图见 [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+> 项目状态：**Phase 1（核心库）**。核心逻辑已成型（版本解析、规则求值、classpath 与参数组装、下载层、Java 探测），
+> 尚未接入 UI。完整路线图见 [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 设计取向
 
@@ -27,10 +31,11 @@
 ## 仓库结构
 
 ```
-crates/          Rust 领域层（qcl-core / qcl-net / qcl-auth / qcl-java / qcl-cli）
+crates/          Rust 领域层（qcl-core / qcl-net / qcl-java / qcl-auth / qcl-cli）
 src-tauri/       Tauri 应用层（薄适配，不含业务算法）
 src/             React 前端
 docs/            开发规划与架构决策记录
+assets/          品牌资产（应用图标源文件，各平台图标由 tauri icon 生成）
 ```
 
 ## 本地开发
