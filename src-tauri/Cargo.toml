@@ -23,6 +23,10 @@ qcl-core = { version = "0.1.0", path = "../crates/qcl-core" }
 qcl-net = { version = "0.1.0", path = "../crates/qcl-net" }
 qcl-platform = { version = "0.1.0", path = "../crates/qcl-platform" }
 tauri = { version = "2.12.5", features = [] }
+tauri-plugin-dialog = "2.8.3"
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"
