@@ -17,4 +17,7 @@ pub use meta::{
     Argument, ArgumentValue, Arguments, Artifact, AssetIndex, Extract, JavaVersion, Library,
     LibraryDownloads, Logging, LoggingClient, VersionDownloads, VersionMeta,
 };
-pub use rules::{OsRule, Rule, RuleAction, VersionRange};
+pub use rules::{
+    LaunchContext, OsRule, Rule, RuleAction, VersionRange, current_arch, current_os_name,
+    evaluate_rules,
+};

@@ -11,8 +11,9 @@ pub mod version;
 pub use error::{CoreError, Result};
 pub use version::{
     Argument, ArgumentValue, Arguments, Artifact, AssetIndex, Extract, JavaVersion, LatestVersions,
-    Library, LibraryDownloads, Logging, LoggingClient, OsRule, Rule, RuleAction, VersionDownloads,
-    VersionEntry, VersionManifest, VersionMeta, VersionRange, VersionType,
+    LaunchContext, Library, LibraryDownloads, Logging, LoggingClient, OsRule, Rule, RuleAction,
+    VersionDownloads, VersionEntry, VersionManifest, VersionMeta, VersionRange, VersionType,
+    current_arch, current_os_name, evaluate_rules,
 };
 
 /// 启动器标识，用于 Minecraft 的 `--versionType` 参数与日志前缀。

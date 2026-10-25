@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::manifest::VersionType;
-use super::rules::Rule;
+use super::rules::{LaunchContext, Rule, evaluate_rules};
 
 /// 单个版本的完整元数据。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,6 +173,16 @@ pub struct Library {
     pub extract: Option<Extract>,
 }
 
+impl Library {
+    /// 该依赖库是否适用于给定环境。
+    ///
+    /// 无 `rules` 的库全平台适用；有 `rules` 的按「默认拒绝、按序匹配」语义求值。
+    #[must_use]
+    pub fn applies_to(&self, context: &LaunchContext) -> bool {
+        evaluate_rules(self.rules.as_deref(), context)
+    }
+}
+
 /// 依赖库的下载信息。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LibraryDownloads {
@@ -248,6 +258,47 @@ impl ArgumentValue {
             Self::Many(values) => values,
         }
     }
+}
+
+impl Argument {
+    /// 解析该参数在给定环境下产生的值；返回空切片表示不生效。
+    #[must_use]
+    pub fn resolve<'a>(&'a self, context: &LaunchContext) -> &'a [String] {
+        match self {
+            Self::Plain(value) => std::slice::from_ref(value),
+            Self::Conditional { rules, value } => {
+                if evaluate_rules(rules.as_deref(), context) {
+                    value.as_slice()
+                } else {
+                    &[]
+                }
+            }
+        }
+    }
+}
+
+impl Arguments {
+    /// 解析 game 参数，仅保留当前环境生效的部分。
+    ///
+    /// 顺序与官方 JSON 一致——参数顺序会影响 JVM 与主类的解析，不能重排。
+    #[must_use]
+    pub fn resolve_game(&self, context: &LaunchContext) -> Vec<&str> {
+        resolve_arguments(&self.game, context)
+    }
+
+    /// 解析 jvm 参数，仅保留当前环境生效的部分。
+    #[must_use]
+    pub fn resolve_jvm(&self, context: &LaunchContext) -> Vec<&str> {
+        resolve_arguments(&self.jvm, context)
+    }
+}
+
+fn resolve_arguments<'a>(arguments: &'a [Argument], context: &LaunchContext) -> Vec<&'a str> {
+    arguments
+        .iter()
+        .flat_map(|argument| argument.resolve(context))
+        .map(String::as_str)
+        .collect()
 }
 
 /// 日志配置。
