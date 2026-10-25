@@ -38,12 +38,16 @@ best_time=""
 
 echo "探测 apt 镜像（发行版代号：${CODENAME}）"
 for mirror in "${CANDIDATES[@]}"; do
-  # 状态码与耗时一起取：只看耗时会把「秒回 404」当成最快的源。
-  read -r code elapsed < <(
+  # 用命令替换而不是 `read < <(...)`：`curl -w` 不输出换行，`read` 会返回 1，
+  # 配上 `set -e` 会让脚本在第一次探测就退出（CI 上真的踩到了）。
+  measured=$(
     curl -s -o /dev/null -m 8 \
       -w '%{http_code} %{time_total}' \
-      "${mirror}/dists/${CODENAME}/Release" || echo "000 99"
+      "${mirror}/dists/${CODENAME}/Release" 2>/dev/null || echo "000 99"
   )
+  # 状态码与耗时一起取：只看耗时会把「秒回 404」当成最快的源。
+  code="${measured%% *}"
+  elapsed="${measured##* }"
 
   if [[ "$code" == "200" ]]; then
     printf '  %-52s %6.2fs  ok\n' "$mirror" "$elapsed"
@@ -53,7 +57,7 @@ for mirror in "${CANDIDATES[@]}"; do
       best_mirror="$mirror"
     fi
   else
-    printf '  %-52s %6.2fs  HTTP %s\n' "$mirror" "$elapsed" "$code"
+    printf '  %-52s %6.2fs  HTTP %s\n' "$mirror" "$elapsed" "${code:-?}"
   fi
 done
 
