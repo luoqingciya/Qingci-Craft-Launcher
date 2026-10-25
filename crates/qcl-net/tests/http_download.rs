@@ -263,3 +263,69 @@ async fn executor_skips_files_that_are_already_valid() {
     assert_eq!(report.skipped, 1);
     assert_eq!(report.downloaded, 0);
 }
+
+#[tokio::test]
+async fn fetch_size_falls_back_to_content_range() {
+    // 真实 CDN 常在分块传输时不给 Content-Length（Fabric 的 Cloudflare 就是这样），
+    // 所以 HEAD 拿不到长度时必须退到 `Range: bytes=0-0`。
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/f.jar"))
+        .and(wiremock::matchers::header("range", "bytes=0-0"))
+        .respond_with(ResponseTemplate::new(206).append_header("content-range", "bytes 0-0/12345"))
+        .mount(&server)
+        .await;
+
+    let downloader = HttpDownloader::new(dir.path()).expect("应能创建下载器");
+    let size = downloader
+        .fetch_size(&format!("{}/f.jar", server.uri()))
+        .await
+        .expect("应能取到长度");
+
+    assert_eq!(size, 12_345);
+}
+
+#[tokio::test]
+async fn fetch_size_uses_content_length_when_range_is_ignored() {
+    // 服务端忽略 Range 时返回 200 与完整内容，长度写在 Content-Length 里。
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/f.jar"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(b"0123456789".to_vec()))
+        .mount(&server)
+        .await;
+
+    let downloader = HttpDownloader::new(dir.path()).expect("应能创建下载器");
+    let size = downloader
+        .fetch_size(&format!("{}/f.jar", server.uri()))
+        .await
+        .expect("应能取到长度");
+
+    assert_eq!(size, 10);
+}
+
+#[tokio::test]
+async fn fetch_size_reports_unknown_length() {
+    // `bytes 0-0/*` 表示总长未知：必须报错，不能猜一个数字。
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/f.jar"))
+        .and(wiremock::matchers::header("range", "bytes=0-0"))
+        .respond_with(ResponseTemplate::new(206).append_header("content-range", "bytes 0-0/*"))
+        .mount(&server)
+        .await;
+
+    let downloader = HttpDownloader::new(dir.path()).expect("应能创建下载器");
+    let error = downloader
+        .fetch_size(&format!("{}/f.jar", server.uri()))
+        .await
+        .expect_err("未知长度应报错");
+
+    assert!(matches!(error, DownloadError::Other(_)), "实际：{error:?}");
+}
