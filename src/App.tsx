@@ -21,7 +21,8 @@ import {
   type VersionSummary,
 } from "./api";
 import { GameDirectory, InstallProgressBar } from "./components/GameDirectory";
-import { LogPanel, MAX_LINES, type LogEntry, type LogStreamKind } from "./components/LogPanel";
+import { LogPanel } from "./components/LogPanel";
+import { appendLog, type LogEntry, type LogStreamKind } from "./lib/logs";
 import { VersionList } from "./components/VersionList";
 
 /** 版本清单的加载状态。用联合类型避免「既在加载又有错误」的非法状态。 */
@@ -45,14 +46,10 @@ export default function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const logId = useRef(0);
 
-  const appendLog = useCallback((entry: { stream: LogStreamKind; text: string }) => {
+  const pushLog = useCallback((entry: { stream: LogStreamKind; text: string }) => {
     logId.current += 1;
     const line: LogEntry = { ...entry, id: logId.current };
-    setLogs((previous) => {
-      const next = [...previous, line];
-      // 截断而不是整段丢弃：保留最近的行，早期启动信息价值随时间递减。
-      return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next;
-    });
+    setLogs((previous) => appendLog(previous, line));
   }, []);
 
   // 初始数据：版本清单、设置、运行状态。
@@ -121,7 +118,7 @@ export default function App() {
 
     register(
       listen<GameLogEvent>(GAME_LOG_EVENT, (event) => {
-        appendLog(event.payload);
+        pushLog(event.payload);
       }),
     );
 
@@ -129,7 +126,7 @@ export default function App() {
       listen<GameExitEvent>(GAME_EXIT_EVENT, (event) => {
         setStatus({ running: false, version: null });
         const { code, durationSecs } = event.payload;
-        appendLog({
+        pushLog({
           stream: "system",
           text: `—— 游戏退出（${code ?? "被终止"}），运行 ${durationSecs.toFixed(1)} 秒 ——`,
         });
@@ -142,7 +139,7 @@ export default function App() {
         unlisten();
       });
     };
-  }, [appendLog]);
+  }, [pushLog]);
 
   const applyGameDir = useCallback(async (path: string | null) => {
     setSettingsBusy(true);

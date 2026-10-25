@@ -1,24 +1,5 @@
 import type { VersionSummary } from "../api";
-
-const TYPE_LABELS: Record<string, string> = {
-  release: "正式版",
-  snapshot: "快照",
-  old_beta: "Beta",
-  old_alpha: "Alpha",
-  other: "其他",
-};
-
-function formatDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-}
+import { formatDate, typeLabel } from "../lib/format";
 
 /** 版本列表。点击选中，选中项决定「安装 / 启动」作用于哪个版本。 */
 export function VersionList({
@@ -51,6 +32,7 @@ export function VersionList({
                 <button
                   type="button"
                   disabled={disabled}
+                  aria-pressed={active}
                   onClick={() => onSelect(version.id)}
                   className={`flex w-full items-center justify-between px-4 py-2.5 text-left text-sm disabled:cursor-not-allowed ${
                     active
@@ -60,7 +42,7 @@ export function VersionList({
                 >
                   <span className="font-mono">{version.id}</span>
                   <span className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)]">
-                    <span>{TYPE_LABELS[version.type] ?? version.type}</span>
+                    <span>{typeLabel(version.type)}</span>
                     <span>{formatDate(version.releaseTime)}</span>
                   </span>
                 </button>

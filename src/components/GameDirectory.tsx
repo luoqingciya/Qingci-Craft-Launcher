@@ -1,4 +1,5 @@
 import type { InstallProgressEvent, SettingsView } from "../api";
+import { phaseLabel } from "../lib/format";
 
 /** 游戏目录设置。目录变更会影响后续所有下载与启动，因此独立成块。 */
 export function GameDirectory({
@@ -60,19 +61,13 @@ export function GameDirectory({
   );
 }
 
-const PHASE_LABELS: Record<string, string> = {
-  versionFiles: "版本文件",
-  assets: "资产",
-};
-
 /** 安装进度条。阶段切换时文字随之变化，避免把两个阶段的百分比混为一谈。 */
 export function InstallProgressBar({ progress }: { progress: InstallProgressEvent }) {
-  const label = PHASE_LABELS[progress.phase] ?? progress.phase;
   return (
     <div className="mt-2">
       <div className="flex items-center justify-between text-xs text-[var(--color-text-secondary)]">
         <span>
-          正在下载{label} {progress.completed}/{progress.total}
+          正在下载{phaseLabel(progress.phase)} {progress.completed}/{progress.total}
         </span>
         <span>{progress.percent}%</span>
       </div>

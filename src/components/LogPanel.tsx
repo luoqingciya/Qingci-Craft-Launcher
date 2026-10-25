@@ -1,13 +1,6 @@
 import { useEffect, useRef } from "react";
 
-/** 日志来源。`system` 是界面自己插入的分隔信息（如「游戏退出」），不来自进程。 */
-export type LogStreamKind = "stdout" | "stderr" | "system";
-
-/** 带稳定 key 的日志行。 */
-export type LogEntry = { id: number; stream: LogStreamKind; text: string };
-
-/** 保留的最大行数：模组报错循环时游戏可以每秒刷出上千行，无界增长会把内存吃光。 */
-export const MAX_LINES = 2000;
+import { MAX_LINES, type LogEntry, type LogStreamKind } from "../lib/logs";
 
 const STREAM_STYLES: Record<LogStreamKind, string> = {
   stdout: "text-[var(--color-text-primary)]",
@@ -23,7 +16,7 @@ export function LogPanel({ logs, onClear }: { logs: LogEntry[]; onClear: () => v
   // 否则用户向上翻看历史时会被不断拉回去。
   useEffect(() => {
     const element = container.current;
-    if (!element) {
+    if (!element || logs.length === 0) {
       return;
     }
     const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
