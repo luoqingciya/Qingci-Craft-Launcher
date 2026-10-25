@@ -7,9 +7,9 @@
 # 抽成 composite action 的理由：clippy / test / coverage / build 四个 job 都需要，
 # 原来各抄一份 `apt-get install`，改一次要改四处，而且很容易只改了其中三处。
 #
-# 两步各自解决一个问题：
-#   1. 选最快的镜像——实测 apt 装这些依赖曾占掉 build job 305 秒里的 166 秒
-#   2. 缓存 .deb——命中后不再走网络，这是真正的提速手段
+# 为什么不直接用现成的 cache-apt-pkgs-action：实测在 composite action 里调用它时
+# 参数传递失败（它收到空的 packages，报 "Packages argument is empty"）。这里只有
+# 三步，自己写反而更可控，也少一个需要理解的第三方行为。
 
 name: Linux 构建依赖
 description: 选最快的 apt 镜像并安装（带缓存）Tauri 所需系统依赖
@@ -21,11 +21,36 @@ runs:
       shell: bash
       run: bash "${{ github.action_path }}/../../scripts/apt-mirror.sh"
 
-    - name: 安装系统依赖（带缓存）
-      uses: awalsh128/cache-apt-pkgs-action@v1
+    # 缓存的是「下载下来的 .deb」与「软件源索引」，不是安装结果：
+    # 前者让 apt 不必再走网络，后者让 `apt-get update` 不必重新拉索引。
+    #
+    # key 里带上 action.yml 的哈希：包列表一变就换 key，避免命中缺包的旧缓存。
+    - name: 恢复 apt 缓存
+      id: apt-cache
+      uses: actions/cache@v4
       with:
-        packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
-        # 包列表变化时递增，否则会命中旧缓存、缺包。
-        version: 1.0
-        # 这些包只是库与开发头文件，不需要跑 postinst 里的服务操作。
-        execute_install_scripts: false
+        path: ~/.apt-cache
+        key: apt-${{ runner.os }}-${{ hashFiles('.github/actions/linux-deps/action.yml') }}
+
+    - name: 安装系统依赖
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p ~/.apt-cache
+
+        if [[ -f ~/.apt-cache/apt.tar ]]; then
+          echo "命中 apt 缓存，解包到系统目录"
+          sudo tar -xf ~/.apt-cache/apt.tar -C /
+        else
+          echo "无缓存，完整下载"
+        fi
+
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+
+        if [[ ! -f ~/.apt-cache/apt.tar ]]; then
+          # 打包失败不该让 CI 挂掉：最坏情况只是下次仍然没有缓存。
+          sudo tar -cf ~/.apt-cache/apt.tar -C / var/cache/apt/archives var/lib/apt/lists || \
+            echo "缓存打包失败，跳过"
+        fi
