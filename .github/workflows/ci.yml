@@ -45,10 +45,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: 安装 Linux 构建依赖
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+        uses: ./.github/actions/linux-deps
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   # 三平台矩阵：跨平台项目最常见的失败模式是"本机通过、其他平台失败"，
@@ -68,10 +65,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: 安装 Linux 构建依赖
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+        uses: ./.github/actions/linux-deps
       - run: cargo test --workspace --all-features
 
   coverage:
@@ -89,10 +83,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: 安装 Linux 构建依赖
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+        uses: ./.github/actions/linux-deps
       - run: cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
       - uses: codecov/codecov-action@v7
         with:
@@ -153,10 +144,7 @@ jobs:
         if: hashFiles('src-tauri/tauri.conf.json') != ''
       - name: 安装 Linux 构建依赖
         if: hashFiles('src-tauri/tauri.conf.json') != '' && runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+        uses: ./.github/actions/linux-deps
       - uses: pnpm/action-setup@v6
         if: hashFiles('package.json') != ''
       - uses: actions/setup-node@v7
