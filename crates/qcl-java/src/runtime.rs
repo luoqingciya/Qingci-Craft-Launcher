@@ -161,10 +161,16 @@ impl RuntimePlan {
     }
 }
 
+/// 运行时在游戏目录下的安装根目录。
+#[must_use]
+pub fn runtime_home(component: &str, platform: &str) -> String {
+    format!("runtime/{component}/{platform}")
+}
+
 /// 把运行时的相对路径解析成游戏目录下的落地路径。
 #[must_use]
 pub fn runtime_install_path(component: &str, platform: &str, relative: &str) -> String {
-    format!("runtime/{component}/{platform}/{relative}")
+    format!("{}/{relative}", runtime_home(component, platform))
 }
 
 /// 当前平台对应的官方运行时平台键。
