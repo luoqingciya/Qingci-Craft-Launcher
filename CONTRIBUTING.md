@@ -72,3 +72,21 @@ PR 标题必须符合该格式，因为合并时使用 **Squash merge**，PR 标
 - `clippy -D warnings` 视为错误；确有必要的例外需在代码处 `#[allow(...)]` 并写明理由。
 - 错误类型：库层用 `thiserror` 定义可分类错误，应用层用 `anyhow` 附加上下文。
 - 公共 API 必须有文档注释（`missing_docs` 为 warning，CI 会将其提升为错误）。
+
+## 8. 更新日志
+
+`CHANGELOG.md` 由 [git-cliff](https://github.com/orhun/git-cliff) 依据 Conventional Commits 自动生成，
+**不手工编辑**。
+
+```bash
+git cliff --config cliff.toml -o CHANGELOG.md    # 重新生成全量
+git cliff --config cliff.toml --unreleased       # 仅预览未发布部分
+```
+
+生成时机是**发布前**，而不是每个 PR。原因：未发布段落由「上一个 tag 之后的全部提交」构成，
+若要求每个 PR 都更新它，多个并行 PR 会持续产生冲突，且每次合并都要重排。
+
+由此得到一个推论：**PR 标题会原样出现在更新日志里**。这就是第 4 节要求标题严格遵循
+Conventional Commits 的实际原因——规范与否直接决定用户看到的是「feat(core): 版本清单与版本元数据的领域模型」
+还是「update stuff」。
+
