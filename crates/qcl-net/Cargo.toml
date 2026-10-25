@@ -19,6 +19,10 @@ sha1.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
+reqwest.workspace = true
+futures-util.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+tempfile = "3.27.0"
+wiremock = "0.6.5"

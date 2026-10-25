@@ -24,6 +24,9 @@ pub enum DownloadError {
     /// 文件系统错误，重试无意义。
     #[error("文件系统错误：{0}")]
     Io(String),
+    /// 计划中的落地路径越出游戏目录，属于非法输入。
+    #[error("非法的落地路径：{0}")]
+    UnsafePath(String),
     /// 其他不可重试错误（如 404）。
     #[error("{0}")]
     Other(String),
