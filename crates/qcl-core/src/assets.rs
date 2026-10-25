@@ -133,3 +133,21 @@ fn is_valid_sha1(hash: &str) -> bool {
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
+
+/// 逻辑路径是否可以安全地拼接到目录下。
+///
+/// 现代布局不使用逻辑路径落盘，但旧版虚拟目录需要——把索引里的键直接拼到
+/// `assets/virtual/<id>/` 之后，`..` 就能把文件写到游戏目录之外。反斜杠在
+/// Windows 上同样是分隔符，因此一并拒绝，避免「在 Linux 上通过、在 Windows 上穿越」。
+#[must_use]
+pub fn is_safe_logical_path(path: &str) -> bool {
+    if path.is_empty() || path.starts_with('/') || path.contains('\\') || path.contains('\0') {
+        return false;
+    }
+    // Windows 盘符前缀（`C:`）与 UNC 前缀（`//` 已由前导斜杠拦截）。
+    if path.len() >= 2 && path.as_bytes()[1] == b':' {
+        return false;
+    }
+    path.split('/')
+        .all(|segment| !segment.is_empty() && segment != "." && segment != "..")
+}
