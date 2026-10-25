@@ -193,11 +193,26 @@ async fn path_traversal_is_rejected() {
 #[tokio::test]
 async fn absolute_paths_are_rejected() {
     let (_dir, downloader) = downloader();
+
+    // 绝对路径的形态与平台相关：Unix 以 `/` 开头，Windows 带盘符。
+    // 注意 `C:/Windows/...` 在 Unix 上只是一个合法的**相对**文件名（冒号是普通字符），
+    // 不能拿它做跨平台断言——这正是本测试首轮在三平台 CI 上翻车的原因。
+    let absolute = if cfg!(windows) {
+        "C:/Windows/system32/evil.dll"
+    } else {
+        "/etc/passwd"
+    };
+
     let error = downloader
-        .resolve("C:/Windows/system32/evil.dll")
-        .or_else(|_| downloader.resolve("/etc/passwd"))
+        .resolve(absolute)
         .expect_err("绝对路径必须被拒绝");
     assert!(matches!(error, DownloadError::UnsafePath(_)));
+
+    // 父目录穿越与平台无关。
+    assert!(
+        downloader.resolve("../escape.jar").is_err(),
+        "`..` 穿越必须被拒绝"
+    );
 }
 
 #[tokio::test]
