@@ -138,16 +138,30 @@ async fn run(args: Args) -> Result<ExitCode, Box<dyn std::error::Error>> {
     }
 
     // 5. 启动并转发日志。
-    println!("\n启动游戏…\n");
+    //
+    // Ctrl+C 交给 `wait_or_cancel` 处理，而不是让进程直接退出：子进程被
+    // `CREATE_NO_WINDOW` 放进了独立控制台，终端的信号传不到它，直接退出会留下
+    // 一个还在跑的游戏进程。
+    println!("\n启动游戏…（Ctrl+C 停止）\n");
     let mut process = spawn(&command, &game_dir)?;
     let outcome = process
-        .wait(|line| {
-            // stderr 原样输出到 stderr，便于 `qcl ... 2>err.log` 分离。
-            match line.stream {
-                LogStream::Stdout => println!("{}", line.text),
-                LogStream::Stderr => eprintln!("{}", line.text),
-            }
-        })
+        .wait_or_cancel(
+            async {
+                if tokio::signal::ctrl_c().await.is_ok() {
+                    eprintln!("\n收到中断信号，正在停止游戏…");
+                } else {
+                    // 拿不到信号处理器时不要误杀游戏，等它自己结束。
+                    std::future::pending::<()>().await;
+                }
+            },
+            |line| {
+                // stderr 原样输出到 stderr，便于 `qcl ... 2>err.log` 分离。
+                match line.stream {
+                    LogStream::Stdout => println!("{}", line.text),
+                    LogStream::Stderr => eprintln!("{}", line.text),
+                }
+            },
+        )
         .await?;
 
     println!(

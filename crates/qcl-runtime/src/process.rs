@@ -4,6 +4,7 @@
 //! 读日志、等退出、必要时杀掉」。把进程管理单独成 crate 而不是塞进 `qcl-core`，
 //! 是为了让核心逻辑保持无 IO、可在任意平台完整测试。
 
+use std::future::Future;
 use std::path::Path;
 use std::process::Stdio;
 use std::time::{Duration, Instant};
@@ -123,6 +124,44 @@ impl GameProcess {
             exit_code: status.code(),
             duration: started.elapsed(),
         })
+    }
+
+    /// 等待进程结束，但允许外部取消。
+    ///
+    /// `cancel` 完成时终止游戏进程，然后照常收尾并返回结果（退出码为终止后的实际值，
+    /// 通常非 0）。用于界面的「停止」按钮与终端的 Ctrl+C。
+    ///
+    /// 为什么必须有这个入口：不处理取消的话，调用方进程退出时子进程会成为孤儿——
+    /// Windows 上子进程被 `CREATE_NO_WINDOW` 放进了独立控制台，终端的 Ctrl+C
+    /// 传不到它，用户会看到「启动器关了但游戏还在跑」。
+    pub async fn wait_or_cancel<F, C>(
+        &mut self,
+        cancel: C,
+        mut on_line: F,
+    ) -> Result<LaunchOutcome, LaunchError>
+    where
+        F: FnMut(LogLine),
+        C: Future<Output = ()>,
+    {
+        enum Step {
+            Done(Result<LaunchOutcome, LaunchError>),
+            Cancel,
+        }
+
+        let step = tokio::select! {
+            outcome = self.wait(&mut on_line) => Step::Done(outcome),
+            () = cancel => Step::Cancel,
+        };
+
+        match step {
+            Step::Done(outcome) => outcome,
+            Step::Cancel => {
+                self.kill().await?;
+                // 终止之后仍要走完 `wait`：日志通道里可能还有最后几行，
+                // 退出码也需要从子进程取回，而不是假定成功或失败。
+                self.wait(&mut on_line).await
+            }
+        }
     }
 }
 
