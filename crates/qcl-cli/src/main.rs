@@ -18,10 +18,11 @@ use std::sync::Mutex;
 use qcl_core::launch::{
     AccountInfo, LaunchCommand, LaunchLayout, LaunchOptions, build_launch_command,
 };
-use qcl_core::version::{LaunchContext, VersionEntry, VersionManifest, VersionMeta};
+use qcl_core::version::{VersionEntry, VersionManifest, VersionMeta};
 use qcl_install::{InstallPhase, InstallProgress, VersionInstallOptions, install_version};
 use qcl_java::{detect, select};
 use qcl_net::{HttpDownloader, verify_sha1};
+use qcl_platform::launch_context;
 use qcl_runtime::{LogStream, spawn};
 
 use crate::args::{Args, ArgsError};
@@ -67,17 +68,13 @@ async fn run(args: Args) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let meta = fetch_meta(&downloader, &entry).await?;
 
     // 2. 安装。幂等，因此每次启动前调用都能起到修复作用。
-    //
-    // `LaunchContext::current()` 不带系统版本号（取真实构建号需要平台专用 API）。
-    // 已知后果：26.3 用 `os.versionRange` 区分 Windows 版本以选择 GC，缺版本号时
-    // 两条分支都不命中，命令行里不会出现 `-XX:+UseZGC`——游戏照常启动（JVM 用默认 GC），
-    // 但与官方启动器不完全一致。补上系统版本探测是后续独立改动。
     println!("检查文件…");
+    let context = launch_context();
     let options = VersionInstallOptions::for_version(&meta.id);
     let report = install_version(
         Arc::clone(&downloader),
         &meta,
-        &LaunchContext::current(),
+        &context,
         &options,
         progress_printer(),
     )
@@ -127,7 +124,7 @@ async fn run(args: Args) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let command = build_launch_command(
         &java.executable,
         &meta,
-        &LaunchContext::current(),
+        &context,
         &layout,
         &account,
         &launch_options,

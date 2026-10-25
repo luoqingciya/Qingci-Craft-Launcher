@@ -176,6 +176,68 @@ fn official_default_memory_is_used_when_user_sets_nothing() {
 }
 
 #[test]
+fn gc_arguments_depend_on_system_version() {
+    // 26.3 的 default-user-jvm 用 versionRange 按 Windows 版本选 GC：
+    // 分界点是 10.0.17134（Windows 10 1803）。缺系统版本号时两条分支都不命中，
+    // 命令行里一个 GC 参数都没有——这正是补系统版本探测的原因。
+    let meta = parse(META_26_3);
+    let layout = LaunchLayout::standard("26.3");
+
+    let modern = build_launch_command(
+        "java",
+        &meta,
+        &windows_11(),
+        &layout,
+        &account(),
+        &LaunchOptions::default(),
+    )
+    .expect("应能组装命令");
+    assert!(
+        modern.args.iter().any(|arg| arg == "-XX:+UseZGC"),
+        "Windows 10 1803 之后应使用 ZGC"
+    );
+
+    let mut legacy = windows_11();
+    legacy.os_version = Some("6.1.7601".to_owned());
+    let legacy_command = build_launch_command(
+        "java",
+        &meta,
+        &legacy,
+        &layout,
+        &account(),
+        &LaunchOptions::default(),
+    )
+    .expect("应能组装命令");
+    assert!(
+        legacy_command.args.iter().any(|arg| arg == "-XX:+UseG1GC"),
+        "旧版 Windows 应退回 G1"
+    );
+    assert!(
+        !legacy_command.args.iter().any(|arg| arg == "-XX:+UseZGC"),
+        "两个分支互斥，不能同时出现"
+    );
+
+    let mut unknown = windows_11();
+    unknown.os_version = None;
+    let unknown_command = build_launch_command(
+        "java",
+        &meta,
+        &unknown,
+        &layout,
+        &account(),
+        &LaunchOptions::default(),
+    )
+    .expect("应能组装命令");
+    assert!(
+        !unknown_command
+            .args
+            .iter()
+            .any(|arg| arg.contains("UseZGC") || arg.contains("UseG1GC")),
+        "系统版本未知时不应猜测 GC——宁可留给 JVM 默认值"
+    );
+}
+
+#[test]
 fn user_memory_overrides_official_defaults() {
     let meta = parse(META_26_3);
     let layout = LaunchLayout::standard("26.3");
