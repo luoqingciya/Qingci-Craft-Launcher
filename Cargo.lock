@@ -943,6 +943,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "qcl-java"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+]
+
+[[package]]
 name = "qcl-net"
 version = "0.1.0"
 dependencies = [
