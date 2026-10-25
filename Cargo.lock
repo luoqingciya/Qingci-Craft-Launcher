@@ -2759,6 +2759,7 @@ name = "qcl-desktop"
 version = "0.1.0"
 dependencies = [
  "qcl-core",
+ "qcl-install",
  "qcl-net",
  "qcl-platform",
  "serde",

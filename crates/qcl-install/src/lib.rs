@@ -4,17 +4,23 @@
 //! 兼容分支、把失败归因到具体阶段。它不实现自己的网络或落盘逻辑，一律委托给
 //! [`qcl_net`]。
 //!
-//! 三个入口，粒度从粗到细：
+//! 入口，粒度从粗到细：
 //!
 //! - [`install_version`]：装完一个版本所需的全部文件（推荐）
 //! - [`install_assets`]：只装资产
 //! - [`install_natives`]：只解压 natives 归档
+//! - [`fetch_manifest`] / [`resolve_version`] / [`fetch_meta`]：安装前的元数据准备
 
 pub mod assets;
+pub mod manifest;
 pub mod natives;
 pub mod version;
 
 pub use assets::{AssetError, AssetInstallOptions, AssetInstallReport, install_assets};
+pub use manifest::{
+    ManifestError, VERSION_MANIFEST_URL, fetch_manifest, fetch_manifest_from, fetch_meta,
+    resolve_version,
+};
 pub use natives::{ExtractOutcome, NativeError, NativesReport, extract_natives, install_natives};
 pub use version::{
     InstallPhase, InstallProgress, VersionError, VersionInstallOptions, VersionInstallReport,

@@ -18,18 +18,16 @@ use std::sync::Mutex;
 use qcl_core::launch::{
     AccountInfo, LaunchCommand, LaunchLayout, LaunchOptions, build_launch_command,
 };
-use qcl_core::version::{VersionEntry, VersionManifest, VersionMeta};
-use qcl_install::{InstallPhase, InstallProgress, VersionInstallOptions, install_version};
+use qcl_install::{
+    InstallPhase, InstallProgress, VersionInstallOptions, fetch_manifest, fetch_meta,
+    install_version, resolve_version,
+};
 use qcl_java::{detect, select};
-use qcl_net::{HttpDownloader, verify_sha1};
+use qcl_net::HttpDownloader;
 use qcl_platform::launch_context;
 use qcl_runtime::{LogStream, spawn};
 
 use crate::args::{Args, ArgsError};
-
-/// 版本清单地址。
-const VERSION_MANIFEST_URL: &str =
-    "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -63,9 +61,10 @@ async fn run(args: Args) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let downloader = Arc::new(HttpDownloader::new(&game_dir)?);
 
     // 1. 版本清单与版本元数据。
-    let entry = resolve_version(&downloader, &args.version).await?;
+    let manifest = fetch_manifest(&downloader).await?;
+    let entry = resolve_version(&manifest, &args.version)?;
     println!("版本：{}（{}）", entry.id, entry.release_time);
-    let meta = fetch_meta(&downloader, &entry).await?;
+    let meta = fetch_meta(&downloader, entry).await?;
 
     // 2. 安装。幂等，因此每次启动前调用都能起到修复作用。
     println!("检查文件…");
@@ -175,43 +174,6 @@ async fn run(args: Args) -> Result<ExitCode, Box<dyn std::error::Error>> {
         Some(code) => ExitCode::from(u8::try_from(code).unwrap_or(1)),
         None => ExitCode::FAILURE,
     })
-}
-
-/// 解析版本号：`latest` 取最新正式版，否则按 id 精确匹配。
-async fn resolve_version(
-    downloader: &HttpDownloader,
-    requested: &str,
-) -> Result<VersionEntry, Box<dyn std::error::Error>> {
-    let raw = downloader.fetch_text(VERSION_MANIFEST_URL).await?;
-    let manifest: VersionManifest = serde_json::from_str(&raw)?;
-
-    let id = if requested == "latest" {
-        manifest.latest.release.clone()
-    } else {
-        requested.to_owned()
-    };
-
-    manifest
-        .find(&id)
-        .cloned()
-        .ok_or_else(|| format!("版本清单中不存在 `{id}`").into())
-}
-
-/// 拉取并校验版本元数据。
-///
-/// 校验 SHA-1 的成本几乎为零，但它挡住了代理注入与截断——版本元数据决定了
-/// 后面要下载哪些文件、用什么参数启动，被篡改的后果比单个文件损坏严重得多。
-async fn fetch_meta(
-    downloader: &HttpDownloader,
-    entry: &VersionEntry,
-) -> Result<VersionMeta, Box<dyn std::error::Error>> {
-    let raw = downloader.fetch_text(&entry.url).await?;
-    if let Some(expected) = entry.sha1.as_deref()
-        && !verify_sha1(expected, raw.as_bytes())
-    {
-        return Err(format!("版本元数据校验失败：{}", entry.url).into());
-    }
-    Ok(serde_json::from_str(&raw)?)
 }
 
 /// 离线账户。启动器尚未接入微软登录，这里用占位凭据。
