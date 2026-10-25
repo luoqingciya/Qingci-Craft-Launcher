@@ -4,10 +4,12 @@
 //! 下载、校验、解压、起进程属于后续的安装层与运行时层。
 
 pub mod classpath;
+pub mod command;
 pub mod template;
 
 pub use classpath::{
     NativesArtifact, build_classpath, classpath_separator, join_classpath, library_path,
     maven_to_path, natives_artifacts,
 };
+pub use command::{AccountInfo, LaunchCommand, LaunchLayout, LaunchOptions, build_launch_command};
 pub use template::LaunchVariables;
