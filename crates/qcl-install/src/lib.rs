@@ -16,11 +16,17 @@
 //! - [`fetch_manifest`] / [`resolve_version`] / [`fetch_meta`]：安装前的元数据准备
 
 pub mod assets;
+pub mod loader;
 pub mod manifest;
 pub mod natives;
 pub mod version;
 
 pub use assets::{AssetError, AssetInstallOptions, AssetInstallReport, install_assets};
+pub use loader::{
+    FABRIC_MAVEN_BASE, FABRIC_META_BASE, FabricLibrary, FabricProfile, LoaderError, LoaderInfo,
+    fetch_loader_list, fetch_loader_list_from, fetch_profile, fetch_profile_from, inherits_from,
+    merge, resolve_libraries,
+};
 pub use manifest::{
     ManifestError, VERSION_MANIFEST_URL, fetch_manifest, fetch_manifest_from, fetch_meta,
     resolve_version,

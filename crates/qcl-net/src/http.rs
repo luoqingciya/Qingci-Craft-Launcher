@@ -115,6 +115,73 @@ impl HttpDownloader {
             .map_err(|error| DownloadError::Network(error.to_string()))
     }
 
+    /// 探测远端文件大小。
+    ///
+    /// 某些清单只给下载地址、不给大小（Fabric 的 loader 构件就是这样）。缺了大小，
+    /// [`DownloadOps::is_present`] 就无法判断本地文件是否完整，会导致每次启动都重下。
+    ///
+    /// 先发 HEAD；拿不到有效长度时退到 `Range: bytes=0-0` 读 `Content-Range`。
+    /// 这个兜底不是理论情况：Cloudflare 对分块传输的响应不给 `Content-Length`，
+    /// 而 Fabric 的元数据与 maven 都在 Cloudflare 后面。
+    pub async fn fetch_size(&self, url: &str) -> Result<u64, DownloadError> {
+        if let Ok(size) = self.head_size(url).await
+            && size > 0
+        {
+            return Ok(size);
+        }
+        self.ranged_size(url).await
+    }
+
+    /// 用 HEAD 请求取 `Content-Length`。
+    async fn head_size(&self, url: &str) -> Result<u64, DownloadError> {
+        let response = self
+            .client
+            .head(url)
+            .send()
+            .await
+            .map_err(|error| DownloadError::Network(error.to_string()))?;
+
+        check_status(response.status())?;
+
+        // 服务端可以不返回 Content-Length（分块传输）。此时明确失败，
+        // 让调用方走兜底，而不是返回 0 让上层误以为文件是空的。
+        response
+            .content_length()
+            .filter(|size| *size > 0)
+            .ok_or_else(|| DownloadError::Other("响应未提供有效的 Content-Length".to_owned()))
+    }
+
+    /// 用单字节范围请求读总长度。
+    async fn ranged_size(&self, url: &str) -> Result<u64, DownloadError> {
+        let response = self
+            .client
+            .get(url)
+            .header(reqwest::header::RANGE, "bytes=0-0")
+            .send()
+            .await
+            .map_err(|error| DownloadError::Network(error.to_string()))?;
+
+        let status = response.status();
+        check_status(status)?;
+
+        // 服务端忽略 Range 时返回 200 与完整内容，此时长度就写在 Content-Length 里。
+        if status == reqwest::StatusCode::OK {
+            return response
+                .content_length()
+                .filter(|size| *size > 0)
+                .ok_or_else(|| DownloadError::Other("响应未提供有效的 Content-Length".to_owned()));
+        }
+
+        let header = response
+            .headers()
+            .get(reqwest::header::CONTENT_RANGE)
+            .and_then(|value| value.to_str().ok())
+            .ok_or_else(|| DownloadError::Other("响应未提供 Content-Range".to_owned()))?;
+
+        parse_content_range_total(header)
+            .ok_or_else(|| DownloadError::Other(format!("无法解析 Content-Range：{header}")))
+    }
+
     /// 主动校验磁盘上的文件是否与期望摘要一致。
     ///
     /// 与 [`DownloadOps::is_present`] 的区别：本方法**总是**做完整哈希，
@@ -254,4 +321,26 @@ async fn hash_file(path: &Path) -> Option<String> {
     }
 
     Some(hasher.finish())
+}
+
+/// 把 HTTP 状态码转成可分类的错误。
+fn check_status(status: reqwest::StatusCode) -> Result<(), DownloadError> {
+    if status.is_success() {
+        return Ok(());
+    }
+    let code = status.as_u16();
+    Err(if is_retryable_status(code) {
+        DownloadError::Network(format!("HTTP {code}"))
+    } else {
+        DownloadError::Other(format!("HTTP {code}"))
+    })
+}
+
+/// 从 `Content-Range: bytes 0-0/12345` 里取出总长度。
+///
+/// `bytes 0-0/*` 表示总长未知，返回 `None`——调用方应把它当成失败，
+/// 而不是猜一个数字。
+fn parse_content_range_total(value: &str) -> Option<u64> {
+    let (_, total) = value.rsplit_once('/')?;
+    total.trim().parse().ok()
 }
