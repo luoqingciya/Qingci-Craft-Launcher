@@ -1,0 +1,20 @@
+[package]
+name = "qcl-net"
+description = "Qingci Craft Launcher 下载层：下载计划、完整性校验与重试策略"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+qcl-core = { path = "../qcl-core" }
+sha1.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

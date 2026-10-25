@@ -165,7 +165,7 @@ pub struct VersionDownloads {
 }
 
 /// 单个可下载文件。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Artifact {
     /// 文件标识。仅日志配置等少数场景提供，依赖库与客户端 jar 不提供。
     #[serde(default, skip_serializing_if = "Option::is_none")]

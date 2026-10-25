@@ -3,7 +3,7 @@
 //! 这里只做**路径计算**，不碰文件系统：下载、校验、解压属于安装层职责。
 //! 这样划分的好处是组装逻辑可以在任意平台上完整测试，且不依赖磁盘状态。
 
-use crate::version::{LaunchContext, Library, VersionMeta};
+use crate::version::{Artifact, LaunchContext, Library, VersionMeta};
 
 /// 把 Maven 坐标转换为仓库内相对路径。
 ///
@@ -122,6 +122,8 @@ pub struct NativesArtifact {
     pub library: String,
     /// natives jar 的相对路径。
     pub path: String,
+    /// 下载信息（URL、SHA-1、大小），供下载层直接使用。
+    pub artifact: Artifact,
     /// 解压时需要排除的路径前缀，通常为 `META-INF/`。
     pub exclude: Vec<String>,
 }
@@ -171,6 +173,7 @@ pub fn natives_artifacts(meta: &VersionMeta, context: &LaunchContext) -> Vec<Nat
         artifacts.push(NativesArtifact {
             library: library.name.clone(),
             path,
+            artifact: artifact.clone(),
             exclude: library
                 .extract
                 .as_ref()
