@@ -64,7 +64,12 @@ pub fn ensure_writable(dir: &Path) -> std::io::Result<PathBuf> {
     let _ = std::fs::remove_file(&probe);
 
     // 规范化：用户在对话框里选的路径可能带 `..` 或符号链接。
-    std::fs::canonicalize(dir).or_else(|_| Ok::<PathBuf, std::io::Error>(dir.to_path_buf()))
+    //
+    // 用 `dunce` 而不是 `std::fs::canonicalize`：后者在 Windows 上返回
+    // `\\?\C:\...` 这种 verbatim 前缀，它会原样显示在界面上，也会被塞进
+    // `${game_directory}` 传给游戏。多数程序能接受，但日志与报错里极难辨认，
+    // 且一旦路径里出现 `..` 或相对段，部分工具会直接拒绝。
+    Ok(dunce::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf()))
 }
 
 #[cfg(test)]
@@ -122,13 +127,28 @@ mod tests {
         let resolved = ensure_writable(&target).expect("应可写");
 
         assert!(target.is_dir());
-        assert_eq!(
-            resolved,
-            std::fs::canonicalize(&target).expect("应能规范化")
-        );
         assert!(
             !target.join(".qcl-write-test").exists(),
             "探测文件必须被清理"
+        );
+        // 规范化后的路径必须仍指向同一目录，但不应带上 Windows 的 verbatim 前缀。
+        assert_eq!(
+            dunce::canonicalize(&resolved).expect("应能规范化"),
+            dunce::canonicalize(&target).expect("应能规范化")
+        );
+    }
+
+    #[test]
+    fn resolved_path_has_no_verbatim_prefix() {
+        // `\\?\C:\...` 会原样显示在界面上，也会进到 `${game_directory}`。
+        // 这条在非 Windows 平台上恒真，但保留它能让回归发生在三平台 CI 上。
+        let dir = TempDir::new().expect("临时目录");
+        let resolved = ensure_writable(dir.path()).expect("应可写");
+        let rendered = resolved.to_string_lossy();
+
+        assert!(
+            !rendered.starts_with(r"\\?\"),
+            "不应返回 verbatim 路径：{rendered}"
         );
     }
 }

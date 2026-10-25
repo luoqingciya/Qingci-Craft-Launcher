@@ -2758,6 +2758,7 @@ dependencies = [
 name = "qcl-desktop"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "qcl-core",
  "qcl-install",
  "qcl-java",
