@@ -23,6 +23,9 @@ tokio = { version = "1.54.1", features = ["rt", "rt-multi-thread", "sync", "time
 reqwest = { version = "0.13.5", features = ["stream"] }
 futures-util = "0.3.34"
 async-trait = "0.1.92"
+# 只解压 natives 归档，不需要压缩、加密与其它压缩算法。
+# 默认特性会引入 aes/bzip2/lzma/zstd/xz/ppmd 等一整套实现，对本项目是纯粹的体积浪费。
+zip = { version = "9.1.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 # 仅用于测试
 insta = { version = "1.49.0", features = ["json"] }

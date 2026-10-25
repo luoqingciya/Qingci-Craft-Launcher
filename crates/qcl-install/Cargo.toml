@@ -19,6 +19,7 @@ qcl-net = { version = "0.1.0", path = "../qcl-net" }
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+zip.workspace = true
 
 [dev-dependencies]
 tempfile = "3.27.0"

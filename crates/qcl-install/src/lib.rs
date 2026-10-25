@@ -4,9 +4,11 @@
 //! 版本间的兼容分支、把失败归因到具体阶段。它不实现自己的网络或落盘逻辑，
 //! 一律委托给 [`qcl_net`]。
 //!
-//! 当前范围：**资产安装**（含 1.6 及更早的虚拟目录展开）。
-//! 版本文件与 natives 解压属于后续 PR。
+//! 当前范围：**资产安装**（含 1.6 及更早的虚拟目录展开）与 **natives 解压**。
+//! 版本文件安装编排属于后续 PR。
 
 pub mod assets;
+pub mod natives;
 
 pub use assets::{AssetError, AssetInstallOptions, AssetInstallReport, install_assets};
+pub use natives::{ExtractOutcome, NativeError, NativesReport, extract_natives, install_natives};
