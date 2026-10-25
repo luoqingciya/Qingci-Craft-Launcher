@@ -92,8 +92,13 @@ async fn separates_stderr_from_stdout() {
 #[tokio::test]
 async fn working_directory_is_applied() {
     let dir = temp_dir();
-    // 输出当前工作目录，断言它就是我们传入的目录。
+
+    // 打印当前工作目录的命令在两个平台上不同：
+    // Windows 的 `cd` 无参数时打印路径，Unix 的 `cd` 只切换目录、不输出任何东西。
+    #[cfg(windows)]
     let command = shell("cd");
+    #[cfg(not(windows))]
+    let command = shell("pwd");
 
     let mut process = spawn(&command, dir.path()).expect("应能启动");
     let mut lines: Vec<LogLine> = Vec::new();
