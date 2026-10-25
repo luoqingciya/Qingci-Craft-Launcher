@@ -3,12 +3,17 @@
 //! 本 crate 不依赖 Tauri，可在无 GUI 环境中独立编译与测试，因此承担全部可自动化
 //! 验证的业务逻辑：版本清单解析、依赖规则求值、启动参数组装与进程编排。
 //!
-//! 当前进度：Phase 1，已建立官方版本清单与单版本元数据的领域模型。
+//! 当前进度：Phase 1，已建立版本元数据、平台规则求值、启动命令组装与资产索引的领域模型。
 
+pub mod assets;
 pub mod error;
 pub mod launch;
 pub mod version;
 
+pub use assets::{
+    ASSET_OBJECTS_BASE, AssetObject, AssetObjects, LEGACY_INDEX_IDS, is_legacy_index,
+    maps_to_resources, object_relative_path, object_url,
+};
 pub use error::{CoreError, Result};
 pub use version::{
     Argument, ArgumentValue, Arguments, Artifact, AssetIndex, Extract, JavaVersion, LatestVersions,
