@@ -1,0 +1,27 @@
+[package]
+name = "qcl-cli"
+description = "Qingci Craft Launcher 的无界面入口：安装、组装命令、启动"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "qcl"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+# 同时给出 version 与 path：只写 path 会被 cargo-deny 判为通配依赖（wildcard）。
+qcl-core = { version = "0.1.0", path = "../qcl-core" }
+qcl-net = { version = "0.1.0", path = "../qcl-net" }
+qcl-java = { version = "0.1.0", path = "../qcl-java" }
+qcl-install = { version = "0.1.0", path = "../qcl-install" }
+qcl-runtime = { version = "0.1.0", path = "../qcl-runtime" }
+serde_json.workspace = true
+tokio.workspace = true

@@ -108,6 +108,17 @@ where
     }
     let index: AssetObjects = serde_json::from_str(&raw)?;
 
+    // 校验通过后把索引落盘到 `assets/indexes/<id>.json`，与官方启动器一致。
+    // 游戏不读它，但保留一份能让「对象目录被误删后重新校验」和离线排查有据可依；
+    // 端到端跑一次才发现此前只用了索引的 URL 与摘要，文件本身没有写出来。
+    let index_file = downloader.game_dir().join(&index_task.path);
+    if let Some(parent) = index_file.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| AssetError::Io(format!("{}: {error}", parent.display())))?;
+    }
+    std::fs::write(&index_file, &raw)
+        .map_err(|error| AssetError::Io(format!("{}: {error}", index_file.display())))?;
+
     // 2. 生成对象计划并交给下载执行器。重试、并发、`.part` 原子落盘全部继承。
     let plan = plan_assets_with_base(&index, &options.assets_dir, &options.objects_base);
     let total_bytes = plan.total_bytes();

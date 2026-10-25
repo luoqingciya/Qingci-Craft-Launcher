@@ -128,6 +128,13 @@ async fn modern_index_downloads_objects_without_virtual_tree() {
         STONE
     );
     assert!(!dir.path().join("assets").join("virtual").exists());
+
+    // 索引本身也要落盘，供离线排查与重建校验使用。
+    let index_file = dir.path().join("assets/indexes/34.json");
+    assert_eq!(
+        std::fs::read_to_string(&index_file).expect("索引应已落盘"),
+        index_body()
+    );
 }
 
 #[tokio::test]
@@ -169,6 +176,10 @@ async fn index_checksum_mismatch_writes_nothing() {
     assert!(
         !dir.path().join("assets").join("objects").exists(),
         "校验失败时不应写盘"
+    );
+    assert!(
+        !dir.path().join("assets").join("indexes").exists(),
+        "校验失败时索引也不应落盘"
     );
 }
 
