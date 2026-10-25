@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/qcl-core", "crates/qcl-net", "crates/qcl-java", "crates/qcl-runtime", "crates/qcl-install", "crates/qcl-cli", "crates/qcl-platform", "src-tauri"]
+members = ["crates/qcl-core", "crates/qcl-net", "crates/qcl-java", "crates/qcl-runtime", "crates/qcl-install", "crates/qcl-cli", "crates/qcl-platform", "crates/qcl-auth", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
@@ -20,7 +20,7 @@ thiserror = "2.0.21"
 regex-lite = "0.1.9"
 sha1 = "0.11.0"
 tokio = { version = "1.54.1", features = ["rt", "rt-multi-thread", "sync", "time", "macros", "fs", "io-util", "net", "process", "signal"] }
-reqwest = { version = "0.13.5", features = ["stream"] }
+reqwest = { version = "0.13.5", features = ["stream", "json", "form"] }
 futures-util = "0.3.34"
 async-trait = "0.1.92"
 # 只解压 natives 归档，不需要压缩、加密与其它压缩算法。

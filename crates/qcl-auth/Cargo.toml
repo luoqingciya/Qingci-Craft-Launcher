@@ -1,0 +1,26 @@
+[package]
+name = "qcl-auth"
+description = "Qingci Craft Launcher 的微软账号认证：设备码登录与 Xbox 认证链"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# 同时给出 version 与 path：只写 path 会被 cargo-deny 判为通配依赖（wildcard）。
+qcl-core = { version = "0.1.0", path = "../qcl-core" }
+qcl-net = { version = "0.1.0", path = "../qcl-net" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"
+wiremock = "0.6.5"

@@ -344,3 +344,77 @@ fn parse_content_range_total(value: &str) -> Option<u64> {
     let (_, total) = value.rsplit_once('/')?;
     total.trim().parse().ok()
 }
+
+/// 需要自行处理状态码的请求方法。
+///
+/// 与 [`HttpDownloader::fetch_text`] 的区别：那个把非 2xx 当成错误返回，
+/// 而 OAuth 这类协议的错误信息**就写在 4xx 的响应体里**（`authorization_pending`、
+/// `expired_token` 等）。把状态码和响应体原样交出去，由调用方解释。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HttpMethod {
+    /// GET。
+    Get,
+    /// POST。
+    Post,
+}
+
+/// 请求体。
+#[derive(Debug, Clone, Copy)]
+pub enum RequestBody<'a> {
+    /// 无请求体。
+    Empty,
+    /// `application/x-www-form-urlencoded`。
+    Form(&'a [(&'a str, &'a str)]),
+    /// `application/json`。
+    Json(&'a serde_json::Value),
+}
+
+/// 原始响应：状态码 + 文本体。
+#[derive(Debug, Clone)]
+pub struct HttpResponse {
+    /// HTTP 状态码。
+    pub status: u16,
+    /// 响应体文本。
+    pub body: String,
+}
+
+impl HttpDownloader {
+    /// 发送请求并原样返回状态码与响应体。
+    ///
+    /// `bearer` 非空时附加 `Authorization: Bearer <token>`。
+    pub async fn request(
+        &self,
+        method: HttpMethod,
+        url: &str,
+        bearer: Option<&str>,
+        body: RequestBody<'_>,
+    ) -> Result<HttpResponse, DownloadError> {
+        let mut request = match method {
+            HttpMethod::Get => self.client.get(url),
+            HttpMethod::Post => self.client.post(url),
+        };
+
+        if let Some(token) = bearer {
+            request = request.bearer_auth(token);
+        }
+
+        request = match body {
+            RequestBody::Empty => request,
+            RequestBody::Form(fields) => request.form(fields),
+            RequestBody::Json(value) => request.json(value),
+        };
+
+        let response = request
+            .send()
+            .await
+            .map_err(|error| DownloadError::Network(error.to_string()))?;
+
+        let status = response.status().as_u16();
+        let body = response
+            .text()
+            .await
+            .map_err(|error| DownloadError::Network(error.to_string()))?;
+
+        Ok(HttpResponse { status, body })
+    }
+}
