@@ -969,6 +969,7 @@ dependencies = [
  "qcl-install",
  "qcl-java",
  "qcl-net",
+ "qcl-platform",
  "qcl-runtime",
  "serde_json",
  "tokio",
@@ -1026,6 +1027,13 @@ dependencies = [
  "thiserror",
  "tokio",
  "wiremock",
+]
+
+[[package]]
+name = "qcl-platform"
+version = "0.1.0"
+dependencies = [
+ "qcl-core",
 ]
 
 [[package]]

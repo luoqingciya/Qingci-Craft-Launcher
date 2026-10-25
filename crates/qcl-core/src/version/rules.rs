@@ -181,8 +181,9 @@ pub struct LaunchContext {
 impl LaunchContext {
     /// 按当前进程所在平台构造。
     ///
-    /// 系统版本留空：取真实构建号需要平台专用 API，属应用层职责，
-    /// 在补充之前依赖版本条件的规则不会被命中。
+    /// 系统版本留空：取真实版本号需要执行系统命令或读系统文件，属 IO，
+    /// 不能放进本 crate。需要完整上下文（含系统版本）请用 `qcl-platform` 的
+    /// `launch_context()`——它会影响 GC 选择这类按系统版本分流的参数。
     #[must_use]
     pub fn current() -> Self {
         Self {
