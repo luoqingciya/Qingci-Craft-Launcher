@@ -1,6 +1,24 @@
 # cargo-deny 配置（适配 cargo-deny 0.20.x）
 # 校验目标：许可证合规、依赖来源可信、无重复/通配依赖。
-# 安全公告（advisories）使用默认策略，不额外配置。
+# 安全公告（advisories）使用默认策略，仅对下列已知无害的条目显式豁免。
+
+[advisories]
+# RUSTSEC-2024-0370：`proc-macro-error 1.0.4` 已停止维护。
+#
+# 它来自 Linux 专属的 gtk-rs 0.18 链路：
+#   tauri → wry → webkit2gtk → glib 0.18 → glib-macros → proc-macro-error
+#
+# 为什么豁免而不是修：
+# 1. 升级路径不在本项目手里——gtk-rs 0.19+ 才换成 proc-macro-error2，
+#    而版本由 tauri/wry 决定；我们无法单独把 glib-macros 提上去。
+# 2. 该公告是「不再维护」，不是漏洞。proc-macro-error 只在编译期展开宏，
+#    不进入运行时产物，也不处理不可信输入。
+# 3. 影响面仅限 Linux 构建，Windows/macOS 的依赖树里没有它。
+#
+# 移除条件：tauri 升级到使用 gtk-rs 0.19+ 后，这条豁免应立即删除。
+ignore = [
+    { id = "RUSTSEC-2024-0370", reason = "来自 Linux 专属的 gtk-rs 0.18 链路（tauri→wry→webkit2gtk→glib-macros），升级权不在本项目；该公告是「停止维护」而非漏洞，且只在编译期展开宏" },
+]
 
 [licenses]
 # 白名单策略：未列出的许可证一律拒绝。

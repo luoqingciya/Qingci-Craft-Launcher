@@ -9,8 +9,9 @@
 
 用 **Tauri 2 + Rust** 构建的跨平台、轻量级 Minecraft Java 版启动器。
 
-> 项目状态：**Phase 1（核心库）**。核心逻辑已成型（版本解析、规则求值、classpath 与参数组装、下载层、Java 探测），
-> 尚未接入 UI。完整路线图见 [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+> 项目状态：**Phase 2（界面骨架）**。核心链路已端到端跑通：解析 → 安装（约 598 MB）
+> → Java 选择 → 组装命令 → 启动游戏 → 日志转发 → 优雅停止；桌面壳已能拉取版本清单。
+> 完整路线图见 [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 设计取向
 
@@ -31,9 +32,16 @@
 ## 仓库结构
 
 ```
-crates/          Rust 领域层（qcl-core / qcl-net / qcl-java / qcl-auth / qcl-cli）
-src-tauri/       Tauri 应用层（薄适配，不含业务算法）
-src/             React 前端
+crates/          Rust 领域层
+  qcl-core       版本解析、规则求值、启动命令组装（纯逻辑，无 IO）
+  qcl-net        下载计划、执行器、HTTP 下载与 SHA-1 校验
+  qcl-install    资产与运行时安装编排
+  qcl-java       Java 探测与按需安装
+  qcl-runtime    游戏进程启动、日志转发与停止
+  qcl-platform   本机平台探测（系统版本决定 GC 参数）
+  qcl-cli        无界面入口（冒烟与排查用）
+src-tauri/       Tauri 应用层（薄适配，只做 IPC 与状态持有）
+src/             React 19 前端
 docs/            开发规划与架构决策记录
 assets/          品牌资产（应用图标源文件，各平台图标由 tauri icon 生成）
 ```
@@ -49,9 +57,20 @@ assets/          品牌资产（应用图标源文件，各平台图标由 tauri
 常用命令：
 
 ```bash
+# Rust 侧
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo test --workspace --all-features
+
+# 前端（类型检查 + 生产构建）
+pnpm install
+pnpm build
+
+# 桌面应用（开发模式：热重载）
+pnpm tauri dev
+
+# 无界面入口：安装并打印启动命令，不启动游戏
+cargo run -p qcl-cli -- 26.3 --dry-run
 ```
 
 ## 参与贡献

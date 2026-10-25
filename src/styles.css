@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+/* 应用内的颜色与间距统一走这几个变量，避免在组件里散落硬编码色值。 */
+@theme {
+  --color-surface: #0f1115;
+  --color-surface-raised: #171a21;
+  --color-border-subtle: #262b36;
+  --color-text-primary: #e8eaed;
+  --color-text-secondary: #9aa3b2;
+  --color-accent: #4f8cff;
+  --color-accent-soft: #1e2a44;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family:
+    "Segoe UI", "Microsoft YaHei UI", system-ui, -apple-system, "Helvetica Neue",
+    sans-serif;
+  /* 桌面应用里选中文本通常没有意义，还会破坏拖拽体验。 */
+  user-select: none;
+}

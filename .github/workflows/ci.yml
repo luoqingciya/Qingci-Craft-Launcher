@@ -100,8 +100,8 @@ jobs:
           # 覆盖率只做趋势观察，不阻断合并；达标要求由评审把关。
           fail_ci_if_error: false
 
-  # 前端尚未落地（Phase 2）。步骤按 package.json 是否存在自动跳过，
-  # 引入前端后无需改动本文件即可生效。
+  # 前端门禁：类型检查 + 生产构建。pnpm build 本身执行 tsc --noEmit 后再打包，
+  # 不调用 package.json 中不存在的 eslint/vitest 脚本，避免「配置看起来绿、实际 job 红」。
   frontend:
     name: frontend
     runs-on: ubuntu-latest
@@ -117,18 +117,9 @@ jobs:
       - name: 安装依赖
         if: hashFiles('package.json') != ''
         run: pnpm install --frozen-lockfile
-      - name: 类型检查
+      - name: 类型检查与生产构建
         if: hashFiles('package.json') != ''
-        run: pnpm exec tsc --noEmit
-      - name: Lint
-        if: hashFiles('package.json') != ''
-        run: pnpm exec eslint .
-      - name: 单元测试
-        if: hashFiles('package.json') != ''
-        run: pnpm exec vitest run
-      - name: 构建
-        if: hashFiles('package.json') != ''
-        run: pnpm exec vite build
+        run: pnpm build
 
   deny:
     name: deny
