@@ -203,10 +203,10 @@ fn legacy_version_extracts_into_natives_dir() {
     )
     .expect("应可解析");
 
-    // 下载阶段会把归档放在 artifact.path 指定的位置（当前约定：相对游戏目录）。
-    let archive = dir
-        .path()
-        .join("org/lwjgl/lwjgl/lwjgl-platform/2.9.4/lwjgl-platform-2.9.4-natives-windows-64.jar");
+    // 下载阶段会把归档放在 artifact.path 指定的位置（含 libraries/ 前缀）。
+    let archive = dir.path().join(
+        "libraries/org/lwjgl/lwjgl/lwjgl-platform/2.9.4/lwjgl-platform-2.9.4-natives-windows-64.jar",
+    );
     make_zip(
         &archive,
         &[
