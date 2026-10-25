@@ -1,0 +1,57 @@
+{
+  "files": {
+    "bin": {
+      "type": "directory"
+    },
+    "bin/java": {
+      "type": "file",
+      "executable": true,
+      "downloads": {
+        "lzma": {
+          "sha1": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size": 100,
+          "url": "https://example.invalid/java.lzma"
+        },
+        "raw": {
+          "sha1": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "size": 200,
+          "url": "https://example.invalid/java"
+        }
+      }
+    },
+    "lib/modules": {
+      "type": "file",
+      "downloads": {
+        "raw": {
+          "sha1": "cccccccccccccccccccccccccccccccccccccccc",
+          "size": 300,
+          "url": "https://example.invalid/modules"
+        }
+      }
+    },
+    "lib/only-lzma": {
+      "type": "file",
+      "downloads": {
+        "lzma": {
+          "sha1": "dddddddddddddddddddddddddddddddddddddddd",
+          "size": 400,
+          "url": "https://example.invalid/only-lzma.lzma"
+        }
+      }
+    },
+    "lib/foo.jar": {
+      "type": "link",
+      "target": "lib/bar.jar"
+    },
+    "release": {
+      "type": "file",
+      "downloads": {
+        "raw": {
+          "sha1": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "size": 50,
+          "url": "https://example.invalid/release"
+        }
+      }
+    }
+  }
+}
