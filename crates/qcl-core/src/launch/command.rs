@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 把元数据、classpath 与参数模板组装成一条可直接执行的启动命令。
 //!
 //! 这是核心模块的收口：前面各模块产出的路径、参数、变量在这里合成最终形态。

@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 下载层：下载计划、完整性校验与重试策略。
 //!
 //! 当前只包含**纯逻辑**，不做网络与磁盘 IO。这样划分是为了让「该下载什么、跳过什么、

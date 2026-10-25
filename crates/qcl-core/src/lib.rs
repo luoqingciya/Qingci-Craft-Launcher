@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! Qingci Craft Launcher 的领域核心。
 //!
 //! 本 crate 不依赖 Tauri，可在无 GUI 环境中独立编译与测试，因此承担全部可自动化

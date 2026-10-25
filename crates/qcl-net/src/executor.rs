@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 下载执行器：并发调度、重试与进度上报。
 //!
 //! 网络与文件操作通过 [`DownloadOps`] 注入，执行器只负责调度判断。这样可以在测试中

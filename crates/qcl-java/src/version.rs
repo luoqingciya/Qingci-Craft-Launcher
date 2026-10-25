@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! Java 版本号解析。
 //!
 //! Java 的版本字符串形态混乱：8 及以前是 `1.8.0_392`，9 及以后是 `21.0.12`，

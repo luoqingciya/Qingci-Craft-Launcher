@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! `qcl`：Qingci Craft Launcher 的无界面入口。
 //!
 //! 存在的意义是把散落在各 crate 里的能力串成一条可执行的链路，作为端到端冒烟手段：

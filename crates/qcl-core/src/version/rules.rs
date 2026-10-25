@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 依赖与启动参数的平台规则，以及求值逻辑。
 //!
 //! 求值语义直接决定「哪些库进 classpath、哪些参数进命令行」，写错会导致游戏启动失败

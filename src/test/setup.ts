@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 // 引入 jest-dom 的断言扩展（toBeInTheDocument 等），并同时注册类型。
 import "@testing-library/jest-dom/vitest";
 

@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 资产索引内容：`assets/indexes/<id>.json`。
 //!
 //! 索引把**逻辑路径**（如 `minecraft/sounds/block/stone/break1.ogg`）映射到**内容哈希**。

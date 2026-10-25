@@ -90,3 +90,23 @@ git cliff --config cliff.toml --unreleased       # 仅预览未发布部分
 Conventional Commits 的实际原因——规范与否直接决定用户看到的是「feat(core): 版本清单与版本元数据的领域模型」
 还是「update stuff」。
 
+
+## 9. 许可与版权
+
+本项目以 **GPL-3.0** 发布，并附有 **GPLv3 第 7 条附加条款**，见
+[ADDITIONAL-TERMS.md](ADDITIONAL-TERMS.md)。两条要求与你直接相关：
+
+1. **提交贡献即视为同意**：你的贡献以 GPL-3.0 授权，并受该附加条款约束。若不接受，请勿提交。
+2. **新文件要带文件头**：所有 `.rs` / `.ts` / `.tsx` 文件开头须有三行声明（照抄即可）：
+
+   ```
+   Copyright (C) 2026 luoqingci
+   SPDX-License-Identifier: GPL-3.0-only
+   附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+   ```
+
+   这不是形式主义：GPLv3 第 7 条要求附加条款出现在相关源文件里，或至少给出「到哪里找」的提示。
+   漏掉文件头的 PR 会被要求补上。
+
+另外，**分发修改版必须更换名称**（不得继续使用「Qingci Craft Launcher」「QCL」等），
+但原样分发未经修改的副本不受此限制。

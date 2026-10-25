@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 启动命令组装的测试。
 //!
 //! 断言的是**参数序列**而不是拼接后的字符串：空格与中文路径的引号问题

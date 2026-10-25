@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 打印本机探测到的 Java 安装，用于排查「为什么没选中我想要的 Java」。
 //!
 //! 运行：`cargo run -p qcl-java --example detect`

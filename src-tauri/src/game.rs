@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 启动与停止游戏。
 //!
 //! 进程的生命周期由 `qcl-runtime` 管理，这里负责：

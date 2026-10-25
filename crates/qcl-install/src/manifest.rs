@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 版本清单与版本元数据的获取。
 //!
 //! 这是所有安装流程的第一步，CLI 与桌面端都需要，因此放在编排层而不是各自的

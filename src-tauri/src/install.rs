@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 安装命令：把 `qcl-install` 的安装流程接到 IPC 上。
 //!
 //! 这里只做三件事：取上下文、转发进度、把结果整理成前端能直接显示的形状。

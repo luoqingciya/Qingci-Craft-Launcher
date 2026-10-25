@@ -88,4 +88,9 @@ cargo run -p qcl-cli -- 26.3 --dry-run
 
 ## 许可证
 
-[GPL-3.0](LICENSE)
+[GPL-3.0](LICENSE)，并附有 **GPLv3 第 7 条附加条款**（[ADDITIONAL-TERMS.md](ADDITIONAL-TERMS.md)）：
+
+- 分发时须保留版权与许可声明
+- **分发修改版须更换名称**，不得暗示与原版同源或获得原作者支持
+
+原样分发未经修改的完整副本可以保留原名——附加条款不限制 GPLv3 允许的逐字分发。

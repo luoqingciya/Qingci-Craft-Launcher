@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! classpath 与 natives 构件组装。
 //!
 //! 这里只做**路径计算**，不碰文件系统：下载、校验、解压属于安装层职责。

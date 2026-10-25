@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 单个版本的 `version.json` 领域模型。
 //!
 //! 字段与官方 JSON 一一对应。两条贯穿全模块的约定：

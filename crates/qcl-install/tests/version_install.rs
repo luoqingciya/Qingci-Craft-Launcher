@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 完整版本安装：走真实 HTTP 与真实磁盘。
 //!
 //! 服务端同时充当官方 CDN、资源仓库与 assets 对象仓库——`objects_base` 可配置正是

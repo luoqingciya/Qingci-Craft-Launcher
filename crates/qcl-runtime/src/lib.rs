@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! Qingci Craft Launcher 的游戏进程层。
 //!
 //! 职责单一：接收 `qcl-core` 组装好的 [`LaunchCommand`](qcl_core::launch::LaunchCommand)，
