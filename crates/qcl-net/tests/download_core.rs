@@ -38,7 +38,15 @@ fn plan_covers_client_jar_logging_and_libraries() {
         "客户端 jar 应排在最前，便于优先展示进度"
     );
     assert!(plan.contains_path("assets/log_configs/client-1.21.2.xml"));
-    assert!(plan.contains_path("at/yawk/lz4/lz4-java/1.10.1/lz4-java-1.10.1.jar"));
+    assert!(plan.contains_path("libraries/at/yawk/lz4/lz4-java/1.10.1/lz4-java-1.10.1.jar"));
+    assert_eq!(
+        plan.tasks
+            .iter()
+            .filter(|task| task.path.starts_with("libraries/"))
+            .count(),
+        74,
+        "库必须落在 libraries/ 下，且与 classpath 使用同一份路径"
+    );
 
     assert!(
         plan.tasks.iter().all(|task| task.sha1.len() == 40),
@@ -67,7 +75,7 @@ fn plan_for_legacy_version_includes_natives() {
     // 客户端 jar + 2 个库 + 1 个 natives；旧版本没有日志配置。
     assert_eq!(plan.len(), 4);
     assert!(
-        plan.contains_path("org/lwjgl/lwjgl/lwjgl/2.9.1/lwjgl-2.9.1-natives-windows.jar"),
+        plan.contains_path("libraries/org/lwjgl/lwjgl/lwjgl/2.9.1/lwjgl-2.9.1-natives-windows.jar"),
         "natives 构件必须纳入下载计划"
     );
     assert!(

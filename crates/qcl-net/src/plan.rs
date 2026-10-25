@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use qcl_core::assets::{ASSET_OBJECTS_BASE, AssetObjects, object_relative_path};
-use qcl_core::launch::{maven_to_path, natives_artifacts};
+use qcl_core::launch::{library_path, natives_artifacts};
 use qcl_core::version::{LaunchContext, VersionMeta};
 
 /// 单个待下载文件。
@@ -123,11 +123,8 @@ pub fn plan_version_files(
         else {
             continue;
         };
-        let Some(path) = artifact
-            .path
-            .clone()
-            .or_else(|| maven_to_path(&library.name))
-        else {
+        // 与 classpath 共用同一个路径函数，避免「下载到 A、classpath 指向 B」。
+        let Some(path) = library_path(library) else {
             continue;
         };
         push(&artifact.url, path, &artifact.sha1, artifact.size);

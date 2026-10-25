@@ -39,20 +39,26 @@ pub fn maven_to_path(coordinate: &str) -> Option<String> {
     ))
 }
 
-/// 依赖库在游戏目录下的相对路径。
+/// 依赖库在游戏目录下的子目录。
 ///
-/// 优先使用官方给出的 `artifact.path`；缺失时按 Maven 坐标推导。
+/// 与官方启动器一致。少了这一层，`com/`、`org/`、`net/` 会直接散落在游戏根目录，
+/// 和 `assets`、`versions`、`mods`、`saves` 混在一起；加上之后，用户从别的启动器
+/// 迁移过来的 `libraries/` 也能直接复用。
+pub const LIBRARIES_DIR: &str = "libraries";
+
+/// 依赖库主构件在游戏目录下的相对路径（含 [`LIBRARIES_DIR`] 前缀）。
+///
+/// 优先使用官方给出的 `artifact.path`，缺失时按 Maven 坐标推导。返回值可直接用于
+/// classpath 与下载落地路径——两处必须同源，否则会出现「文件下载到了 A，classpath 指向 B」。
 #[must_use]
 pub fn library_path(library: &Library) -> Option<String> {
-    if let Some(path) = library
+    let path = library
         .downloads
         .as_ref()
         .and_then(|downloads| downloads.artifact.as_ref())
         .and_then(|artifact| artifact.path.clone())
-    {
-        return Some(path);
-    }
-    maven_to_path(&library.name)
+        .or_else(|| maven_to_path(&library.name))?;
+    Some(format!("{LIBRARIES_DIR}/{path}"))
 }
 
 /// 组装 classpath 条目（相对游戏目录的路径）。
@@ -120,7 +126,7 @@ pub fn join_classpath(entries: &[String], separator: char) -> String {
 pub struct NativesArtifact {
     /// 来源库的 Maven 坐标，便于定位问题。
     pub library: String,
-    /// natives jar 的相对路径。
+    /// natives jar 在游戏目录下的相对路径（含 `libraries/` 前缀）。
     pub path: String,
     /// 下载信息（URL、SHA-1、大小），供下载层直接使用。
     pub artifact: Artifact,
@@ -172,7 +178,7 @@ pub fn natives_artifacts(meta: &VersionMeta, context: &LaunchContext) -> Vec<Nat
 
         artifacts.push(NativesArtifact {
             library: library.name.clone(),
-            path,
+            path: format!("{LIBRARIES_DIR}/{path}"),
             artifact: artifact.clone(),
             exclude: library
                 .extract

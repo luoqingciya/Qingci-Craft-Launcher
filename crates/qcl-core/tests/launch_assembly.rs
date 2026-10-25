@@ -57,7 +57,7 @@ fn classpath_for_official_26_3_contains_all_applicable_libraries() {
     assert_eq!(entries.len(), 75);
     assert_eq!(
         entries.first().map(String::as_str),
-        Some("at/yawk/lz4/lz4-java/1.10.1/lz4-java-1.10.1.jar"),
+        Some("libraries/at/yawk/lz4/lz4-java/1.10.1/lz4-java-1.10.1.jar"),
         "顺序必须与 version.json 一致，不能重排"
     );
     assert_eq!(
@@ -72,6 +72,27 @@ fn classpath_for_official_26_3_contains_all_applicable_libraries() {
     assert!(
         entries.iter().all(|entry| !entry.contains('\\')),
         "classpath 一律使用正斜杠，Windows 反斜杠会破坏 Java 的路径解析"
+    );
+}
+
+#[test]
+fn library_paths_live_under_libraries_dir() {
+    // 库文件必须归置到 libraries/ 下，不能散落在游戏根目录——
+    // 否则 com/、org/、net/ 会与 assets、versions、mods 混在一起。
+    let meta = parse(META_26_3);
+    let entries = build_classpath(&meta, &windows_11(), "versions/26.3/26.3.jar");
+
+    let libraries: Vec<&String> = entries
+        .iter()
+        .filter(|entry| !entry.starts_with("versions/"))
+        .collect();
+
+    assert_eq!(libraries.len(), 74, "除版本 jar 外全部是库");
+    assert!(
+        libraries
+            .iter()
+            .all(|entry| entry.starts_with("libraries/")),
+        "库条目必须以 libraries/ 开头"
     );
 }
 
@@ -93,7 +114,10 @@ fn classpath_deduplicates_repeated_entries() {
     let meta = parse(raw);
     let entries = build_classpath(&meta, &windows_11(), "versions/test/test.jar");
 
-    assert_eq!(entries, vec!["g/a/1/a-1.jar", "versions/test/test.jar"]);
+    assert_eq!(
+        entries,
+        vec!["libraries/g/a/1/a-1.jar", "versions/test/test.jar"]
+    );
 }
 
 #[test]
@@ -114,7 +138,7 @@ fn classpath_falls_back_to_coordinates_when_path_missing() {
 
     assert_eq!(
         entries.first().map(String::as_str),
-        Some("com/example/demo/1.2.3/demo-1.2.3.jar"),
+        Some("libraries/com/example/demo/1.2.3/demo-1.2.3.jar"),
         "缺少 downloads 时应由 Maven 坐标推导路径"
     );
 }
@@ -129,7 +153,7 @@ fn natives_are_collected_for_legacy_versions() {
     assert_eq!(artifact.library, "org.lwjgl.lwjgl:lwjgl:2.9.1");
     assert_eq!(
         artifact.path,
-        "org/lwjgl/lwjgl/lwjgl/2.9.1/lwjgl-2.9.1-natives-windows.jar"
+        "libraries/org/lwjgl/lwjgl/lwjgl/2.9.1/lwjgl-2.9.1-natives-windows.jar"
     );
     assert_eq!(artifact.exclude, vec!["META-INF/".to_owned()]);
 }
