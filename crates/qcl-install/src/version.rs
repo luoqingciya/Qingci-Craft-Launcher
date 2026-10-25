@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 完整版本安装：一次调用装完某个版本所需的全部文件。
 //!
 //! 顺序是**刻意的**：

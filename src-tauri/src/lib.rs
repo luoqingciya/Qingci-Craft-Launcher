@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! Qingci Craft Launcher 的 Tauri 应用层。
 //!
 //! 这一层刻意保持很薄：**只做 IPC 适配与状态持有，不实现业务算法**。

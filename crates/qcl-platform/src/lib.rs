@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 本机平台探测。
 //!
 //! `qcl-core` 刻意不碰 IO，因此「系统名与架构」这类静态信息由它提供，

@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 极简参数解析。
 //!
 //! 不引入 clap：本程序只有四个选项，而 clap 的派生宏会带来数百 KB 的依赖。

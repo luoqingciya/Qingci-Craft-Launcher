@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! Java 安装探测与选择。
 //!
 //! 探测顺序即优先级：显式指定 → `JAVA_HOME` → `PATH` → 启动器自管目录 → 平台常见安装目录。

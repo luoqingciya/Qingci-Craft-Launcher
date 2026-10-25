@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! Qingci Craft Launcher 的安装编排。
 //!
 //! 这一层负责把「解析」与「下载」串成可执行的安装：决定先后顺序、处理版本间的

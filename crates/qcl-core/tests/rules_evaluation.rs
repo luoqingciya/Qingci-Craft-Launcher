@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 平台规则求值的测试。
 //!
 //! 期望值不是凭直觉写的：`26.3` 的库数量与参数数量先由一份独立的 JS 实现

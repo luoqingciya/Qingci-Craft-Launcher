@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! HTTP 下载实现的测试。
 //!
 //! 用 wiremock 起本地服务，验证真实网络路径上的行为：截断、错误状态码、哈希不匹配、

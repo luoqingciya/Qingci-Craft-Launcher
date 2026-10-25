@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 进程层的测试。
 //!
 //! 用系统自带的 shell 作为被测进程，因此不依赖本机是否装了 Java，

@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 文件完整性校验。
 //!
 //! Mojang 全部使用 SHA-1 而非更现代的摘要算法，因此这里必须跟着用 SHA-1。

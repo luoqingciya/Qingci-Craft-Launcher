@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 启动器设置：持久化与目录解析。
 //!
 //! 这里刻意不依赖 Tauri 类型：函数只接收路径，因此可以在无 GUI 的测试里

@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 启动命令组装：classpath、natives 构件与参数模板。
 //!
 //! 本模块只负责**计算**（拼路径、展开变量），不做 IO。

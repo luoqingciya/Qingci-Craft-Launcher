@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 版本清单与元数据获取：走真实 HTTP（wiremock）。
 //!
 //! 元数据用仓库里的官方 26.3 夹具，因此校验与解析都对着真实数据跑。

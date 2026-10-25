@@ -1,3 +1,7 @@
+// Copyright (C) 2026 luoqingci
+// SPDX-License-Identifier: GPL-3.0-only
+// 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
+
 //! 按官方清单安装 Java 运行时。
 //!
 //! 流程：查索引 → 拉文件清单（校验 SHA-1）→ 生成计划 → 复用下载执行器落盘 →
