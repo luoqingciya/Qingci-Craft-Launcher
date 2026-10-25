@@ -35,3 +35,6 @@ Thumbs.db
 
 # 本地工具与智能体工作区（不参与版本控制）
 .workbuddy-ai/
+
+# qcl 默认游戏目录：运行一次 `qcl <版本>` 就会在里面放几百 MB
+.minecraft/
