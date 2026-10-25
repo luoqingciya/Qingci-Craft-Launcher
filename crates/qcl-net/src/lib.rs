@@ -4,10 +4,15 @@
 //! 失败后重试几次」这些判断能在 CI 中确定性验证，而不依赖真实网络。
 //! 异步执行器（reqwest + tokio）在后续 PR 中基于这些原语实现。
 
+pub mod executor;
 pub mod plan;
 pub mod retry;
 pub mod verify;
 
+pub use executor::{
+    DownloadError, DownloadFailure, DownloadOps, DownloadOptions, DownloadReport, Progress,
+    execute_plan,
+};
 pub use plan::{DownloadPlan, DownloadTask, plan_version_files};
 pub use retry::{RetryPolicy, is_retryable_status};
 pub use verify::{Sha1Hasher, hex_sha1, verify_sha1};
