@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "主窗口的默认能力。应用自定义命令不需要在这里声明权限。",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "dialog:allow-open"]
 }

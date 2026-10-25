@@ -21,3 +21,29 @@ export interface VersionSummary {
 export function listVersions(): Promise<VersionSummary[]> {
   return invoke<VersionSummary[]>("list_versions");
 }
+
+/** 设置视图。字段与 Rust 侧 `SettingsView` 一一对应。 */
+export interface SettingsView {
+  /** 当前生效的游戏目录。 */
+  gameDir: string;
+  /** 默认目录（安装目录下），供「恢复默认」使用。 */
+  defaultGameDir: string;
+  /** 是否使用了自定义目录。 */
+  isCustom: boolean;
+  /** 默认目录不可用时的回退原因。 */
+  fallbackReason: string | null;
+}
+
+/** 读取当前设置。 */
+export function getSettings(): Promise<SettingsView> {
+  return invoke<SettingsView>("get_settings");
+}
+
+/**
+ * 设置游戏目录。
+ *
+ * `path` 传 `null` 表示恢复默认（安装目录下的 `game`）。
+ */
+export function setGameDir(path: string | null): Promise<SettingsView> {
+  return invoke<SettingsView>("set_game_dir", { path });
+}
