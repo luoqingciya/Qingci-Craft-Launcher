@@ -127,6 +127,10 @@ jobs:
 
   # 验证三平台是否真的能编译出 Tauri 应用。此 job 的存在是为了让
   # "签名 / WebView 依赖 / 交叉编译"这类问题在合并前暴露，而不是在发版时。
+  #
+  # 它也是最贵的一环（实测三平台合计约 600 秒）。但只有改动 Rust / Tauri / 前端构建
+  # 配置时才有意义——纯文档或纯 CI 改动跑一遍完整编译只是白等。所以用路径过滤：
+  # 不相关时跳过重活，job 本身仍然成功，避免卡住必需的状态检查。
   build:
     name: build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -136,25 +140,47 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            code:
+              - 'crates/**'
+              - 'src-tauri/**'
+              - 'src/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'vite.config.ts'
+              - 'vitest.config.ts'
+              - 'tsconfig.json'
+              - 'index.html'
+              - '.github/workflows/**'
+              - '.github/actions/**'
+      - name: 说明跳过原因
+        if: steps.changes.outputs.code != 'true'
+        run: echo "本次改动未触及代码或构建配置，跳过三平台编译（其余 job 仍会运行）"
       - uses: dtolnay/rust-toolchain@master
-        if: hashFiles('src-tauri/tauri.conf.json') != ''
+        if: steps.changes.outputs.code == 'true' && hashFiles('src-tauri/tauri.conf.json') != ''
         with:
           toolchain: "1.99.1"
       - uses: Swatinem/rust-cache@v2
-        if: hashFiles('src-tauri/tauri.conf.json') != ''
+        if: steps.changes.outputs.code == 'true' && hashFiles('src-tauri/tauri.conf.json') != ''
       - name: 安装 Linux 构建依赖
-        if: hashFiles('src-tauri/tauri.conf.json') != '' && runner.os == 'Linux'
+        if: steps.changes.outputs.code == 'true' && hashFiles('src-tauri/tauri.conf.json') != '' && runner.os == 'Linux'
         uses: ./.github/actions/linux-deps
       - uses: pnpm/action-setup@v6
-        if: hashFiles('package.json') != ''
+        if: steps.changes.outputs.code == 'true' && hashFiles('package.json') != ''
       - uses: actions/setup-node@v7
-        if: hashFiles('package.json') != ''
+        if: steps.changes.outputs.code == 'true' && hashFiles('package.json') != ''
         with:
           node-version: 22
           cache: pnpm
       - name: 安装前端依赖
-        if: hashFiles('package.json') != ''
+        if: steps.changes.outputs.code == 'true' && hashFiles('package.json') != ''
         run: pnpm install --frozen-lockfile
       - name: 编译（不打包，仅验证可编译）
-        if: hashFiles('src-tauri/tauri.conf.json') != ''
+        if: steps.changes.outputs.code == 'true' && hashFiles('src-tauri/tauri.conf.json') != ''
         run: pnpm tauri build --no-bundle
