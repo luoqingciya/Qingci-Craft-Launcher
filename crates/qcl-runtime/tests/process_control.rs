@@ -123,10 +123,11 @@ async fn working_directory_is_applied() {
 
 #[tokio::test]
 async fn kill_terminates_a_long_running_process() {
+    // 用 exec 让 shell 直接被目标进程替换，这样 kill 打到的就是真正在等的那个进程。
     #[cfg(windows)]
     let command = shell("ping -n 30 127.0.0.1 > nul");
     #[cfg(not(windows))]
-    let command = shell("sleep 30");
+    let command = shell("exec sleep 30");
 
     let dir = temp_dir();
     let mut process = spawn(&command, dir.path()).expect("应能启动");
@@ -142,6 +143,29 @@ async fn kill_terminates_a_long_running_process() {
         !outcome.is_success(),
         "被终止的进程不应报告成功退出：{outcome:?}"
     );
+}
+
+#[tokio::test]
+async fn wait_does_not_hang_when_a_grandchild_holds_the_pipes() {
+    // 不带 exec：shell 会派生子进程，子进程继承 stdout/stderr 的写端。
+    // 杀掉 shell 后写端仍然打开，EOF 永远等不到——收尾阶段必须有时间上限，
+    // 否则「等待退出」会永久阻塞。
+    #[cfg(windows)]
+    let command = shell("ping -n 30 127.0.0.1 > nul");
+    #[cfg(not(windows))]
+    let command = shell("sleep 30");
+
+    let dir = temp_dir();
+    let mut process = spawn(&command, dir.path()).expect("应能启动");
+
+    process.kill().await.expect("应能终止");
+
+    let outcome = tokio::time::timeout(Duration::from_secs(10), process.wait(|_| {}))
+        .await
+        .expect("即使孙进程还持有管道，wait 也必须有界返回")
+        .expect("等待应成功");
+
+    assert!(!outcome.is_success());
 }
 
 #[tokio::test]

@@ -108,9 +108,16 @@ impl GameProcess {
         };
 
         // 进程已退出，但管道里可能还有未读内容；读取端在 EOF 后会自行结束。
-        while let Some(line) = self.logs.recv().await {
-            on_line(line);
-        }
+        //
+        // 这里必须设时间上限：如果游戏派生了子进程并让它继承了 stdout/stderr
+        // （或者进程被 kill 而孙进程还活着），写端不会关闭，EOF 永远等不到，
+        // 收尾就会永久阻塞。宁可丢掉最后几行日志，也不能让「等待退出」卡死。
+        let drain = async {
+            while let Some(line) = self.logs.recv().await {
+                on_line(line);
+            }
+        };
+        let _ = tokio::time::timeout(LOG_DRAIN_TIMEOUT, drain).await;
 
         Ok(LaunchOutcome {
             exit_code: status.code(),
@@ -160,6 +167,9 @@ pub fn spawn(command: &LaunchCommand, working_dir: &Path) -> Result<GameProcess,
 /// 日志通道容量。设上限而不是无限缓冲：游戏刷日志的速度可以远超消费速度，
 /// 无界通道会把内存吃光。
 const LOG_CHANNEL_CAPACITY: usize = 4096;
+
+/// 进程退出后等待剩余日志的最长时间。
+const LOG_DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
 
 fn spawn_reader<R>(reader: R, stream: LogStream, sender: mpsc::Sender<LogLine>)
 where
