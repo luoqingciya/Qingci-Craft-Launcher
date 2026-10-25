@@ -21,6 +21,7 @@ tauri-build = { version = "2.7.4", features = [] }
 # 同时给出 version 与 path：只写 path 会被 cargo-deny 判为通配依赖（wildcard）。
 qcl-core = { version = "0.1.0", path = "../crates/qcl-core" }
 qcl-net = { version = "0.1.0", path = "../crates/qcl-net" }
+qcl-install = { version = "0.1.0", path = "../crates/qcl-install" }
 qcl-platform = { version = "0.1.0", path = "../crates/qcl-platform" }
 tauri = { version = "2.12.5", features = [] }
 tauri-plugin-dialog = "2.8.3"

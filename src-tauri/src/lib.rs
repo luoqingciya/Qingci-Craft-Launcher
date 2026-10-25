@@ -11,14 +11,10 @@ mod settings;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
-use qcl_core::version::VersionManifest;
+use qcl_install::fetch_manifest;
 use qcl_net::HttpDownloader;
 use serde::Serialize;
 use tauri::Manager;
-
-/// 官方版本清单地址。
-const VERSION_MANIFEST_URL: &str =
-    "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 
 /// 运行时状态。设置、生效目录与下载器必须一起变更，因此放在同一把锁下。
 struct Inner {
@@ -123,13 +119,9 @@ async fn list_versions(state: tauri::State<'_, AppState>) -> Result<Vec<VersionS
         Arc::clone(&inner.downloader)
     };
 
-    let raw = downloader
-        .fetch_text(VERSION_MANIFEST_URL)
+    let manifest = fetch_manifest(&downloader)
         .await
-        .map_err(|error| format!("获取版本清单失败：{error}"))?;
-
-    let manifest: VersionManifest =
-        serde_json::from_str(&raw).map_err(|error| format!("解析版本清单失败：{error}"))?;
+        .map_err(|error| error.to_string())?;
 
     Ok(manifest
         .versions
