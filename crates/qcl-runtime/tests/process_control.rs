@@ -183,3 +183,47 @@ async fn missing_executable_is_reported() {
         "错误信息应说明启动失败：{message}"
     );
 }
+
+#[tokio::test]
+async fn cancel_terminates_a_long_running_process() {
+    #[cfg(windows)]
+    let command = shell("ping -n 30 127.0.0.1 > nul");
+    #[cfg(not(windows))]
+    let command = shell("sleep 30");
+
+    let dir = temp_dir();
+    let mut process = spawn(&command, dir.path()).expect("应能启动");
+
+    // 模拟「用户点了停止 / 按了 Ctrl+C」。
+    let cancel = async {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    };
+
+    let outcome = tokio::time::timeout(
+        Duration::from_secs(10),
+        process.wait_or_cancel(cancel, |_| {}),
+    )
+    .await
+    .expect("取消后应迅速返回，而不是等满 30 秒")
+    .expect("等待应成功");
+
+    assert!(!outcome.is_success(), "被取消的进程不应报告成功退出");
+}
+
+#[tokio::test]
+async fn cancel_that_never_fires_behaves_like_wait() {
+    let dir = temp_dir();
+    let mut process = spawn(&shell("echo done"), dir.path()).expect("应能启动");
+
+    let mut lines = Vec::new();
+    let outcome = process
+        .wait_or_cancel(std::future::pending(), |line| lines.push(line))
+        .await
+        .expect("应能等待");
+
+    assert!(outcome.is_success());
+    assert!(
+        lines.iter().any(|line| line.text.contains("done")),
+        "不取消时日志仍应正常转发"
+    );
+}
