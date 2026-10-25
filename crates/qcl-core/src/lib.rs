@@ -6,6 +6,7 @@
 //! 当前进度：Phase 1，已建立官方版本清单与单版本元数据的领域模型。
 
 pub mod error;
+pub mod launch;
 pub mod version;
 
 pub use error::{CoreError, Result};

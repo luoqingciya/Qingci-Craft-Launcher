@@ -97,6 +97,33 @@ impl VersionMeta {
     pub fn required_java_major(&self) -> Option<u32> {
         self.java_version.as_ref().map(|java| java.major_version)
     }
+
+    /// 解析 game 参数（已按环境求值，但**未做变量替换**）。
+    ///
+    /// 1.13 起走结构化 `arguments.game`；更早的版本只有空格分隔的
+    /// `minecraftArguments` 字符串，按空白切分即可。
+    #[must_use]
+    pub fn game_arguments(&self, context: &LaunchContext) -> Vec<&str> {
+        if let Some(arguments) = &self.arguments {
+            return arguments.resolve_game(context);
+        }
+        self.minecraft_arguments
+            .as_deref()
+            .map(|raw| raw.split_whitespace().collect())
+            .unwrap_or_default()
+    }
+
+    /// 解析 JVM 参数（已按环境求值，但**未做变量替换**）。
+    ///
+    /// 1.13 之前的版本没有结构化 JVM 参数，返回空列表——那些版本所需的
+    /// JVM 参数由启动器自行提供，不在 `version.json` 中。
+    #[must_use]
+    pub fn jvm_arguments(&self, context: &LaunchContext) -> Vec<&str> {
+        self.arguments
+            .as_ref()
+            .map(|arguments| arguments.resolve_jvm(context))
+            .unwrap_or_default()
+    }
 }
 
 /// 版本所需的 Java 运行时。

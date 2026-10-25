@@ -15,6 +15,10 @@ pub enum CoreError {
     /// 版本清单中不存在指定版本。
     #[error("版本清单中不存在版本 `{0}`")]
     VersionNotFound(String),
+
+    /// 启动参数模板中存在未声明的变量。
+    #[error("未声明的启动参数变量：`${{{0}}}`")]
+    UnknownVariable(String),
 }
 
 /// 领域层结果类型别名。
