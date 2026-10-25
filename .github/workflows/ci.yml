@@ -100,8 +100,8 @@ jobs:
           # 覆盖率只做趋势观察，不阻断合并；达标要求由评审把关。
           fail_ci_if_error: false
 
-  # 前端门禁：类型检查 + 生产构建。pnpm build 本身执行 tsc --noEmit 后再打包，
-  # 不调用 package.json 中不存在的 eslint/vitest 脚本，避免「配置看起来绿、实际 job 红」。
+  # 前端门禁：lint → 单元测试 → 类型检查与生产构建。
+  # 顺序刻意如此：lint 与测试都比完整打包快，先失败能省时间。
   frontend:
     name: frontend
     runs-on: ubuntu-latest
@@ -117,6 +117,12 @@ jobs:
       - name: 安装依赖
         if: hashFiles('package.json') != ''
         run: pnpm install --frozen-lockfile
+      - name: Lint
+        if: hashFiles('package.json') != ''
+        run: pnpm lint
+      - name: 单元测试
+        if: hashFiles('package.json') != ''
+        run: pnpm test
       - name: 类型检查与生产构建
         if: hashFiles('package.json') != ''
         run: pnpm build

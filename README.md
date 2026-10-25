@@ -62,8 +62,10 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-features
 
-# 前端（类型检查 + 生产构建）
+# 前端（lint + 单元测试 + 类型检查 + 生产构建）
 pnpm install
+pnpm lint
+pnpm test
 pnpm build
 
 # 桌面应用（开发模式：热重载）
