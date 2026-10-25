@@ -1,119 +1,73 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import {
+  GAME_EXIT_EVENT,
+  GAME_LOG_EVENT,
+  INSTALL_PROGRESS_EVENT,
+  gameStatus,
   getSettings,
+  installGameVersion,
+  launchGame,
   listVersions,
   setGameDir,
+  stopGame,
+  type GameExitEvent,
+  type GameLogEvent,
+  type GameStatus,
+  type InstallProgressEvent,
   type SettingsView,
   type VersionSummary,
 } from "./api";
+import { GameDirectory, InstallProgressBar } from "./components/GameDirectory";
+import { LogPanel, MAX_LINES, type LogEntry, type LogStreamKind } from "./components/LogPanel";
+import { VersionList } from "./components/VersionList";
 
-/** 加载状态机。用联合类型而不是多个布尔，避免出现「既在加载又有错误」这种非法状态。 */
+/** 版本清单的加载状态。用联合类型避免「既在加载又有错误」的非法状态。 */
 type LoadState =
   | { status: "loading" }
   | { status: "ready"; versions: VersionSummary[] }
   | { status: "failed"; message: string };
 
-const TYPE_LABELS: Record<string, string> = {
-  release: "正式版",
-  snapshot: "快照",
-  old_beta: "Beta",
-  old_alpha: "Alpha",
-  other: "其他",
-};
-
-function formatDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-}
-
-/** 游戏目录设置。目录变更会影响后续所有下载与启动，因此独立成块。 */
-function GameDirectory({
-  settings,
-  busy,
-  onChange,
-  onReset,
-}: {
-  settings: SettingsView | null;
-  busy: boolean;
-  onChange: () => void;
-  onReset: () => void;
-}) {
-  return (
-    <section className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] px-4 py-3">
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-medium">游戏目录</h2>
-            {settings?.isCustom && (
-              <span className="rounded bg-[var(--color-accent-soft)] px-1.5 py-0.5 text-[10px] text-[var(--color-accent)]">
-                自定义
-              </span>
-            )}
-          </div>
-          <p
-            className="mt-1 truncate font-mono text-xs text-[var(--color-text-secondary)]"
-            title={settings?.gameDir ?? ""}
-          >
-            {settings?.gameDir ?? "读取中…"}
-          </p>
-        </div>
-
-        <div className="flex shrink-0 gap-2">
-          <button
-            type="button"
-            onClick={onChange}
-            disabled={busy || settings === null}
-            className="rounded border border-[var(--color-border-subtle)] px-3 py-1.5 text-xs hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
-          >
-            更改…
-          </button>
-          <button
-            type="button"
-            onClick={onReset}
-            disabled={busy || settings === null || !settings.isCustom}
-            className="rounded border border-[var(--color-border-subtle)] px-3 py-1.5 text-xs hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
-            title={settings ? `恢复为 ${settings.defaultGameDir}` : undefined}
-          >
-            恢复默认
-          </button>
-        </div>
-      </div>
-
-      {settings?.fallbackReason && (
-        <p className="mt-2 text-xs text-amber-400">⚠ {settings.fallbackReason}</p>
-      )}
-    </section>
-  );
-}
-
 export default function App() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [settings, setSettings] = useState<SettingsView | null>(null);
-  const [settingsError, setSettingsError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [settingsBusy, setSettingsBusy] = useState(false);
 
+  const [selected, setSelected] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<InstallProgressEvent | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const [status, setStatus] = useState<GameStatus>({ running: false, version: null });
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const logId = useRef(0);
+
+  const appendLog = useCallback((entry: { stream: LogStreamKind; text: string }) => {
+    logId.current += 1;
+    const line: LogEntry = { ...entry, id: logId.current };
+    setLogs((previous) => {
+      const next = [...previous, line];
+      // 截断而不是整段丢弃：保留最近的行，早期启动信息价值随时间递减。
+      return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next;
+    });
+  }, []);
+
+  // 初始数据：版本清单、设置、运行状态。
   useEffect(() => {
     let cancelled = false;
 
     listVersions()
       .then((versions) => {
-        // 组件卸载后不再写状态，避免 React 警告与竞态。
         if (!cancelled) {
           setState({ status: "ready", versions });
         }
       })
-      .catch((error: unknown) => {
+      .catch((cause: unknown) => {
         if (!cancelled) {
-          setState({ status: "failed", message: String(error) });
+          setState({ status: "failed", message: String(cause) });
         }
       });
 
@@ -123,10 +77,20 @@ export default function App() {
           setSettings(view);
         }
       })
-      .catch((error: unknown) => {
+      .catch((cause: unknown) => {
         if (!cancelled) {
-          setSettingsError(String(error));
+          setError(String(cause));
         }
+      });
+
+    gameStatus()
+      .then((current) => {
+        if (!cancelled) {
+          setStatus(current);
+        }
+      })
+      .catch(() => {
+        // 状态查询失败不影响使用，后续事件会纠正。
       });
 
     return () => {
@@ -134,90 +98,210 @@ export default function App() {
     };
   }, []);
 
+  // 事件订阅。监听是异步注册的，因此要先判断是否已卸载再决定保留还是立刻注销。
+  useEffect(() => {
+    let disposed = false;
+    const unlisteners: UnlistenFn[] = [];
+
+    const register = (promise: Promise<UnlistenFn>) => {
+      void promise.then((unlisten) => {
+        if (disposed) {
+          unlisten();
+        } else {
+          unlisteners.push(unlisten);
+        }
+      });
+    };
+
+    register(
+      listen<InstallProgressEvent>(INSTALL_PROGRESS_EVENT, (event) => {
+        setProgress(event.payload);
+      }),
+    );
+
+    register(
+      listen<GameLogEvent>(GAME_LOG_EVENT, (event) => {
+        appendLog(event.payload);
+      }),
+    );
+
+    register(
+      listen<GameExitEvent>(GAME_EXIT_EVENT, (event) => {
+        setStatus({ running: false, version: null });
+        const { code, durationSecs } = event.payload;
+        appendLog({
+          stream: "system",
+          text: `—— 游戏退出（${code ?? "被终止"}），运行 ${durationSecs.toFixed(1)} 秒 ——`,
+        });
+      }),
+    );
+
+    return () => {
+      disposed = true;
+      unlisteners.forEach((unlisten) => {
+        unlisten();
+      });
+    };
+  }, [appendLog]);
+
   const applyGameDir = useCallback(async (path: string | null) => {
-    setBusy(true);
-    setSettingsError(null);
+    setSettingsBusy(true);
+    setError(null);
     try {
       setSettings(await setGameDir(path));
-    } catch (error: unknown) {
-      setSettingsError(String(error));
+      setMessage("游戏目录已更新");
+    } catch (cause: unknown) {
+      setError(String(cause));
     } finally {
-      setBusy(false);
+      setSettingsBusy(false);
     }
   }, []);
 
   const pickDirectory = useCallback(async () => {
-    // 对话框返回 `string | string[] | null`：取消时为 null，多选时是数组。
-    const picked = await open({
-      directory: true,
-      multiple: false,
-      title: "选择游戏目录",
-    });
+    const picked = await open({ directory: true, multiple: false, title: "选择游戏目录" });
     if (typeof picked === "string") {
       await applyGameDir(picked);
     }
   }, [applyGameDir]);
 
+  const install = useCallback(async () => {
+    if (!selected) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    setProgress(null);
+    try {
+      const summary = await installGameVersion(selected);
+      setMessage(
+        `${summary.version} 已就绪：版本文件 ${summary.downloaded} 个下载 / ${summary.skipped} 个跳过，` +
+          `资产 ${summary.assets} 个，natives ${summary.natives} 个`,
+      );
+    } catch (cause: unknown) {
+      setError(String(cause));
+    } finally {
+      setBusy(false);
+      setProgress(null);
+    }
+  }, [selected]);
+
+  const launch = useCallback(async () => {
+    if (!selected) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await launchGame(selected);
+      setStatus({ running: true, version: selected });
+    } catch (cause: unknown) {
+      setError(String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }, [selected]);
+
+  const stop = useCallback(async () => {
+    setError(null);
+    try {
+      await stopGame();
+    } catch (cause: unknown) {
+      setError(String(cause));
+    }
+  }, []);
+
+  const canAct = state.status === "ready" && selected !== null && !busy;
+  const runningLabel = status.running ? `运行中：${status.version ?? ""}` : "未运行";
+
   return (
-    <main className="flex h-full flex-col gap-4 p-6">
+    <main className="flex h-full flex-col gap-3 p-6">
       <header className="flex items-baseline justify-between">
         <h1 className="text-lg font-semibold tracking-tight">Qingci Craft Launcher</h1>
-        <span className="text-xs text-[var(--color-text-secondary)]">Phase 2 · 界面骨架</span>
+        <span className="text-xs text-[var(--color-text-secondary)]">{runningLabel}</span>
       </header>
 
       <GameDirectory
         settings={settings}
-        busy={busy}
+        busy={settingsBusy}
         onChange={pickDirectory}
         onReset={() => void applyGameDir(null)}
       />
 
-      {settingsError && (
-        <p className="rounded border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs text-red-400">
-          游戏目录设置失败：{settingsError}
-        </p>
-      )}
+      <section className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm">
+            {selected ? (
+              <>
+                已选版本 <span className="font-mono text-[var(--color-accent)]">{selected}</span>
+              </>
+            ) : (
+              <span className="text-[var(--color-text-secondary)]">
+                在下方列表中选择一个版本
+              </span>
+            )}
+          </div>
 
-      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)]">
-        <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] px-4 py-3">
-          <h2 className="text-sm font-medium">可用版本</h2>
-          {state.status === "ready" && (
-            <span className="text-xs text-[var(--color-text-secondary)]">
-              共 {state.versions.length} 个
-            </span>
-          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void install()}
+              disabled={!canAct || status.running}
+              className="rounded border border-[var(--color-border-subtle)] px-3 py-1.5 text-xs hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
+            >
+              {busy ? "处理中…" : "安装 / 检查文件"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void launch()}
+              disabled={!canAct || status.running}
+              className="rounded bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
+            >
+              启动游戏
+            </button>
+            <button
+              type="button"
+              onClick={() => void stop()}
+              disabled={!status.running}
+              className="rounded border border-red-500/50 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 disabled:opacity-40"
+            >
+              停止
+            </button>
+          </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {state.status === "loading" && (
-            <p className="p-4 text-sm text-[var(--color-text-secondary)]">正在获取版本清单…</p>
-          )}
+        {progress && <InstallProgressBar progress={progress} />}
 
-          {state.status === "failed" && (
-            <p className="p-4 text-sm text-red-400">获取版本清单失败：{state.message}</p>
-          )}
-
-          {state.status === "ready" && (
-            <ul className="divide-y divide-[var(--color-border-subtle)]">
-              {state.versions.map((version) => (
-                <li
-                  key={version.id}
-                  className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-[var(--color-accent-soft)]"
-                >
-                  <span className="font-mono">{version.id}</span>
-                  <span className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)]">
-                    <span>{TYPE_LABELS[version.type] ?? version.type}</span>
-                    <span>{formatDate(version.releaseTime)}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        {message && <p className="mt-2 text-xs text-emerald-400">{message}</p>}
+        {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
       </section>
 
+      <div className="grid min-h-0 flex-1 grid-cols-5 gap-3">
+        <div className="col-span-2 flex min-h-0 flex-col">
+          {state.status === "loading" && (
+            <p className="text-sm text-[var(--color-text-secondary)]">正在获取版本清单…</p>
+          )}
+          {state.status === "failed" && (
+            <p className="text-sm text-red-400">获取版本清单失败：{state.message}</p>
+          )}
+          {state.status === "ready" && (
+            <VersionList
+              versions={state.versions}
+              selected={selected}
+              disabled={busy || status.running}
+              onSelect={setSelected}
+            />
+          )}
+        </div>
+
+        <div className="col-span-3 flex min-h-0 flex-col">
+          <LogPanel logs={logs} onClear={() => setLogs([])} />
+        </div>
+      </div>
+
       <footer className="text-xs text-[var(--color-text-secondary)]">
-        当前已打通「版本清单」与「游戏目录设置」，安装与启动将在后续接入。
+        账号体系与模组管理尚未接入，当前使用离线账户。
       </footer>
     </main>
   );

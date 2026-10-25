@@ -4,17 +4,21 @@
 //! 版本解析、下载、安装、启动全部在 `qcl-*` 领域 crate 里，因此那些逻辑
 //! 能在无 GUI 的 CI 中完整测试，不必为「命令处理函数」单独搭一套测试环境。
 //!
-//! 当前暴露：版本清单、游戏目录的读取与修改。
+//! 当前暴露：版本清单、游戏目录设置、安装、启动与停止。
 
+mod game;
+mod install;
 mod settings;
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use qcl_install::fetch_manifest;
 use qcl_net::HttpDownloader;
 use serde::Serialize;
 use tauri::Manager;
+
+use crate::game::GameSession;
 
 /// 运行时状态。设置、生效目录与下载器必须一起变更，因此放在同一把锁下。
 struct Inner {
@@ -29,7 +33,7 @@ struct Inner {
 }
 
 /// 应用状态。
-struct AppState {
+pub struct AppState {
     /// 配置文件路径（`<app_config>/settings.json`）。
     config_path: PathBuf,
     /// 安装目录，即可执行文件所在目录。
@@ -37,6 +41,22 @@ struct AppState {
     /// 默认目录不可写时的回退位置（`<app_data>/game`）。
     fallback_dir: PathBuf,
     inner: RwLock<Inner>,
+    /// 正在运行的游戏。用 `Arc<Mutex<_>>` 而不是普通 `Mutex`，
+    /// 是为了让等待进程的后台任务能直接持有它（任务里拿不到 `State`）。
+    game: Arc<Mutex<Option<Arc<GameSession>>>>,
+}
+
+impl AppState {
+    /// 取当前的下载器与游戏目录。
+    ///
+    /// 两者必须成对读取：目录变了下载器会重建，分开取可能拿到不一致的组合。
+    fn context(&self) -> Result<(Arc<HttpDownloader>, PathBuf), String> {
+        let inner = self
+            .inner
+            .read()
+            .map_err(|_| "内部状态锁已中毒".to_owned())?;
+        Ok((Arc::clone(&inner.downloader), inner.game_dir.clone()))
+    }
 }
 
 /// 传给前端的设置视图。
@@ -220,13 +240,18 @@ pub fn run() {
                     fallback_reason,
                     downloader: Arc::new(downloader),
                 }),
+                game: Arc::new(Mutex::new(None)),
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             list_versions,
             get_settings,
-            set_game_dir
+            set_game_dir,
+            install::install_game_version,
+            game::launch_game,
+            game::stop_game,
+            game::game_status
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");
