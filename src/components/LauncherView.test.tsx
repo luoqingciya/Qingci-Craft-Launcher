@@ -96,16 +96,29 @@ describe("LauncherView", () => {
     expect(screen.getByText("Fabric 0.20.1")).toBeInTheDocument();
   });
 
-  it("设置抽屉默认关闭，点「设置」打开、点「关闭」收起", async () => {
+  it("默认停在「启动」页，切换标签页才显示设置与关于", async () => {
     renderView({ selected: "26.3" });
 
+    expect(screen.getByRole("tab", { name: "启动" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByText("游戏目录")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "设置" }));
+    await userEvent.click(screen.getByRole("tab", { name: "设置" }));
     expect(screen.getByText("游戏目录")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "关闭" }));
+    await userEvent.click(screen.getByRole("tab", { name: "关于" }));
+    expect(screen.getByText(/GPL-3\.0/)).toBeInTheDocument();
     expect(screen.queryByText("游戏目录")).not.toBeInTheDocument();
+  });
+
+  it("主题按钮在深色/浅色之间切换", async () => {
+    renderView();
+
+    const toggle = screen.getByRole("button", { name: "切换到浅色模式" });
+    await userEvent.click(toggle);
+
+    // 切换后按钮的语义与 <html data-theme> 都要跟着变，否则界面不会真的变。
+    expect(screen.getByRole("button", { name: "切换到深色模式" })).toBeInTheDocument();
+    expect(document.documentElement.dataset.theme).toBe("light");
   });
 
   it("版本清单加载失败时给出错误，而不是空列表", () => {

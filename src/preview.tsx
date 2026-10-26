@@ -17,7 +17,10 @@ import { createRoot } from "react-dom/client";
 import type { GameStatus, LoaderOption, SettingsView, VersionSummary } from "./api";
 import { LauncherView } from "./components/LauncherView";
 import type { LogEntry } from "./lib/logs";
+import { applyInitialTheme } from "./lib/theme";
 import "./styles.css";
+
+applyInitialTheme();
 
 const VERSIONS: VersionSummary[] = [
   { id: "26.4-snapshot-2", type: "snapshot", releaseTime: "2026-10-22T10:00:00+00:00" },

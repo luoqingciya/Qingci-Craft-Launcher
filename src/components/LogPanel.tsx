@@ -57,7 +57,7 @@ export function LogPanel({ logs, onClear }: { logs: LogEntry[]; onClear: () => v
 
       <div
         ref={container}
-        className="mx-4 mb-4 min-h-0 flex-1 overflow-y-auto rounded-lg bg-[#07090d] px-3 py-2 ring-1 ring-inset ring-[var(--color-border-subtle)]"
+        className="mx-4 mb-4 min-h-0 flex-1 overflow-y-auto rounded-lg bg-[var(--color-log-surface)] px-3 py-2 ring-1 ring-inset ring-[var(--color-border-subtle)]"
       >
         {logs.length === 0 ? (
           <p className="text-[11px] text-[var(--color-text-muted)]">

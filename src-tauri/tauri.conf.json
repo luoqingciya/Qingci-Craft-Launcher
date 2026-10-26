@@ -12,12 +12,14 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Qingci Craft Launcher",
         "width": 1000,
         "height": 680,
         "minWidth": 860,
         "minHeight": 560,
-        "resizable": true
+        "resizable": true,
+        "visible": false
       }
     ],
     "security": {
