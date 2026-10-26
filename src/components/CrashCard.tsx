@@ -4,6 +4,7 @@
 
 import { useRef, useState } from "react";
 
+import { revealCrashReport } from "../api";
 import { formatSummary, type CrashSummary } from "../lib/crash";
 
 /**
@@ -21,6 +22,7 @@ export function CrashCard({
 }) {
   const textRef = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState<"idle" | "done" | "manual">("idle");
+  const [revealError, setRevealError] = useState<string | null>(null);
 
   async function copy() {
     const text = formatSummary(summary);
@@ -41,6 +43,18 @@ export function CrashCard({
     }
   }
 
+  async function reveal() {
+    if (!summary.reportPath) {
+      return;
+    }
+    setRevealError(null);
+    try {
+      await revealCrashReport(summary.reportPath);
+    } catch (cause: unknown) {
+      setRevealError(String(cause));
+    }
+  }
+
   return (
     <section className="mb-3 shrink-0 rounded-xl bg-[var(--color-danger)]/10 p-3.5 ring-1 ring-inset ring-[var(--color-danger)]/30">
       <div className="flex items-start gap-3">
@@ -57,6 +71,12 @@ export function CrashCard({
               {summary.lines.join("\n")}
             </pre>
           )}
+
+          {summary.reportPath && (
+            <p className="mt-2 break-all text-[11px] text-[var(--color-text-muted)]">
+              崩溃报告：{summary.reportPath}
+            </p>
+          )}
         </div>
 
         <div className="flex shrink-0 flex-col items-end gap-1">
@@ -67,6 +87,15 @@ export function CrashCard({
           >
             {copied === "done" ? "已复制" : "复制摘要"}
           </button>
+          {summary.reportPath && (
+            <button
+              type="button"
+              onClick={() => void reveal()}
+              className="rounded-md px-2 py-1 text-[11px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
+            >
+              打开报告
+            </button>
+          )}
           <button
             type="button"
             onClick={onDismiss}
@@ -81,6 +110,9 @@ export function CrashCard({
         <p className="mt-2 text-[11px] text-[var(--color-text-muted)]">
           已选中文本，按 Ctrl+C 复制。
         </p>
+      )}
+      {revealError && (
+        <p className="mt-2 text-[11px] text-[var(--color-danger)]">{revealError}</p>
       )}
     </section>
   );

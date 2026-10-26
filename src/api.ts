@@ -95,11 +95,23 @@ export interface GameLogEvent {
   text: string;
 }
 
+/** 游戏自己写下的崩溃报告（后端只读头部，不整份传）。 */
+export interface CrashReport {
+  /** 报告文件路径。 */
+  path: string;
+  /** `Description:` 那一行。 */
+  description: string | null;
+  /** 结论下方紧接着的几行。 */
+  excerpt: string[];
+}
+
 /** 游戏进程退出。 */
 export interface GameExitEvent {
   /** 退出码；被信号终止时为 `null`。 */
   code: number | null;
   durationSecs: number;
+  /** 本次运行产生的崩溃报告；正常退出或没写报告时为 `null`。 */
+  crashReport: CrashReport | null;
 }
 
 /** 运行状态。 */
@@ -169,6 +181,11 @@ export function stopGame(): Promise<void> {
 /** 查询运行状态。 */
 export function gameStatus(): Promise<GameStatus> {
   return invoke<GameStatus>("game_status");
+}
+
+/** 在文件管理器里选中崩溃报告。 */
+export function revealCrashReport(path: string): Promise<void> {
+  return invoke<void>("reveal_crash_report", { path });
 }
 
 /** 模组搜索结果。 */
