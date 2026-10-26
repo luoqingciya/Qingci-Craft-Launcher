@@ -85,12 +85,21 @@ describe("AboutPanel 更新区", () => {
     expect(screen.getByText(/应用会自动重启/)).toBeInTheDocument();
   });
 
-  it("失败时显示原因并可重试", async () => {
+  it("失败的检查显示原因并可重试", async () => {
     const { onCheck } = renderPanel({ kind: "error", message: "网络不可达" });
 
     expect(screen.getByText("网络不可达")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
 
     expect(onCheck).toHaveBeenCalled();
+  });
+
+  it("不支持的平台不给检查按钮，只引导去下载页", () => {
+    // Linux 的安装包不在更新服务器上，给一个「点了就报错」的按钮是最差的选择。
+    renderPanel({ kind: "unsupported" });
+
+    expect(screen.getByText("当前平台不支持自动更新")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /检查更新/ })).toBeNull();
+    expect(screen.getByRole("link", { name: "去下载" })).toBeInTheDocument();
   });
 });

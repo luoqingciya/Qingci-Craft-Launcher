@@ -225,21 +225,19 @@ jobs:
             notes="Qingci Craft Launcher ${VERSION} (manual build, not a published release)"
           fi
 
-          # 每个平台一项；缺哪个平台就跳过哪个。
+          # 清单里只有 Windows。Linux 的 AppImage 不上 COS（80 MB，而且只是自包含的
+          # 打包结果），所以清单里没有 linux 条目——Linux 用户从 GitHub Release 手动下载。
+          # 客户端那边也会据此把 Linux 判为「不支持自动更新」，不会给出一个点了就报错的按钮。
           platforms=()
           add() {  # $1=目标 $2=glob
             local files=($2)
-            if [ ${#files[@]} -gt 0 ]; then
-              platforms+=(--platform "$1=${files[0]}=${files[0]}.sig")
+            if [ ${#files[@]} -eq 0 ]; then
+              echo "::error::没有找到匹配 $2 的产物，无法生成清单"
+              exit 1
             fi
+            platforms+=(--platform "$1=${files[0]}=${files[0]}.sig")
           }
           add windows-x86_64 "out/*x64-setup.exe"
-          add linux-x86_64   "out/*.AppImage"
-
-          if [ ${#platforms[@]} -eq 0 ]; then
-            echo "::error::没有任何平台产物，无法生成清单"
-            exit 1
-          fi
 
           node scripts/make-latest-json.mjs \
             --version "$VERSION" \
@@ -251,13 +249,18 @@ jobs:
           cat out/latest.json
           ls -l out
 
+      # COS 只放「自动更新需要的东西」：Windows 安装包、它的签名、清单。
+      # Linux 的 AppImage 与 deb 只进 GitHub Release——AppImage 有 80 MB，
+      # 传 COS 又慢又占带宽，而它本来就不参与自动更新。
       - name: 预览将要上传的对象（dry run）
         if: github.event_name != 'push' && github.event.inputs.dry_run != 'false'
         shell: bash
         run: |
           set -euo pipefail
           args=()
-          for file in out/*; do args+=(--file "$file"); done
+          for file in out/*x64-setup.exe out/*x64-setup.exe.sig out/latest.json; do
+            if [ -f "$file" ]; then args+=(--file "$file"); fi
+          done
           node scripts/publish-cos.mjs \
             --bucket "$COS_BUCKET" --region "$COS_REGION" --prefix "$COS_PREFIX" \
             "${args[@]}" --dry-run
@@ -272,7 +275,9 @@ jobs:
         run: |
           set -euo pipefail
           args=()
-          for file in out/*; do args+=(--file "$file"); done
+          for file in out/*x64-setup.exe out/*x64-setup.exe.sig out/latest.json; do
+            if [ -f "$file" ]; then args+=(--file "$file"); fi
+          done
           node scripts/publish-cos.mjs \
             --bucket "$COS_BUCKET" --region "$COS_REGION" --prefix "$COS_PREFIX" \
             "${args[@]}"

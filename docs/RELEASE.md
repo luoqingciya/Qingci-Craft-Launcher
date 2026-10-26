@@ -133,14 +133,22 @@ GitHub Release（附安装包与 `.sig`）。
 
 ## 平台现状
 
-发布产物：**Windows 的 NSIS 安装包**，**Linux 的 AppImage 与 deb**。
-`latest.json` 里有 `windows-x86_64` 与 `linux-x86_64` 两个平台条目。
+两条分发通道，故意分开：
+
+| 通道 | 内容 | 用途 |
+| --- | --- | --- |
+| COS（`qcl.luoqingciya.cn/releases/`） | Windows NSIS 安装包 + `.sig` + `latest.json` | **自动更新通道** |
+| GitHub Releases | 上面那些，外加 Linux 的 AppImage 与 deb | 人工下载 |
+
+所以 `latest.json` 里**只有** `windows-x86_64` 一条。Linux 产物留在 GitHub Releases：
+AppImage 有 80 MB，又不参与自动更新，放 COS 上只是白占带宽。
 
 - **Windows**：NSIS 3.3 MB，复用系统 WebView2，自动更新走静默安装 + 重启。
 - **Linux AppImage**：80 MB。自包含，把 WebKitGTK + JavaScriptCore + GTK3 整套塞进去了
-  （解出来 530 个文件），所以体积是 deb 的十几倍。**自动更新只对 AppImage 有效**。
-- **Linux deb**：4.8 MB，依赖发行版的 `libwebkit2gtk-4.1`。装 deb 的用户只能手动升级——
-  更新器要替换的是「正在运行的 AppImage」，deb 装的路径不是 AppImage，替换会失败。
+  （解出来 530 个文件），所以体积是 deb 的十几倍。
+- **Linux deb**：4.8 MB，依赖发行版的 `libwebkit2gtk-4.1`。
+- **Linux 整体不提供自动更新**。「关于」页会识别出 Linux，直接引导到下载页，
+  而不是给一个点了就报错的按钮。
 - **macOS**：不发布。自动更新需要 updater 的 `zip` 特性来解压 `.app.tar.gz`，而该特性
   目前因为两个解压漏洞（RUSTSEC-2026-0367 / 0368）被关掉了，见 `src-tauri/Cargo.toml`；
   另外未签名的 dmg 会被 Gatekeeper 直接拦下，正常分发需要付费开发者账号与公证。

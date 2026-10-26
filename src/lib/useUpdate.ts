@@ -13,6 +13,7 @@ import {
 
 /** 更新流程的状态机。 */
 export type UpdateState =
+  | { kind: "unsupported" }
   | { kind: "idle" }
   | { kind: "checking" }
   | { kind: "latest" }
@@ -36,7 +37,10 @@ export interface UpdateController {
  * 一个「检查更新失败」的红条出现在刚打开的启动器上，只会让人以为程序坏了。
  */
 export function useUpdate(): UpdateController {
-  const [state, setState] = useState<UpdateState>({ kind: "idle" });
+  // 初始状态就决定好：不支持的平台不该先进 idle 再被 effect 改掉。
+  const [state, setState] = useState<UpdateState>(() =>
+    updateSupported() ? { kind: "idle" } : { kind: "unsupported" },
+  );
   const pending = useRef<PendingUpdate | null>(null);
   // 防重入：用户连点两下「检查更新」不该发出两次请求。
   const busy = useRef(false);
@@ -66,6 +70,9 @@ export function useUpdate(): UpdateController {
   }, []);
 
   const check = useCallback(() => {
+    if (!updateSupported()) {
+      return;
+    }
     void run(false);
   }, [run]);
 

@@ -35,13 +35,21 @@ export interface PendingUpdate {
 }
 
 /**
- * 当前环境是否支持更新。
+ * 当前平台是否支持自动更新。
  *
- * 浏览器预览页（`pnpm dev` 打开 preview.html）里没有 Tauri 运行时，
- * 插件调用会直接抛错，界面上不该因此出现红字。
+ * 两种不支持的情况：
+ * 1. 浏览器预览页（`pnpm dev` 打开 preview.html）里没有 Tauri 运行时；
+ * 2. **Linux**。清单 `latest.json` 里只有 `windows-x86_64` 一条——Linux 的
+ *    AppImage 有 80 MB，不上 COS，只在 GitHub Release 提供，所以没有可供
+ *    自动更新下载的地址。这种情况下不该给出一个「点了就报错」的按钮。
+ *
+ * 平台判断用 UA：WebKitGTK 的 UA 里带 `X11; Linux x86_64`，Windows 是 `Windows NT`。
  */
 export function updateSupported(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+    return false;
+  }
+  return !/Linux/i.test(navigator.userAgent);
 }
 
 /** 查询更新。返回 `null` 表示已是最新版本。 */

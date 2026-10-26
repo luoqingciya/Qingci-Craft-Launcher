@@ -83,9 +83,11 @@ assets/          品牌资产（应用图标源文件、模组译名库数据）
 
 | 平台 | 文件 | 大小 | 说明 |
 |---|---|---|---|
-| Windows | `QingciCraftLauncher_*_x64-setup.exe` | 3.3 MB | NSIS 安装程序，装到用户目录，不需要管理员权限 |
+| Windows | `QingciCraftLauncher_*_x64-setup.exe` | 3.3 MB | NSIS 安装程序，装到用户目录，不需要管理员权限；支持自动更新 |
 | Linux | `QingciCraftLauncher_*_amd64.deb` | 4.8 MB | Debian / Ubuntu 安装包，依赖系统已有的 webkit2gtk |
 | Linux | `QingciCraftLauncher_*_x86_64.AppImage` | 80 MB | 免安装，自包含运行时 |
+
+Linux 产物**只在 GitHub Releases 提供**，不走自动更新（AppImage 太大，不放在更新服务器上）。
 
 **macOS 暂不发布**：未签名的 dmg 会被 Gatekeeper 拦下，正常分发需要付费开发者账号与公证。
 
@@ -99,14 +101,17 @@ JavaScriptCore + GTK3 才能在任意发行版上直接跑——那套东西本�
 
 ### 在线更新
 
-安装版启动后会自动检查更新（查不到就什么也不提示）。查到新版本时「关于」页会给出
-提示与更新说明，点「下载并安装」后：
+**仅 Windows 安装版支持**。启动后会自动检查更新（查不到就什么也不提示）。查到新版本时
+「关于」页会给出提示与更新说明，点「下载并安装」后：
 
 1. 从 COS 下载安装包
 2. **用内置公钥校验 minisign 签名**，对不上就拒绝安装
 3. 静默安装并自动重启
 
-便携版没有卸载器，Windows 不允许替换正在运行的 exe，因此不做自动更新，只引导到下载页。
+不支持的两种情况，界面都会直接引导到下载页，而不是给一个点了就报错的按钮：
+
+- **便携版**：没有卸载器，Windows 不允许替换正在运行的 exe
+- **Linux**：安装包（AppImage / deb）不上 COS，只在 GitHub Releases 提供
 
 配置与密钥管理见 [docs/RELEASE.md](docs/RELEASE.md)。
 

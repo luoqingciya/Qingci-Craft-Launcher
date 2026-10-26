@@ -426,10 +426,14 @@ macOS 的 codesign + 公证、Windows 的 Authenticode 目前都**没有**——
 后者需要代码签名证书。两者都不影响更新通道的完整性（那是 minisign 签名负责的），
 只影响系统对程序来源的信任提示。
 
-**发布产物覆盖 Windows 与 Linux。** Windows 出 NSIS，Linux 出 AppImage + deb；
-`latest.json` 里两个平台各一条。macOS 的 dmg 尚未接入，因为它的更新路径需要重新启用
-`tauri-plugin-updater` 的 `zip` 特性（该特性目前因两个解压漏洞被关掉，见
-`src-tauri/Cargo.toml` 注释），且未签名 dmg 会被 Gatekeeper 拦下。
+**发布产物覆盖 Windows 与 Linux，但两条通道分开。** COS 只放自动更新需要的东西
+（Windows NSIS 安装包 + `.sig` + `latest.json`），所以清单里只有 `windows-x86_64`；
+Linux 的 AppImage 与 deb 只进 GitHub Releases。AppImage 有 80 MB，又不参与自动更新，
+放 COS 上只是白占带宽。
+
+macOS 的 dmg 尚未接入，因为它的更新路径需要重新启用 `tauri-plugin-updater` 的 `zip` 特性
+（该特性目前因两个解压漏洞被关掉，见 `src-tauri/Cargo.toml` 注释），且未签名 dmg 会被
+Gatekeeper 拦下。
 
 ### 8.3 分支保护（main）
 

@@ -138,6 +138,12 @@ function UpdateRow({
         </p>
       )}
 
+      {update.kind === "unsupported" && (
+        <p className="text-[12px] text-[var(--color-text-muted)]">
+          Linux 版的安装包不放在更新服务器上，请到下载页获取新版本。
+        </p>
+      )}
+
       {update.kind === "error" && (
         <p className="break-all text-[12px] text-[var(--color-danger)]">{update.message}</p>
       )}
@@ -147,6 +153,9 @@ function UpdateRow({
 
 function headline(update: UpdateState, portable: boolean): string {
   switch (update.kind) {
+    case "unsupported":
+      // Linux：清单里没有对应平台的条目，所以压根没有可自动下载的更新。
+      return "当前平台不支持自动更新";
     case "checking":
       return "正在检查更新…";
     case "latest":
@@ -175,6 +184,10 @@ function action(
 ) {
   if (update.kind === "installing") {
     return null;
+  }
+  if (update.kind === "unsupported") {
+    // 给个出口而不是一个点不出结果的按钮。
+    return <LinkRow href={DOWNLOAD_URL}>去下载</LinkRow>;
   }
   if (update.kind === "available") {
     return portable ? (
