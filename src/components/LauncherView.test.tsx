@@ -65,11 +65,15 @@ describe("LauncherView", () => {
     expect(screen.getByRole("status")).toHaveTextContent("未运行");
   });
 
-  it("未选版本时启动按钮禁用，并提示先选版本", () => {
+  it("未选版本时主按钮变成「选择版本」入口，而不是死按钮", async () => {
     renderView();
 
-    expect(screen.getByRole("button", { name: /启动游戏/ })).toBeDisabled();
-    expect(screen.getByText("先选择一个版本")).toBeInTheDocument();
+    // 点不动的按钮会让人以为坏了；这里改成直接跳去选版本。
+    const button = screen.getByRole("button", { name: /选择版本/ });
+    expect(button).toBeEnabled();
+
+    await userEvent.click(button);
+    expect(screen.getByRole("tab", { name: "版本" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("选中版本后启动可用，按钮副标题显示版本", () => {
