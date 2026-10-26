@@ -61,7 +61,11 @@ Settings → Secrets and variables → Actions:
 | --- | --- |
 | `TENCENT_SECRET_ID` | Tencent Cloud API secret id |
 | `TENCENT_SECRET_KEY` | Tencent Cloud API secret key |
-| `TAURI_SIGNING_PRIVATE_KEY` | **the whole private key file**, both comment lines included |
+| `TAURI_SIGNING_PRIVATE_KEY` | **the whole private key file**: a single base64 line, no line breaks |
+
+The key file is a base64-encoded minisign key with **exactly one line** (the
+`untrusted comment:` markers live inside the base64 payload, so you will not see them).
+Copy the whole thing; do not add a trailing newline.
 
 The key was generated without a password, so `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is not
 needed. Add it if you ever regenerate with a password.

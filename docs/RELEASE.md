@@ -56,7 +56,10 @@ Settings → Secrets and variables → Actions：
 | --- | --- |
 | `TENCENT_SECRET_ID` | 腾讯云 API 密钥 |
 | `TENCENT_SECRET_KEY` | 同上 |
-| `TAURI_SIGNING_PRIVATE_KEY` | **私钥文件的完整内容**（含两行注释） |
+| `TAURI_SIGNING_PRIVATE_KEY` | **私钥文件的全部内容**：一整行 base64，没有换行 |
+
+私钥文件是 base64 编码的 minisign 密钥，**只有一行**（`untrusted comment:` 那些
+标记被编码在 base64 内部，文件里看不到）。整段复制即可，不要自己加换行。
 
 生成密钥时没有设密码，所以不需要 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。
 如果以后带密码重新生成，再加这个 secret。
