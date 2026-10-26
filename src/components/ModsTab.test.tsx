@@ -102,7 +102,7 @@ describe("ModsTab", () => {
     expect(installMod).toHaveBeenCalledWith("AANobbMI", "26.3", "fabric");
     expect(await screen.findByText("已安装到 mods/sodium.jar")).toBeInTheDocument();
 
-    await userEvent.click(await screen.findByRole("button", { name: /展开/ }));
+    await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
     expect(await screen.findByText("sodium.jar")).toBeInTheDocument();
   });
 
@@ -147,7 +147,7 @@ describe("卸载", () => {
     removeMod.mockResolvedValue(undefined);
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
-    await userEvent.click(await screen.findByRole("button", { name: /展开/ }));
+    await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
     const deleteButton = await screen.findByRole("button", { name: "删除" });
 
     await userEvent.click(deleteButton);
@@ -162,7 +162,7 @@ describe("卸载", () => {
   it("可以取消删除", async () => {
     listMods.mockResolvedValue(["sodium.jar"]);
     render(<ModsTab version="26.3" loader="0.20.1" />);
-    await userEvent.click(await screen.findByRole("button", { name: /展开/ }));
+    await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
 
     await userEvent.click(await screen.findByRole("button", { name: "删除" }));
     await userEvent.click(screen.getByRole("button", { name: "取消" }));
@@ -176,7 +176,7 @@ describe("卸载", () => {
     removeMod.mockRejectedValue("文件被占用");
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
-    await userEvent.click(await screen.findByRole("button", { name: /展开/ }));
+    await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
     await userEvent.click(await screen.findByRole("button", { name: "删除" }));
     await userEvent.click(screen.getByRole("button", { name: "确认删除" }));
 
@@ -314,6 +314,7 @@ describe("更新检查", () => {
     checkModUpdates.mockResolvedValue([]);
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
     await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
 
     expect(checkModUpdates).toHaveBeenCalledWith("26.3", "fabric");
@@ -334,8 +335,8 @@ describe("更新检查", () => {
     updateMod.mockResolvedValue(["mods/sodium-new.jar"]);
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
     await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
-    await userEvent.click(await screen.findByRole("button", { name: /展开/ }));
 
     expect(await screen.findByText("0.9.0 → 0.9.3")).toBeInTheDocument();
 
@@ -350,30 +351,31 @@ describe("更新检查", () => {
     expect(await screen.findByText("已更新到 0.9.3")).toBeInTheDocument();
   });
 
-  it("没有已装模组时不能点检查更新", () => {
+  it("没有已装模组时不能点检查更新", async () => {
     render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
 
     expect(screen.getByRole("button", { name: "检查更新" })).toBeDisabled();
   });
 });
 
 describe("布局密度", () => {
-  it("已装列表默认收起，点展开才显示", async () => {
+  it("默认停在搜索页，切到「已安装」才显示列表", async () => {
     listMods.mockResolvedValue(["sodium.jar"]);
     render(<ModsTab version="26.3" loader="0.20.1" />);
 
-    // 收起时连文件名都不渲染——它固定占一块高度，会把搜索结果挤扁。
-    expect(await screen.findByText("已安装 1 个")).toBeInTheDocument();
+    // 两页分开：搜索结果与已装列表不再争同一块高度。
+    expect(await screen.findByRole("tab", { name: /已安装 1/ })).toBeInTheDocument();
     expect(screen.queryByText("sodium.jar")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /展开/ }));
+    await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
     expect(screen.getByText("sodium.jar")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /收起/ }));
+    await userEvent.click(screen.getByRole("tab", { name: "搜索" }));
     expect(screen.queryByText("sodium.jar")).not.toBeInTheDocument();
   });
 
-  it("有更新时在标题旁标出数量，不用展开也能看到", async () => {
+  it("有更新时在子标签上标出数量，不用切页也能看到", async () => {
     listMods.mockResolvedValue(["sodium-old.jar"]);
     checkModUpdates.mockResolvedValue([
       {
@@ -386,9 +388,10 @@ describe("布局密度", () => {
     ]);
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
     await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
 
-    expect(await screen.findByText("1 个可更新")).toBeInTheDocument();
+    expect(await screen.findByText("1 可更新")).toBeInTheDocument();
   });
 
   it("分类默认只露前 8 个，其余收进「更多」", async () => {

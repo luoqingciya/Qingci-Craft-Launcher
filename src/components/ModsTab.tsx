@@ -49,8 +49,8 @@ export function ModsTab({
   const [updates, setUpdates] = useState<ModUpdate[]>([]);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [updatingFile, setUpdatingFile] = useState<string | null>(null);
-  // 已装列表默认折叠：它固定占一块高度，会把搜索结果挤成一条半。
-  const [showInstalled, setShowInstalled] = useState(false);
+  // 搜索与已装分成两页：挤在一页里，谁都不够用。
+  const [view, setView] = useState<"search" | "installed">("search");
   // 分类默认只显示常用的几个，其余收进「更多」。
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -236,6 +236,26 @@ export function ModsTab({
         </p>
       </div>
 
+      <div role="tablist" aria-label="模组视图" className="flex gap-1 border-b border-[var(--color-border-subtle)]">
+        <SubTab active={view === "search"} onClick={() => setView("search")}>
+          搜索
+        </SubTab>
+        <SubTab active={view === "installed"} onClick={() => setView("installed")}>
+          已安装 {installed.length}
+          {updates.length > 0 && (
+            <span className="ml-1.5 rounded bg-[var(--color-warning)]/15 px-1.5 py-0.5 text-[10px] text-[var(--color-warning)]">
+              {updates.length} 可更新
+            </span>
+          )}
+        </SubTab>
+      </div>
+
+      {/* 消息放在两页之外：检查更新的结果、删除失败的原因，在哪个页都要能看到。 */}
+      {notice && <p className="text-[12px] text-[var(--color-success)]">{notice}</p>}
+      {error && <p className="text-[12px] text-[var(--color-danger)]">{error}</p>}
+
+      {view === "search" && (
+        <>
       <form
         className="flex gap-2"
         onSubmit={(event) => {
@@ -302,9 +322,6 @@ export function ModsTab({
         </p>
       )}
 
-      {notice && <p className="text-[12px] text-[var(--color-success)]">{notice}</p>}
-      {error && <p className="text-[12px] text-[var(--color-danger)]">{error}</p>}
-
       <div className="min-h-0 flex-1 overflow-y-auto">
         {searched && results.length === 0 && !searching && (
           <p className="py-6 text-[13px] text-[var(--color-text-muted)]">
@@ -362,29 +379,15 @@ export function ModsTab({
         </ul>
       </div>
 
-      <section className="shrink-0 rounded-xl bg-[var(--color-surface-raised)] p-3.5 ring-1 ring-inset ring-[var(--color-border-subtle)]">
-        <div className="flex items-center justify-between gap-2">
-          {/* 已装列表默认收起：它固定占一块高度，展开时会把搜索结果挤成一条半。 */}
-          <button
-            type="button"
-            onClick={() => setShowInstalled((current) => !current)}
-            disabled={installed.length === 0}
-            className="flex min-w-0 items-center gap-2 text-left disabled:cursor-default"
-          >
-            <h3 className="text-[12px] uppercase tracking-wider text-[var(--color-text-muted)]">
-              已安装 {installed.length} 个
-            </h3>
-            {updates.length > 0 && (
-              <span className="rounded bg-[var(--color-warning)]/15 px-1.5 py-0.5 text-[11px] text-[var(--color-warning)]">
-                {updates.length} 个可更新
-              </span>
-            )}
-            {installed.length > 0 && (
-              <span className="text-[11px] text-[var(--color-text-secondary)]">
-                {showInstalled ? "收起" : "展开"}
-              </span>
-            )}
-          </button>
+        </>
+      )}
+
+      {view === "installed" && (
+      <section className="flex min-h-0 flex-1 flex-col rounded-xl bg-[var(--color-surface-raised)] p-3.5 ring-1 ring-inset ring-[var(--color-border-subtle)]">
+        <div className="flex shrink-0 items-center justify-between gap-2">
+          <h3 className="text-[12px] uppercase tracking-wider text-[var(--color-text-muted)]">
+            已安装 {installed.length} 个
+          </h3>
           <button
             type="button"
             onClick={() => void checkUpdates()}
@@ -398,8 +401,8 @@ export function ModsTab({
           <p className="mt-2 text-[12px] text-[var(--color-text-muted)]">
             还没有安装任何模组。
           </p>
-        ) : showInstalled ? (
-          <ul className="mt-2 flex max-h-[32vh] flex-col gap-1 overflow-y-auto">
+        ) : (
+          <ul className="mt-2 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
             {installed.map((name) => {
               const update = updates.find((item) => item.fileName === name);
               return (
@@ -455,8 +458,9 @@ export function ModsTab({
               );
             })}
           </ul>
-        ) : null}
+        )}
       </section>
+      )}
     </div>
   );
 }
@@ -505,4 +509,31 @@ export function formatDownloads(count: number): string {
     return `${(count / 10_000).toFixed(1)} 万`;
   }
   return String(count);
+}
+
+/** 模组页内部的子标签（搜索 / 已安装）。 */
+function SubTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={`-mb-px flex items-center border-b-2 px-3 py-2 text-[13px] transition-colors ${
+        active
+          ? "border-[var(--color-accent)] text-[var(--color-text-primary)]"
+          : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+      }`}
+    >
+      {children}
+    </button>
+  );
 }
