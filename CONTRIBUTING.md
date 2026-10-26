@@ -108,6 +108,13 @@ git cliff --config cliff.toml --unreleased       # 仅预览未发布部分
 生成时机是**发布前**，而不是每个 PR。原因：未发布段落由「上一个 tag 之后的全部提交」构成，
 若要求每个 PR 都更新它，多个并行 PR 会持续产生冲突，且每次合并都要重排。
 
+**具体落在哪一步**：发版 PR（`chore(release): x.y.z`）必须包含重新生成的 `CHANGELOG.md`。
+这条是补写的——v0.1.1 与 v0.1.2 两次发版都忘了生成，日志停在项目最初 5 个 PR 上，
+直到 v0.1.2 之后才补回来。规则不落到某一步骤上，就等于没有规则。
+
+`git-cliff` 不必装进环境：可以从 [releases](https://github.com/orhun/git-cliff/releases)
+下预编译包，或 `cargo install git-cliff`。
+
 由此得到一个推论：**PR 标题会原样出现在更新日志里**。这就是第 4 节要求标题严格遵循
 Conventional Commits 的实际原因——规范与否直接决定用户看到的是「feat(core): 版本清单与版本元数据的领域模型」
 还是「update stuff」。
