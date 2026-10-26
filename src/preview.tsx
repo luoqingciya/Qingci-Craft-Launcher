@@ -85,6 +85,9 @@ function Preview() {
       progress={null}
       status={STATUS}
       logs={logs}
+      // 想看崩溃卡片时，把这里换成 { exitCode: 1, headline: "…", lines: ["…"] }
+      crash={null}
+      onDismissCrash={() => {}}
       settings={SETTINGS}
       javaOptions={[]}
       savingSettings={false}

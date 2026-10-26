@@ -41,6 +41,7 @@ function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {})
     progress: null,
     status: { running: false, version: null },
     logs: [],
+    crash: null,
     settings: SETTINGS,
     javaOptions: [],
     savingSettings: false,
@@ -53,6 +54,7 @@ function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {})
     onLaunch: vi.fn(),
     onStop: vi.fn(),
     onClearLogs: vi.fn(),
+    onDismissCrash: vi.fn(),
     onSaveSettings: vi.fn(),
     onRefreshJava: vi.fn(),
     ...overrides,
@@ -160,5 +162,27 @@ describe("LauncherView", () => {
     await userEvent.click(screen.getByRole("button", { name: "更换版本" }));
 
     expect(screen.getByText("版本清单还没加载完")).toBeInTheDocument();
+  });
+});
+
+describe("崩溃摘要", () => {
+  it("有摘要时在日志上方显示卡片", () => {
+    renderView({
+      selected: "26.3",
+      crash: {
+        exitCode: 1,
+        headline: "模组依赖或兼容性有问题，游戏在加载阶段退出",
+        lines: ["Incompatible mod set!"],
+      },
+    });
+
+    expect(screen.getByText(/模组依赖或兼容性有问题/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制摘要" })).toBeInTheDocument();
+  });
+
+  it("没有摘要时不显示卡片", () => {
+    renderView({ selected: "26.3", crash: null });
+
+    expect(screen.queryByRole("button", { name: "复制摘要" })).not.toBeInTheDocument();
   });
 });
