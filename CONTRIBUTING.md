@@ -87,6 +87,14 @@ PR 标题必须符合该格式，因为合并时使用 **Squash merge**，PR 标
 - 测试里若涉及平台差异（路径形态、shell 语义、`#[cfg]` 导入），先自问
   「另一个平台这一行还成立吗」——本机通过不代表 CI 通过。
 
+### 调界面时用预览页
+
+`LauncherView` 是纯展示组件，`pnpm dev` 后打开
+<http://localhost:5173/preview.html> 就能用假数据渲染完整界面。
+调布局与配色不必启动桌面壳，也不必真的下载一个版本。
+
+改动界面时请先在这个页面确认，再更新 `src/preview.tsx` 里的假数据。
+
 ## 8. 更新日志
 
 `CHANGELOG.md` 由 [git-cliff](https://github.com/orhun/git-cliff) 依据 Conventional Commits 自动生成，
