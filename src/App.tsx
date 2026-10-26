@@ -43,9 +43,6 @@ export default function App() {
   const [loaders, setLoaders] = useState<LoaderOption[]>([]);
   const [loader, setLoader] = useState("");
   const [loaderBusy, setLoaderBusy] = useState(false);
-  // 安装完成后实际可启动的版本 id：装加载器时会变成 `fabric-loader-<loader>-<game>`。
-  // 它与用户选中的原版 id 不同，所以必须单独记。
-  const [activeVersion, setActiveVersion] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<InstallProgressEvent | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -190,7 +187,6 @@ export default function App() {
     const request = ++loaderRequest.current;
     setSelected(id);
     setLoader("");
-    setActiveVersion(null);
     setLoaderBusy(true);
 
     try {
@@ -220,7 +216,6 @@ export default function App() {
     setProgress(null);
     try {
       const summary = await installGameVersion(selected, loader === "" ? null : loader);
-      setActiveVersion(summary.version);
       setMessage(
         `${summary.version} 已就绪：版本文件 ${summary.downloaded} 个下载 / ${summary.skipped} 个跳过，` +
           `资产 ${summary.assets} 个，natives ${summary.natives} 个`,
@@ -237,20 +232,20 @@ export default function App() {
     if (!selected) {
       return;
     }
-    // 装了加载器就启动合并后的版本，否则启动原版。
-    const target = activeVersion ?? selected;
+    // 目标版本由后端按「版本 + 加载器」推导，界面不再自己算——
+    // 之前用「安装后记住的 id」，没点过安装就直接启动会静默启动原版。
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      await launchGame(target);
-      setStatus({ running: true, version: target });
+      await launchGame(selected, loader === "" ? null : loader);
+      setStatus({ running: true, version: selected });
     } catch (cause: unknown) {
       setError(String(cause));
     } finally {
       setBusy(false);
     }
-  }, [selected, activeVersion]);
+  }, [selected, loader]);
 
   const stop = useCallback(async () => {
     setError(null);
