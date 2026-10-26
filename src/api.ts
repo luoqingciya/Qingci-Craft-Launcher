@@ -129,9 +129,22 @@ export function listJava(): Promise<JavaOption[]> {
   return invoke<JavaOption[]>("list_java");
 }
 
-/** 安装指定版本。幂等，可重复调用。 */
-export function installGameVersion(version: string): Promise<InstallSummary> {
-  return invoke<InstallSummary>("install_game_version", { version });
+/** 一个可选的加载器版本。 */
+export interface LoaderOption {
+  /** 加载器版本号，如 `0.20.1`。 */
+  version: string;
+  /** 是否为稳定版。 */
+  stable: boolean;
+}
+
+/** 安装指定版本。幂等，可重复调用。`loader` 为 `null` 时安装原版。 */
+export function installGameVersion(version: string, loader: string | null): Promise<InstallSummary> {
+  return invoke<InstallSummary>("install_game_version", { version, loader });
+}
+
+/** 列出某个游戏版本可用的 Fabric 加载器版本。 */
+export function listLoaders(version: string): Promise<LoaderOption[]> {
+  return invoke<LoaderOption[]>("list_loaders", { version });
 }
 
 /** 启动游戏。立即返回，日志与退出通过事件推送。 */
