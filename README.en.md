@@ -42,7 +42,7 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 
 - **Lightweight**: uses the system WebView. Portable executable is 11 MB, NSIS installer 3.3 MB.
 - **Cross-platform**: Windows 10+ / macOS 12+ / Linux (glibc 2.31+); CI builds and tests on all three.
-  Only Windows artifacts are published today.
+  Published artifacts cover Windows and Linux.
 - **Testable**: core logic (version parsing, rule evaluation, argument assembly, auth protocols, mod
   resolution, crash report parsing) lives in GUI-free Rust crates — 278 Rust tests + 116 frontend
   tests in CI.
@@ -86,13 +86,19 @@ assets/          Brand assets (icon sources, mod name database)
 
 Download from [Releases](https://github.com/luoqingciya/Qingci-Craft-Launcher/releases):
 
-| File | Description |
-|---|---|
-| `QingciCraftLauncher_*_x64-setup.exe` | NSIS installer; installs per-user, no administrator rights required |
+| Platform | File | Size | Notes |
+|---|---|---|---|
+| Windows | `QingciCraftLauncher_*_x64-setup.exe` | 3.3 MB | NSIS installer; installs per-user, no admin rights |
+| Linux | `QingciCraftLauncher_*_amd64.deb` | 4.8 MB | Debian / Ubuntu package; depends on the system webkit2gtk |
+| Linux | `QingciCraftLauncher_*_x86_64.AppImage` | 80 MB | No install; self-contained runtime |
 
-**Only Windows installers are published today.** macOS and Linux build paths work in CI, but their
-artifacts are not wired into the release yet. MSI and portable builds can be produced locally with
-`pnpm tauri build`.
+**macOS is not published yet**: an unsigned dmg is blocked by Gatekeeper, so proper distribution
+needs a paid developer account and notarization.
+
+The size gap comes from **how much of the WebView is reused**: Windows uses the bundled WebView2
+runtime, the deb relies on `libwebkit2gtk-4.1` from the distribution, while an AppImage has to carry
+the entire WebKitGTK + JavaScriptCore + GTK3 stack to run on any distribution — that stack alone is
+over 70 MB. Pick the deb if size matters, the AppImage if you want "download and double-click".
 
 The default game directory is **`game/` inside the install directory** (portable layout:
 copy the whole folder and your worlds move with it). If that location is not writable,

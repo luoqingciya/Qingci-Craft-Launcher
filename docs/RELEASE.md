@@ -133,14 +133,16 @@ GitHub Release（附安装包与 `.sig`）。
 
 ## 平台现状
 
-**目前只发布 Windows 产物。** `latest.json` 里也只有 `windows-x86_64` 一个平台条目。
+发布产物：**Windows 的 NSIS 安装包**，**Linux 的 AppImage 与 deb**。
+`latest.json` 里有 `windows-x86_64` 与 `linux-x86_64` 两个平台条目。
 
-macOS 与 Linux 的构建链路在 CI 的 `build` job 里能跑通，但还没接进发布流程：
-
-- **Linux**：需要额外产出 AppImage 与 deb。AppImage 的自动更新依赖 updater 的 `zip` 特性
-  之外的路径（裸 AppImage 可以），deb 装的用户则只能手动升级。
-- **macOS**：自动更新需要 updater 的 `zip` 特性来解压 `.app.tar.gz`，而该特性目前因为
-  两个解压漏洞（RUSTSEC-2026-0367 / 0368）被关掉了，见 `src-tauri/Cargo.toml` 的注释。
+- **Windows**：NSIS 3.3 MB，复用系统 WebView2，自动更新走静默安装 + 重启。
+- **Linux AppImage**：80 MB。自包含，把 WebKitGTK + JavaScriptCore + GTK3 整套塞进去了
+  （解出来 530 个文件），所以体积是 deb 的十几倍。**自动更新只对 AppImage 有效**。
+- **Linux deb**：4.8 MB，依赖发行版的 `libwebkit2gtk-4.1`。装 deb 的用户只能手动升级——
+  更新器要替换的是「正在运行的 AppImage」，deb 装的路径不是 AppImage，替换会失败。
+- **macOS**：不发布。自动更新需要 updater 的 `zip` 特性来解压 `.app.tar.gz`，而该特性
+  目前因为两个解压漏洞（RUSTSEC-2026-0367 / 0368）被关掉了，见 `src-tauri/Cargo.toml`；
   另外未签名的 dmg 会被 Gatekeeper 直接拦下，正常分发需要付费开发者账号与公证。
 
 ## 客户端行为

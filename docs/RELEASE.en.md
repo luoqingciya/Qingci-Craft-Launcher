@@ -144,17 +144,20 @@ after configuring secrets.
 
 ## Platform status
 
-**Only Windows artifacts are published today.** `latest.json` contains a single
-`windows-x86_64` entry.
+Published artifacts: **Windows NSIS installer**, **Linux AppImage and deb**.
+`latest.json` carries both a `windows-x86_64` and a `linux-x86_64` entry.
 
-macOS and Linux build paths work in CI's `build` job but are not wired into the release yet:
-
-- **Linux**: would need AppImage and deb bundles. Auto-update works for a plain AppImage; users who
-  installed the deb can only upgrade manually.
-- **macOS**: auto-update needs the updater's `zip` feature to unpack `.app.tar.gz`, and that feature
-  is currently disabled because of two extraction vulnerabilities (RUSTSEC-2026-0367 / 0368) — see
-  the comment in `src-tauri/Cargo.toml`. An unsigned dmg is also blocked outright by Gatekeeper, so
-  proper distribution needs a paid developer account and notarization.
+- **Windows**: NSIS, 3.3 MB, reuses the system WebView2; auto-update installs silently and relaunches.
+- **Linux AppImage**: 80 MB. Self-contained — it carries the whole WebKitGTK + JavaScriptCore + GTK3
+  stack (530 files once extracted), which is why it is over ten times the size of the deb.
+  **Auto-update only works for the AppImage.**
+- **Linux deb**: 4.8 MB, depends on the distribution's `libwebkit2gtk-4.1`. Users who installed the
+  deb can only upgrade manually — the updater replaces "the AppImage that is currently running", and a
+  deb install is not an AppImage, so the replacement fails.
+- **macOS**: not published. Auto-update needs the updater's `zip` feature to unpack `.app.tar.gz`,
+  and that feature is currently disabled because of two extraction vulnerabilities
+  (RUSTSEC-2026-0367 / 0368) — see `src-tauri/Cargo.toml`. An unsigned dmg is also blocked outright
+  by Gatekeeper, so proper distribution needs a paid developer account and notarization.
 
 ## Client behaviour
 
