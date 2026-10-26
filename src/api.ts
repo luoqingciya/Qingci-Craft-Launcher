@@ -39,6 +39,10 @@ export interface SettingsView {
   javaPath: string | null;
   /** 允许的内存范围 `[最小, 最大]`，前端据此校验。 */
   memoryRange: [number, number];
+  /** 上次选择的版本。 */
+  selectedVersion: string | null;
+  /** 上次选择的加载器版本。 */
+  loaderVersion: string | null;
 }
 
 /** 提交给 Rust 的设置。空字符串表示「用默认值」。 */
@@ -213,4 +217,14 @@ export function listMods(): Promise<string[]> {
 /** 删除一个已安装的模组。只接受 mods/ 下的 .jar 文件名。 */
 export function removeMod(filename: string): Promise<void> {
   return invoke<void>("remove_mod", { filename });
+}
+
+/**
+ * 记住当前选择（版本 + 加载器）。
+ *
+ * 与 `saveSettings` 分开：切换版本是高频操作，不该连带把设置表单里
+ * 还没提交的改动写进去。
+ */
+export function rememberSelection(version: string | null, loader: string | null): Promise<void> {
+  return invoke<void>("remember_selection", { version, loader });
 }

@@ -48,6 +48,8 @@ const SETTINGS: SettingsView = {
   memoryMb: 6144,
   javaPath: null,
   memoryRange: [512, 65536],
+  selectedVersion: null,
+  loaderVersion: null,
 };
 
 const LOGS: LogEntry[] = [

@@ -23,6 +23,8 @@ const SETTINGS: SettingsView = {
   memoryMb: null,
   javaPath: null,
   memoryRange: [512, 65536],
+  selectedVersion: null,
+  loaderVersion: null,
 };
 
 function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {}) {

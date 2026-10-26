@@ -34,6 +34,14 @@ pub struct Settings {
     /// 显式指定的 Java 可执行文件。`None` 表示自动选择。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub java_path: Option<PathBuf>,
+    /// 上次选择的版本。
+    ///
+    /// 存在这里而不是只放内存：重启后回到「未选择」等于每次都让用户重选一遍。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_version: Option<String>,
+    /// 上次选择的加载器版本（如 `0.20.1`）。`None` 表示原版。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loader_version: Option<String>,
 }
 
 /// 未设置玩家名时使用的默认值。
@@ -81,6 +89,19 @@ impl Settings {
         }
 
         Ok(())
+    }
+
+    /// 返回一份「只改选择」的设置副本。
+    ///
+    /// 选择是高频、低风险的写入（点一下就存），而保存设置是表单提交。
+    /// 两者分开写，避免「保存设置」把上次的选择清空、或「切换版本」把
+    /// 表单里还没提交的改动一起写进去。
+    #[must_use]
+    pub fn with_selection(&self, version: Option<String>, loader: Option<String>) -> Self {
+        let mut next = self.clone();
+        next.selected_version = version.filter(|value| !value.trim().is_empty());
+        next.loader_version = loader.filter(|value| !value.trim().is_empty());
+        next
     }
 
     /// 实际使用的玩家名（去空白后回退到默认值）。
@@ -184,6 +205,8 @@ mod tests {
             player_name: Some("清辞".to_owned()),
             memory_mb: Some(4096),
             java_path: None,
+            selected_version: Some("26.3".to_owned()),
+            loader_version: Some("0.20.1".to_owned()),
         };
 
         save(&path, &settings).expect("应能保存");
@@ -313,5 +336,56 @@ mod tests {
             ..Settings::default()
         };
         assert!(missing.validate().is_err());
+    }
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::Settings;
+    use std::path::PathBuf;
+
+    fn populated() -> Settings {
+        Settings {
+            game_dir: Some(PathBuf::from("/games/qcl")),
+            player_name: Some("清辞".to_owned()),
+            memory_mb: Some(6144),
+            java_path: Some(PathBuf::from("/usr/bin/java")),
+            selected_version: None,
+            loader_version: None,
+        }
+    }
+
+    #[test]
+    fn with_selection_only_touches_selection() {
+        // 切换版本不该顺手把设置表单里的值改掉——两边是独立的写入路径。
+        let next = populated().with_selection(Some("26.3".to_owned()), Some("0.20.1".to_owned()));
+
+        assert_eq!(next.selected_version.as_deref(), Some("26.3"));
+        assert_eq!(next.loader_version.as_deref(), Some("0.20.1"));
+        assert_eq!(next.game_dir, Some(PathBuf::from("/games/qcl")));
+        assert_eq!(next.player_name.as_deref(), Some("清辞"));
+        assert_eq!(next.memory_mb, Some(6144));
+        assert_eq!(next.java_path, Some(PathBuf::from("/usr/bin/java")));
+    }
+
+    #[test]
+    fn empty_selection_is_stored_as_none() {
+        // 空串来自界面（加载器选「无」），不该写进配置文件。
+        let next = populated().with_selection(Some("  ".to_owned()), Some(String::new()));
+
+        assert!(next.selected_version.is_none());
+        assert!(next.loader_version.is_none());
+    }
+
+    #[test]
+    fn selection_survives_roundtrip() {
+        let dir = tempfile::TempDir::new().expect("临时目录");
+        let path = dir.path().join("settings.json");
+        let settings =
+            populated().with_selection(Some("26.3".to_owned()), Some("0.20.1".to_owned()));
+
+        super::save(&path, &settings).expect("应能保存");
+
+        assert_eq!(super::load(&path), settings);
     }
 }
