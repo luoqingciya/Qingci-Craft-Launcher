@@ -147,3 +147,30 @@ This project is released under **GPL-3.0** with **additional terms under GPLv3 S
 Also note: **distributing a modified version requires renaming it** (do not keep using
 "Qingci Craft Launcher", "QCL" and the like), while verbatim copies of the unmodified work are not
 affected.
+
+## 10. Chinese name database
+
+Modrinth's search index is English-only (Chinese queries return 0 hits), so Chinese names come from
+a local database: `assets/data/mod-zh.json`, keyed by project **slug**.
+
+```json
+{
+  "sodium": "钠",
+  "create": "机械动力"
+}
+```
+
+To add an entry:
+
+1. Confirm the slug matches the project at `https://modrinth.com/mod/<slug>`
+2. Add one line to the JSON (**one entry per line**, for review and merges)
+3. Run `cargo test -p qcl-mods` — it validates the JSON, rejects empty values and **duplicate keys**
+
+Conventions:
+
+- Translate **names only**, not descriptions. Descriptions are long and terminology-heavy; machine
+  translation is unreliable there, so the UI links to the Modrinth page instead.
+- Proper nouns may stay in English (e.g. `Fabric API`, `Jade`).
+- Use a middle dot for qualifiers: `"iris": "铱 · 光影加载器"`.
+- The database ships with the binary and is not fetched at runtime, so changes take effect in the
+  next release.

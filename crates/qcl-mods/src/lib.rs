@@ -13,6 +13,8 @@
 //! 依赖解析（模组的依赖树）刻意没做：Modrinth 的依赖关系不保证完整，
 //! 猜错了会让人装上一个启动即崩的组合。缺依赖时游戏自己的日志说得更清楚。
 
+pub mod zh_names;
+
 use qcl_net::{DownloadOps, DownloadOptions, DownloadPlan, DownloadTask, HttpDownloader};
 use serde::Deserialize;
 use std::sync::Arc;

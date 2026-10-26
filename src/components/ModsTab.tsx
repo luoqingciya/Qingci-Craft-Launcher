@@ -185,8 +185,15 @@ export function ModsTab({
             >
               <ModIcon url={hit.iconUrl} title={hit.title} />
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-[14px] font-medium">{hit.title}</span>
+                <div className="flex items-baseline gap-2">
+                  <span className="truncate text-[14px] font-medium">
+                    {hit.zhName ?? hit.title}
+                  </span>
+                  {hit.zhName && (
+                    <span className="shrink-0 truncate text-[12px] text-[var(--color-text-muted)]">
+                      {hit.title}
+                    </span>
+                  )}
                   <span className="shrink-0 text-[11px] text-[var(--color-text-muted)]">
                     {hit.author}
                   </span>
@@ -194,8 +201,16 @@ export function ModsTab({
                 <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
                   {hit.description}
                 </p>
-                <p className="mt-1 text-[11px] tabular-nums text-[var(--color-text-muted)]">
-                  {formatDownloads(hit.downloads)} 次下载
+                <p className="mt-1 flex items-center gap-3 text-[11px] text-[var(--color-text-muted)]">
+                  <span className="tabular-nums">{formatDownloads(hit.downloads)} 次下载</span>
+                  {/* 描述保持英文：机翻长文本的术语质量不稳，不如让用户看原页 */}
+                  <button
+                    type="button"
+                    onClick={() => void openModrinthPage(hit.slug)}
+                    className="text-[var(--color-accent-text)] hover:underline"
+                  >
+                    在 Modrinth 查看
+                  </button>
                 </p>
               </div>
 
@@ -262,6 +277,18 @@ export function ModsTab({
       </section>
     </div>
   );
+}
+
+
+/** 在系统浏览器里打开 Modrinth 项目页。浏览器预览页里退回 window.open。 */
+async function openModrinthPage(slug: string): Promise<void> {
+  const url = `https://modrinth.com/mod/${slug}`;
+  try {
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(url);
+  } catch {
+    window.open(url, "_blank", "noreferrer");
+  }
 }
 
 /** 模组图标。没有图标时用标题首字占位，避免行高塌陷。 */
