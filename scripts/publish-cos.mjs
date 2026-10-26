@@ -94,10 +94,18 @@ if (dryRun) {
   process.exit(0);
 }
 
-const secretId = process.env.TENCENT_SECRET_ID;
-const secretKey = process.env.TENCENT_SECRET_KEY;
+// 必须 trim：在 GitHub 网页上粘贴 secret 很容易带进一个尾随换行，而 COS SDK 会把
+// SecretId 原样拼进 `Authorization` 头，一个 `\n` 就让请求报
+// `ERR_INVALID_CHAR / Invalid character in header content`——错误信息完全不提换行，
+// 看起来像密钥填错了。第一次真发版就栽在这上面。
+const secretId = process.env.TENCENT_SECRET_ID?.trim();
+const secretKey = process.env.TENCENT_SECRET_KEY?.trim();
 if (!secretId || !secretKey) {
   throw new Error("缺少 TENCENT_SECRET_ID / TENCENT_SECRET_KEY");
+}
+// 密钥中间出现空白说明复制错了（换行被粘到了中间），继续下去只会得到签名错误。
+if (/\s/.test(secretId) || /\s/.test(secretKey)) {
+  throw new Error("TENCENT_SECRET_ID / TENCENT_SECRET_KEY 中间含有空白字符，请重新设置 secret");
 }
 
 const cos = new COS({ SecretId: secretId, SecretKey: secretKey });
