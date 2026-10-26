@@ -257,3 +257,85 @@ async fn live_search_and_resolve() {
     assert!(file.size > 0, "大小应大于 0");
     assert!(file.url.starts_with("https://"), "下载地址应走 HTTPS");
 }
+
+#[test]
+fn remove_deletes_only_inside_mods() {
+    let dir = TempDir::new().expect("临时目录");
+    let mods = dir.path().join("mods");
+    std::fs::create_dir_all(&mods).expect("应能建目录");
+    std::fs::write(mods.join("sodium.jar"), b"x").expect("应能写入");
+    std::fs::write(dir.path().join("outside.jar"), b"x").expect("应能写入");
+
+    qcl_mods::remove(dir.path(), "sodium.jar").expect("应能删除");
+    assert!(!mods.join("sodium.jar").exists());
+    // mods 目录之外的文件不该被碰到。
+    assert!(dir.path().join("outside.jar").exists());
+}
+
+#[test]
+fn remove_rejects_escaping_names_and_non_jars() {
+    let dir = TempDir::new().expect("临时目录");
+    std::fs::create_dir_all(dir.path().join("mods")).expect("应能建目录");
+    std::fs::write(dir.path().join("outside.jar"), b"x").expect("应能写入");
+
+    for name in ["../outside.jar", "a/b.jar", r"a\b.jar", "..", ".hidden.jar"] {
+        let error = qcl_mods::remove(dir.path(), name).expect_err("应被拒绝");
+        assert!(
+            matches!(error, ModError::UnsafeFilename(_)),
+            "{name} 应被拒绝，实际：{error:?}"
+        );
+    }
+
+    // 不是 .jar 的一律不删：这个接口只服务模组，不该变成通用删除器。
+    let error = qcl_mods::remove(dir.path(), "notes.txt").expect_err("非 jar 应被拒绝");
+    assert!(
+        matches!(error, ModError::UnsafeFilename(_)),
+        "实际：{error:?}"
+    );
+
+    assert!(dir.path().join("outside.jar").exists());
+}
+
+#[test]
+fn remove_reports_missing_file() {
+    let dir = TempDir::new().expect("临时目录");
+    std::fs::create_dir_all(dir.path().join("mods")).expect("应能建目录");
+
+    let error = qcl_mods::remove(dir.path(), "ghost.jar").expect_err("不存在应报错");
+    assert!(matches!(error, ModError::Download(_)), "实际：{error:?}");
+}
+
+#[tokio::test]
+async fn search_parses_icon_url() {
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+
+    let body = r#"{
+      "hits": [
+        {
+          "project_id": "AANobbMI",
+          "slug": "sodium",
+          "title": "Sodium",
+          "description": "d",
+          "downloads": 1,
+          "author": "a",
+          "icon_url": "https://cdn.modrinth.com/data/AANobbMI/icon.png"
+        }
+      ]
+    }"#;
+
+    Mock::given(method("GET"))
+        .and(path("/search"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(body))
+        .mount(&server)
+        .await;
+
+    let results = search_from(&downloader(&dir), &server.uri(), "x", "26.3", "fabric", 1)
+        .await
+        .expect("应能搜索");
+
+    assert_eq!(
+        results[0].icon_url.as_deref(),
+        Some("https://cdn.modrinth.com/data/AANobbMI/icon.png")
+    );
+}

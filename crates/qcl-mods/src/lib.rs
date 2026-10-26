@@ -41,6 +41,8 @@ pub struct ModSummary {
     pub downloads: u64,
     /// 作者。
     pub author: String,
+    /// 图标地址。项目没上传图标时为 `None`。
+    pub icon_url: Option<String>,
 }
 
 /// 一个具体可下载的模组文件。
@@ -101,6 +103,8 @@ struct SearchHit {
     downloads: u64,
     #[serde(default)]
     author: String,
+    #[serde(default)]
+    icon_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -175,6 +179,7 @@ pub async fn search_from(
             description: hit.description,
             downloads: hit.downloads,
             author: hit.author,
+            icon_url: hit.icon_url,
         })
         .collect())
 }
@@ -284,7 +289,36 @@ fn sanitize_filename(filename: &str) -> Result<String, ModError> {
     Ok(trimmed.to_owned())
 }
 
-/// 优先取 `primary` 文件，没有就取第一个。
+/// 从 mods/ 里删除一个模组文件。
+///
+/// 只允许删 mods/ 下的 .jar：文件名来自界面，而界面上的文件名又来自远端，
+/// 两道都当作不可信处理。删除前会把路径规范化，确保它确实落在 mods 目录内
+/// （防止通过符号链接跳到别处）。
+pub fn remove(game_dir: &std::path::Path, filename: &str) -> Result<(), ModError> {
+    let safe = sanitize_filename(filename)?;
+    if !safe.ends_with(".jar") {
+        return Err(ModError::UnsafeFilename(filename.to_owned()));
+    }
+
+    let mods_dir = game_dir.join("mods");
+    let target = mods_dir.join(&safe);
+
+    // 用规范化路径比较，符号链接指向目录外时会被拦下。
+    let Ok(root) = std::fs::canonicalize(&mods_dir) else {
+        return Err(ModError::Download("mods 目录不存在".to_owned()));
+    };
+    let Ok(real) = std::fs::canonicalize(&target) else {
+        return Err(ModError::Download(format!("{safe} 不存在")));
+    };
+
+    if !real.starts_with(&root) {
+        return Err(ModError::UnsafeFilename(filename.to_owned()));
+    }
+
+    std::fs::remove_file(&real).map_err(|error| ModError::Download(error.to_string()))
+}
+
+/// 优先取 primary 文件，没有就取第一个。
 fn pick_primary(files: &[VersionFile]) -> Option<&VersionFile> {
     files
         .iter()

@@ -4,10 +4,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { installMod, listMods, searchMods, type ModHit } from "../api";
+import { installMod, listMods, removeMod, searchMods, type ModHit } from "../api";
 
 /**
- * 模组页：从 Modrinth 搜索并安装到 `mods/`。
+ * 模组页：从 Modrinth 搜索、安装、卸载。
  *
  * 自己持有数据而不是由 `App` 传入：模组是独立的一块功能，
  * 它的状态（查询、结果、安装中）与启动流程无关，放上去只会让 App 更臃肿。
@@ -28,6 +28,9 @@ export function ModsTab({
   const [installed, setInstalled] = useState<string[]>([]);
   const [searching, setSearching] = useState(false);
   const [installingId, setInstallingId] = useState<string | null>(null);
+  // 删除是两步的：先点「删除」进入待确认，再点「确认删除」才真的动文件。
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
@@ -98,6 +101,22 @@ export function ModsTab({
     }
   }
 
+  async function remove(filename: string) {
+    setRemoving(filename);
+    setError(null);
+    setNotice(null);
+    try {
+      await removeMod(filename);
+      setNotice(`已删除 ${filename}`);
+      await refreshInstalled();
+    } catch (cause: unknown) {
+      setError(String(cause));
+    } finally {
+      setRemoving(null);
+      setConfirming(null);
+    }
+  }
+
   // 没选版本时搜索框点了也没反应；原版则装了不会被加载。两种情况都先讲清楚。
   if (!version || !loader) {
     return (
@@ -160,6 +179,7 @@ export function ModsTab({
               key={hit.projectId}
               className="flex items-start gap-3 rounded-xl bg-[var(--color-surface-raised)] p-3.5 ring-1 ring-inset ring-[var(--color-border-subtle)]"
             >
+              <ModIcon url={hit.iconUrl} title={hit.title} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="truncate text-[14px] font-medium">{hit.title}</span>
@@ -199,14 +219,67 @@ export function ModsTab({
         ) : (
           <ul className="mt-2 flex flex-col gap-1">
             {installed.map((name) => (
-              <li key={name} className="truncate font-mono text-[12px] text-[var(--color-text-secondary)]">
-                {name}
+              <li key={name} className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-[var(--color-text-secondary)]">
+                  {name}
+                </span>
+
+                {confirming === name ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void remove(name)}
+                      disabled={removing === name}
+                      className="shrink-0 rounded-md px-2 py-1 text-[11px] text-[var(--color-danger)] ring-1 ring-inset ring-[var(--color-danger)]/40 hover:bg-[var(--color-danger)]/10 disabled:opacity-40"
+                    >
+                      {removing === name ? "删除中…" : "确认删除"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirming(null)}
+                      className="shrink-0 rounded-md px-2 py-1 text-[11px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
+                    >
+                      取消
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirming(name)}
+                    className="shrink-0 rounded-md px-2 py-1 text-[11px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-danger)]"
+                  >
+                    删除
+                  </button>
+                )}
               </li>
             ))}
           </ul>
         )}
       </section>
     </div>
+  );
+}
+
+/** 模组图标。没有图标时用标题首字占位，避免行高塌陷。 */
+function ModIcon({ url, title }: { url: string | null; title: string }) {
+  const [failed, setFailed] = useState(false);
+
+  if (!url || failed) {
+    return (
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-surface-hover)] text-[15px] text-[var(--color-text-muted)]">
+        {title.trim().charAt(0) || "?"}
+      </span>
+    );
+  }
+
+  return (
+    <img
+      src={url}
+      alt=""
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="h-10 w-10 shrink-0 rounded-lg object-cover"
+    />
   );
 }
 
