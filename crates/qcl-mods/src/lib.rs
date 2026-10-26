@@ -159,16 +159,41 @@ pub async fn search(
     loader: &str,
     limit: usize,
 ) -> Result<Vec<ModSummary>, ModError> {
-    search_from(downloader, MODRINTH_API, query, game_version, loader, limit).await
+    search_with_filters(downloader, query, game_version, loader, &[], limit).await
 }
 
-/// 同 [`search`]，但可指定 API 根地址。
-pub async fn search_from(
+/// 带内容分类筛选的搜索。
+///
+/// `categories` 是 Modrinth 的分类 id（如 `optimization`、`technology`）；
+/// 多个之间是「或」——用户同时点「优化」和「科技」时想看的是两类都算。
+pub async fn search_with_filters(
+    downloader: &HttpDownloader,
+    query: &str,
+    game_version: &str,
+    loader: &str,
+    categories: &[String],
+    limit: usize,
+) -> Result<Vec<ModSummary>, ModError> {
+    search_with_filters_from(
+        downloader,
+        MODRINTH_API,
+        query,
+        game_version,
+        loader,
+        categories,
+        limit,
+    )
+    .await
+}
+
+/// 同 [`search_with_filters`]，但可指定 API 根地址。
+pub async fn search_with_filters_from(
     downloader: &HttpDownloader,
     api: &str,
     query: &str,
     game_version: &str,
     loader: &str,
+    categories: &[String],
     limit: usize,
 ) -> Result<Vec<ModSummary>, ModError> {
     let url = format!(
@@ -176,7 +201,7 @@ pub async fn search_from(
         api.trim_end_matches('/'),
         encode_query_value(query),
         limit.clamp(1, 50),
-        encode_query_value(&facets(game_version, loader))
+        encode_query_value(&facets(game_version, loader, categories))
     );
 
     let raw = downloader
@@ -199,6 +224,18 @@ pub async fn search_from(
             icon_url: hit.icon_url,
         })
         .collect())
+}
+
+/// 同 [`search`]，但可指定 API 根地址。
+pub async fn search_from(
+    downloader: &HttpDownloader,
+    api: &str,
+    query: &str,
+    game_version: &str,
+    loader: &str,
+    limit: usize,
+) -> Result<Vec<ModSummary>, ModError> {
+    search_with_filters_from(downloader, api, query, game_version, loader, &[], limit).await
 }
 
 /// 把项目解析成适配该游戏版本与加载器的文件。
@@ -353,13 +390,21 @@ fn pick_primary(files: &[VersionFile]) -> Option<&VersionFile> {
 }
 
 /// 构造 Modrinth 的 facets 参数：项目类型 + 游戏版本 + 加载器。
-fn facets(game_version: &str, loader: &str) -> String {
+fn facets(game_version: &str, loader: &str, categories: &[String]) -> String {
     let mut groups = vec![
         "[\"project_type:mod\"]".to_owned(),
         format!("[\"versions:{game_version}\"]"),
     ];
     if !loader.is_empty() {
         groups.push(format!("[\"categories:{loader}\"]"));
+    }
+    if !categories.is_empty() {
+        // 同一组内是「或」：选「优化 + 科技」应该两类都出，而不是取交集。
+        let items: Vec<String> = categories
+            .iter()
+            .map(|category| format!("\"categories:{category}\""))
+            .collect();
+        groups.push(format!("[{}]", items.join(",")));
     }
     format!("[{}]", groups.join(","))
 }
