@@ -26,22 +26,12 @@ import {
   type LoaderOption,
   type SettingsInput,
   type SettingsView,
-  type VersionSummary,
 } from "./api";
-import { LoaderSelect } from "./components/LoaderSelect";
-import { InstallProgressBar, SettingsPanel } from "./components/SettingsPanel";
-import { LogPanel } from "./components/LogPanel";
+import { LauncherView, type VersionsState } from "./components/LauncherView";
 import { appendLog, type LogEntry, type LogStreamKind } from "./lib/logs";
-import { VersionList } from "./components/VersionList";
-
-/** 版本清单的加载状态。用联合类型避免「既在加载又有错误」的非法状态。 */
-type LoadState =
-  | { status: "loading" }
-  | { status: "ready"; versions: VersionSummary[] }
-  | { status: "failed"; message: string };
 
 export default function App() {
-  const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [state, setState] = useState<VersionsState>({ status: "loading" });
   const [settings, setSettings] = useState<SettingsView | null>(null);
   const [javaOptions, setJavaOptions] = useState<JavaOption[]>([]);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -271,115 +261,31 @@ export default function App() {
     }
   }, []);
 
-  const canAct = state.status === "ready" && selected !== null && !busy;
-  const runningLabel = status.running ? `运行中：${status.version ?? ""}` : "未运行";
-
   return (
-    <main className="flex h-full flex-col gap-3 p-6">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-lg font-semibold tracking-tight">Qingci Craft Launcher</h1>
-        <span className="text-xs text-[var(--color-text-secondary)]">{runningLabel}</span>
-      </header>
-
-      {settings ? (
-        <SettingsPanel
-          settings={settings}
-          javaOptions={javaOptions}
-          saving={savingSettings}
-          error={settingsError}
-          onSave={(input) => void saveSettingsInput(input)}
-          onRefreshJava={() => void refreshJava()}
-        />
-      ) : (
-        <section className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] px-4 py-3 text-xs text-[var(--color-text-secondary)]">
-          {settingsError ? `读取设置失败：${settingsError}` : "正在读取设置…"}
-        </section>
-      )}
-
-      <section className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3 text-sm">
-            {selected ? (
-              <>
-                已选版本 <span className="font-mono text-[var(--color-accent)]">{selected}</span>
-              </>
-            ) : (
-              <span className="text-[var(--color-text-secondary)]">
-                在下方列表中选择一个版本
-              </span>
-            )}
-
-            {selected && (
-              <LoaderSelect
-                loaders={loaders}
-                value={loader}
-                busy={loaderBusy}
-                disabled={!canAct || status.running}
-                onChange={setLoader}
-              />
-            )}
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => void install()}
-              disabled={!canAct || status.running}
-              className="rounded border border-[var(--color-border-subtle)] px-3 py-1.5 text-xs hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
-            >
-              {busy ? "处理中…" : "安装 / 检查文件"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void launch()}
-              disabled={!canAct || status.running}
-              className="rounded bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
-            >
-              启动游戏
-            </button>
-            <button
-              type="button"
-              onClick={() => void stop()}
-              disabled={!status.running}
-              className="rounded border border-red-500/50 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 disabled:opacity-40"
-            >
-              停止
-            </button>
-          </div>
-        </div>
-
-        {progress && <InstallProgressBar progress={progress} />}
-
-        {message && <p className="mt-2 text-xs text-emerald-400">{message}</p>}
-        {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
-      </section>
-
-      <div className="grid min-h-0 flex-1 grid-cols-5 gap-3">
-        <div className="col-span-2 flex min-h-0 flex-col">
-          {state.status === "loading" && (
-            <p className="text-sm text-[var(--color-text-secondary)]">正在获取版本清单…</p>
-          )}
-          {state.status === "failed" && (
-            <p className="text-sm text-red-400">获取版本清单失败：{state.message}</p>
-          )}
-          {state.status === "ready" && (
-            <VersionList
-              versions={state.versions}
-              selected={selected}
-              disabled={busy || status.running}
-              onSelect={(id) => void selectVersion(id)}
-            />
-          )}
-        </div>
-
-        <div className="col-span-3 flex min-h-0 flex-col">
-          <LogPanel logs={logs} onClear={() => setLogs([])} />
-        </div>
-      </div>
-
-      <footer className="text-xs text-[var(--color-text-secondary)]">
-        账号体系与模组管理尚未接入，当前使用离线账户。
-      </footer>
-    </main>
+    <LauncherView
+      versions={state}
+      selected={selected}
+      loaders={loaders}
+      loader={loader}
+      loaderBusy={loaderBusy}
+      busy={busy}
+      progress={progress}
+      status={status}
+      logs={logs}
+      settings={settings}
+      javaOptions={javaOptions}
+      savingSettings={savingSettings}
+      settingsError={settingsError}
+      message={message}
+      error={error}
+      onSelectVersion={(id) => void selectVersion(id)}
+      onLoaderChange={setLoader}
+      onInstall={() => void install()}
+      onLaunch={() => void launch()}
+      onStop={() => void stop()}
+      onClearLogs={() => setLogs([])}
+      onSaveSettings={(input) => void saveSettingsInput(input)}
+      onRefreshJava={() => void refreshJava()}
+    />
   );
 }

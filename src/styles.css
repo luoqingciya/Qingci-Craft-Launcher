@@ -2,13 +2,20 @@
 
 /* 应用内的颜色与间距统一走这几个变量，避免在组件里散落硬编码色值。 */
 @theme {
-  --color-surface: #0f1115;
-  --color-surface-raised: #171a21;
-  --color-border-subtle: #262b36;
-  --color-text-primary: #e8eaed;
-  --color-text-secondary: #9aa3b2;
-  --color-accent: #4f8cff;
-  --color-accent-soft: #1e2a44;
+  --color-surface: #0b0d12;
+  --color-surface-raised: #12151c;
+  --color-surface-hover: #191d26;
+  --color-border-subtle: #232833;
+  --color-border-strong: #2f3646;
+  --color-text-primary: #e9ecf1;
+  --color-text-secondary: #8b94a6;
+  --color-text-muted: #5f6779;
+  --color-accent: #5b8cff;
+  --color-accent-strong: #3d6fe8;
+  --color-accent-soft: #1b2740;
+  --color-success: #34d399;
+  --color-danger: #f87171;
+  --color-warning: #fbbf24;
 }
 
 html,
@@ -24,6 +31,29 @@ body {
   font-family:
     "Segoe UI", "Microsoft YaHei UI", system-ui, -apple-system, "Helvetica Neue",
     sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
   /* 桌面应用里选中文本通常没有意义，还会破坏拖拽体验。 */
   user-select: none;
+}
+
+/* 滚动条：默认的亮色滚动条在深色界面上非常突兀。 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #2a3040;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #39415a;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
 }

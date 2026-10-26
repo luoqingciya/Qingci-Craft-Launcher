@@ -8,11 +8,16 @@ import { MAX_LINES, type LogEntry, type LogStreamKind } from "../lib/logs";
 
 const STREAM_STYLES: Record<LogStreamKind, string> = {
   stdout: "text-[var(--color-text-primary)]",
-  stderr: "text-red-400",
+  stderr: "text-[var(--color-danger)]",
   system: "text-[var(--color-accent)]",
 };
 
-/** 日志面板。 */
+/**
+ * 日志面板。
+ *
+ * 与版本列表一样不画外框，由布局决定边界。日志用等宽字体、行高收紧，
+ * 让同一屏能看到更多行——排查问题时行数比字号重要。
+ */
 export function LogPanel({ logs, onClear }: { logs: LogEntry[]; onClear: () => void }) {
   const container = useRef<HTMLDivElement>(null);
 
@@ -30,31 +35,36 @@ export function LogPanel({ logs, onClear }: { logs: LogEntry[]; onClear: () => v
   }, [logs]);
 
   return (
-    <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)]">
-      <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] px-4 py-3">
-        <h2 className="text-sm font-medium">游戏日志</h2>
+    <section className="flex min-h-0 flex-1 flex-col">
+      <div className="flex h-9 shrink-0 items-center justify-between px-4">
+        <h2 className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
+          日志
+        </h2>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-[var(--color-text-secondary)]">
-            {logs.length >= MAX_LINES ? `仅显示最近 ${MAX_LINES} 行` : `${logs.length} 行`}
+          <span className="text-[10px] tabular-nums text-[var(--color-text-muted)]">
+            {logs.length >= MAX_LINES ? `最近 ${MAX_LINES} 行` : `${logs.length} 行`}
           </span>
           <button
             type="button"
             onClick={onClear}
             disabled={logs.length === 0}
-            className="rounded border border-[var(--color-border-subtle)] px-2 py-1 text-xs hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
+            className="rounded px-1.5 py-0.5 text-[11px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-30"
           >
             清空
           </button>
         </div>
       </div>
 
-      <div ref={container} className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+      <div
+        ref={container}
+        className="mx-4 mb-4 min-h-0 flex-1 overflow-y-auto rounded-lg bg-[#07090d] px-3 py-2 ring-1 ring-inset ring-[var(--color-border-subtle)]"
+      >
         {logs.length === 0 ? (
-          <p className="text-xs text-[var(--color-text-secondary)]">
-            启动游戏后日志会显示在这里。
+          <p className="text-[11px] text-[var(--color-text-muted)]">
+            启动游戏后，输出会实时显示在这里。
           </p>
         ) : (
-          <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-relaxed">
+          <pre className="whitespace-pre-wrap break-all font-mono text-[11px] leading-[1.55]">
             {logs.map((log) => (
               <div key={log.id} className={STREAM_STYLES[log.stream]}>
                 {log.text}

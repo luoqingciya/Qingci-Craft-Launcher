@@ -15,13 +15,13 @@ const VERSIONS: VersionSummary[] = [
 ];
 
 describe("VersionList", () => {
-  it("渲染版本号、中文类型与数量", () => {
+  it("渲染版本号与类型", () => {
     render(<VersionList versions={VERSIONS} selected={null} disabled={false} onSelect={vi.fn()} />);
 
     expect(screen.getByText("26.3")).toBeInTheDocument();
-    expect(screen.getByText("正式版")).toBeInTheDocument();
+    // 只标非正式版：清单里绝大多数是 release，逐行重复「正式版」是噪音。
     expect(screen.getByText("快照")).toBeInTheDocument();
-    expect(screen.getByText("共 2 个")).toBeInTheDocument();
+    expect(screen.queryByText("正式版")).not.toBeInTheDocument();
   });
 
   it("点击时回传版本号", async () => {

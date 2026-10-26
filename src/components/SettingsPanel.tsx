@@ -34,6 +34,7 @@ export function SettingsPanel({
   error,
   onSave,
   onRefreshJava,
+  embedded = false,
 }: {
   settings: SettingsView;
   javaOptions: JavaOption[];
@@ -41,6 +42,8 @@ export function SettingsPanel({
   error: string | null;
   onSave: (input: SettingsInput) => void;
   onRefreshJava: () => void;
+  /** 放在抽屉等已有容器里时去掉自身的卡片外框，避免卡片套卡片。 */
+  embedded?: boolean;
 }) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(settings));
   const [baseline, setBaseline] = useState<SettingsView>(settings);
@@ -115,10 +118,17 @@ export function SettingsPanel({
   const message = localError ?? error;
 
   return (
-    <section className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] px-4 py-3">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-medium">设置</h2>
-        <div className="flex items-center gap-2">
+    <section
+      className={
+        embedded
+          ? ""
+          : "rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] px-4 py-3"
+      }
+    >
+      {!embedded && (
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-medium">设置</h2>
+          <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setDraft(toDraft(settings))}
@@ -135,8 +145,9 @@ export function SettingsPanel({
           >
             {saving ? "保存中…" : "保存"}
           </button>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 text-xs lg:grid-cols-2">
         {/* 游戏目录 */}
@@ -245,6 +256,27 @@ export function SettingsPanel({
         <p className="mt-2 text-xs text-amber-400">⚠ {settings.fallbackReason}</p>
       )}
       {message && <p className="mt-2 text-xs text-red-400">{message}</p>}
+
+      {embedded && (
+        <div className="mt-4 flex items-center justify-end gap-2 border-t border-[var(--color-border-subtle)] pt-3">
+          <button
+            type="button"
+            onClick={() => setDraft(toDraft(settings))}
+            disabled={!dirty || saving}
+            className="rounded border border-[var(--color-border-subtle)] px-3 py-1.5 text-xs hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
+          >
+            撤销
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!dirty || saving}
+            className="rounded bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
+          >
+            {saving ? "保存中…" : "保存"}
+          </button>
+        </div>
+      )}
     </section>
   );
 }
