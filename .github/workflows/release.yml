@@ -1,6 +1,6 @@
 name: Release
 
-# 发版流程：打 tag → 构建 NSIS 安装包并签名 → 推送 COS → 建 GitHub Release。
+# 发版流程：打 tag → 构建（Windows / Linux）→ 签名 → 推送 COS → 建 GitHub Release。
 #
 # 客户端启动后从 https://qcl.luoqingciya.cn/releases/latest.json 读清单，
 # 按里面的地址下载安装包，并用内置公钥校验 minisign 签名。所以这里必须
@@ -32,9 +32,13 @@ env:
   PUBLIC_BASE_URL: https://qcl.luoqingciya.cn/releases
 
 jobs:
-  publish:
-    name: 构建并发布
-    runs-on: windows-latest
+  # 先做一次性校验。独立成 job 是为了让「三处版本不一致」在两台机器开始编译
+  # 之前就失败，而不是各自编译五分钟后再报。
+  prepare:
+    name: 校验
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
 
@@ -78,10 +82,38 @@ jobs:
             exit 1
           fi
 
+  build:
+    name: 构建 ${{ matrix.name }}
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            kind: windows
+            bundles: nsis
+          - name: Linux
+            # 用 22.04 而不是 latest：glibc 基线 2.35，向下兼容面更广。
+            # 24.04 构建的产物在旧发行版上会直接无法启动。
+            os: ubuntu-22.04
+            kind: linux
+            bundles: appimage,deb
+    steps:
+      - uses: actions/checkout@v7
+
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.99.1"
       - uses: Swatinem/rust-cache@v2
+
+      - name: 安装 Linux 构建依赖
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/linux-deps
+      - name: 安装 AppImage 打包依赖
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y --no-install-recommends libfuse2
 
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -91,62 +123,140 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
 
-      # 只出 NSIS：Windows 上 updater 装的就是它（installMode=passive 静默装并重启）。
-      # MSI 需要 WiX，多一份产物但没有对应的更新路径。
-      #
       # createUpdaterArtifacts 只在这份 release 配置里打开：它要求构建时必须提供私钥，
       # 而贡献者本地打包不该被这个要求挡住（见 tauri.release.json）。
       - name: 构建并签名
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: pnpm tauri build --bundles nsis --config src-tauri/tauri.release.json
+        run: pnpm tauri build --bundles ${{ matrix.bundles }} --config src-tauri/tauri.release.json
 
       # 安装包原名带空格（"Qingci Craft Launcher_0.1.1_x64-setup.exe"）。
-      # 换成一个纯 ASCII 名字，URL 里就不用再操心编码。
+      # 换成纯 ASCII 名字，URL 里就不用再操心编码。用 glob 而不是拼文件名：
+      # 各平台 Tauri 的架构标记不一样（NSIS 是 x64、AppImage/deb 是 amd64），
+      # 拼错了要到发版那天才发现。
       - name: 整理产物
         shell: bash
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          KIND: ${{ matrix.kind }}
         run: |
           set -euo pipefail
           mkdir -p out
-          src="target/release/bundle/nsis/Qingci Craft Launcher_${VERSION}_x64-setup.exe"
-          dst="out/QingciCraftLauncher_${VERSION}_x64-setup.exe"
-          cp "$src" "$dst"
-          cp "$src.sig" "$dst.sig"
+          shopt -s nullglob
+
+          copy() {  # $1=glob $2=目标名
+            local files=($1)
+            if [ ${#files[@]} -eq 0 ]; then
+              echo "::error::没有找到匹配 $1 的产物"
+              exit 1
+            fi
+            cp "${files[0]}" "out/$2"
+            echo "→ out/$2"
+          }
+
+          # 按平台分支：每个 job 只处理自己那套产物。
+          # 第一次写成一套通用 glob，结果 Windows 去找 AppImage、Linux 去找
+          # NSIS，两个 job 都在这一步挂了（构建本身是成功的）。
+          case "$KIND" in
+            windows)
+              copy "target/release/bundle/nsis/*-setup.exe"     "QingciCraftLauncher_${VERSION}_x64-setup.exe"
+              copy "target/release/bundle/nsis/*-setup.exe.sig" "QingciCraftLauncher_${VERSION}_x64-setup.exe.sig"
+              ;;
+            linux)
+              copy "target/release/bundle/appimage/*.AppImage"     "QingciCraftLauncher_${VERSION}_x86_64.AppImage"
+              copy "target/release/bundle/appimage/*.AppImage.sig" "QingciCraftLauncher_${VERSION}_x86_64.AppImage.sig"
+              copy "target/release/bundle/deb/*.deb"               "QingciCraftLauncher_${VERSION}_amd64.deb"
+              ;;
+            *)
+              echo "::error::未知平台 $KIND"
+              exit 1
+              ;;
+          esac
+
           ls -l out
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.name }}
+          path: out/*
+          if-no-files-found: error
+
+  # 合并各平台产物、生成清单、推送 COS、建 Release。
+  # 单独成 job 而不是塞进 build：latest.json 要同时包含两个平台的签名，
+  # 只有拿到全部产物之后才写得出来。
+  publish:
+    name: 发布
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v5
+        with:
+          path: out
+          merge-multiple: true
+
+      # 上传脚本要 import cos-nodejs-sdk-v5，所以这个 job 也得装依赖。
+      # 只是装依赖，不编译任何东西。
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
 
       - name: 生成更新清单
         shell: bash
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
+          shopt -s nullglob
+
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            notes="清辞 ${VERSION}。完整说明见 ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}"
+            notes="Qingci Craft Launcher ${VERSION}. Full notes: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}"
           else
-            notes="清辞 ${VERSION}（手动触发的构建）"
+            notes="Qingci Craft Launcher ${VERSION} (manual build, not a published release)"
           fi
+
+          # 每个平台一项；缺哪个平台就跳过哪个。
+          platforms=()
+          add() {  # $1=目标 $2=glob
+            local files=($2)
+            if [ ${#files[@]} -gt 0 ]; then
+              platforms+=(--platform "$1=${files[0]}=${files[0]}.sig")
+            fi
+          }
+          add windows-x86_64 "out/*x64-setup.exe"
+          add linux-x86_64   "out/*.AppImage"
+
+          if [ ${#platforms[@]} -eq 0 ]; then
+            echo "::error::没有任何平台产物，无法生成清单"
+            exit 1
+          fi
+
           node scripts/make-latest-json.mjs \
             --version "$VERSION" \
-            --installer "out/QingciCraftLauncher_${VERSION}_x64-setup.exe" \
-            --signature "out/QingciCraftLauncher_${VERSION}_x64-setup.exe.sig" \
             --base-url "$PUBLIC_BASE_URL" \
             --notes "$notes" \
+            "${platforms[@]}" \
             --out out/latest.json
+
+          cat out/latest.json
+          ls -l out
 
       - name: 预览将要上传的对象（dry run）
         if: github.event_name != 'push' && github.event.inputs.dry_run != 'false'
         shell: bash
         run: |
           set -euo pipefail
-          cat out/latest.json
+          args=()
+          for file in out/*; do args+=(--file "$file"); done
           node scripts/publish-cos.mjs \
             --bucket "$COS_BUCKET" --region "$COS_REGION" --prefix "$COS_PREFIX" \
-            --file "out/QingciCraftLauncher_${{ steps.version.outputs.version }}_x64-setup.exe" \
-            --file out/latest.json \
-            --dry-run
+            "${args[@]}" --dry-run
 
       # 清单最后上传（脚本里保证顺序）：它一可读，客户端就会照着里面的地址下载。
       - name: 推送 COS
@@ -157,17 +267,17 @@ jobs:
           TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
         run: |
           set -euo pipefail
+          args=()
+          for file in out/*; do args+=(--file "$file"); done
           node scripts/publish-cos.mjs \
             --bucket "$COS_BUCKET" --region "$COS_REGION" --prefix "$COS_PREFIX" \
-            --file "out/QingciCraftLauncher_${{ steps.version.outputs.version }}_x64-setup.exe" \
-            --file out/latest.json
+            "${args[@]}"
 
       - name: 创建 GitHub Release
         if: github.event_name == 'push'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           # 重跑同一次发版时 Release 可能已经存在。
@@ -175,6 +285,6 @@ jobs:
             gh release upload "$GITHUB_REF_NAME" out/* --clobber
           else
             gh release create "$GITHUB_REF_NAME" out/* \
-              --title "清辞 v${VERSION}" \
+              --title "Qingci Craft Launcher v${VERSION}" \
               --generate-notes
           fi
