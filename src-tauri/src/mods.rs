@@ -28,6 +28,10 @@ pub struct ModHit {
     pub author: String,
     /// 图标地址。
     pub icon_url: Option<String>,
+    /// 项目短名，用于拼 Modrinth 页面地址。
+    pub slug: String,
+    /// 中文译名。译名库里没有就是 `None`，界面退回英文标题。
+    pub zh_name: Option<String>,
 }
 
 impl From<ModSummary> for ModHit {
@@ -39,6 +43,8 @@ impl From<ModSummary> for ModHit {
             downloads: summary.downloads,
             author: summary.author,
             icon_url: summary.icon_url,
+            zh_name: qcl_mods::zh_names::zh_name(&summary.slug).map(str::to_owned),
+            slug: summary.slug,
         }
     }
 }

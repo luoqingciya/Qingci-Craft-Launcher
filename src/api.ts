@@ -185,6 +185,10 @@ export interface ModHit {
   author: string;
   /** 图标地址；项目没上传图标时为 null。 */
   iconUrl: string | null;
+  /** 项目短名，用于拼 Modrinth 页面地址。 */
+  slug: string;
+  /** 中文译名；译名库里没有时为 null。 */
+  zhName: string | null;
 }
 
 /**

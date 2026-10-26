@@ -16,6 +16,8 @@ const HITS = [
     downloads: 123_456_789,
     author: "jellysquid3",
     iconUrl: "https://cdn.modrinth.com/data/AANobbMI/icon.png",
+    slug: "sodium",
+    zhName: "钠",
   },
   {
     projectId: "gvQqBUqZ",
@@ -24,6 +26,8 @@ const HITS = [
     downloads: 45_600,
     author: "jellysquid3",
     iconUrl: null,
+    slug: "lithium",
+    zhName: null,
   },
 ];
 
@@ -68,7 +72,9 @@ describe("ModsTab", () => {
     await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
 
     expect(searchMods).toHaveBeenCalledWith("sodium", "26.3", "fabric");
-    expect(await screen.findByText("Sodium")).toBeInTheDocument();
+    expect(await screen.findByText("钠")).toBeInTheDocument();
+    // 英文标题作为副标题仍然显示，方便对照。
+    expect(screen.getByText("Sodium")).toBeInTheDocument();
     expect(screen.getByText("高性能渲染引擎")).toBeInTheDocument();
   });
 
@@ -174,5 +180,37 @@ describe("依赖", () => {
     await userEvent.click(buttons[0]);
 
     expect(await screen.findByText("已安装 2 个文件（含依赖）")).toBeInTheDocument();
+  });
+});
+
+describe("中文译名", () => {
+  it("有译名时中文优先，英文作为副标题", async () => {
+    searchMods.mockResolvedValue(HITS);
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+
+    await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
+
+    // 中文名是主标题，英文名退成灰色副标题——两者都要在，方便对照。
+    expect(await screen.findByText("钠")).toBeInTheDocument();
+    expect(screen.getByText("Sodium")).toBeInTheDocument();
+  });
+
+  it("没有译名时只显示英文，不显示空的中文名", async () => {
+    searchMods.mockResolvedValue(HITS);
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+
+    await userEvent.type(screen.getByRole("textbox"), "lithium{Enter}");
+
+    expect(await screen.findByText("Lithium")).toBeInTheDocument();
+  });
+
+  it("提供在 Modrinth 查看原页的入口", async () => {
+    searchMods.mockResolvedValue(HITS);
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+
+    await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
+
+    // 描述保持英文，所以必须有一个能看原页的入口。
+    expect(await screen.findAllByRole("button", { name: "在 Modrinth 查看" })).toHaveLength(2);
   });
 });
