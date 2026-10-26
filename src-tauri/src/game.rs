@@ -13,11 +13,12 @@
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::SystemTime;
 
 use qcl_core::launch::{AccountInfo, LaunchLayout, LaunchOptions, build_launch_command};
 use qcl_java::{JavaSource, detect, inspect, select};
 use qcl_platform::launch_context;
-use qcl_runtime::{LogStream, spawn};
+use qcl_runtime::{CrashReport, LogStream, spawn};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
@@ -38,6 +39,31 @@ pub struct GameLogEvent {
     pub text: String,
 }
 
+/// 崩溃报告里要送到界面的部分。
+///
+/// 不整份传：报告动辄几百 KB，其中九成是模组清单与系统信息。界面要的只是
+/// 「Description 是什么」和紧随其后的几行堆栈。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrashReportPayload {
+    /// 报告文件路径，用于「打开所在文件夹」。
+    pub path: String,
+    /// `Description:` 那一行。
+    pub description: Option<String>,
+    /// 结论下方紧接着的若干行。
+    pub excerpt: Vec<String>,
+}
+
+impl From<&CrashReport> for CrashReportPayload {
+    fn from(report: &CrashReport) -> Self {
+        Self {
+            path: report.path.display().to_string(),
+            description: report.description.clone(),
+            excerpt: report.excerpt.clone(),
+        }
+    }
+}
+
 /// 进程退出。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,6 +72,8 @@ pub struct GameExitEvent {
     pub code: Option<i32>,
     /// 运行时长（秒）。
     pub duration_secs: f64,
+    /// 本次运行产生的崩溃报告（没有则为 `null`）。
+    pub crash_report: Option<CrashReportPayload>,
 }
 
 /// 一次游戏运行。
@@ -193,6 +221,10 @@ pub async fn launch_game(
         *slot = Some(Arc::clone(&session));
     }
 
+    // 记下启动时刻：只有这之后写出的崩溃报告才属于这一局。
+    let started = SystemTime::now();
+    // 崩溃报告在后台任务里找，所以目录要活过这个函数。
+    let report_dir = game_dir.clone();
     let handle = app.clone();
     let slot_handle = Arc::clone(&state.game);
     tauri::async_runtime::spawn(async move {
@@ -214,6 +246,17 @@ pub async fn launch_game(
             })
             .await;
 
+        // 只有异常退出才找报告：正常退出（0）时目录里那份一定是旧的。
+        let exit_code = outcome.as_ref().ok().and_then(|outcome| outcome.exit_code);
+        let crash_report = if exit_code.is_some_and(|code| code != 0) {
+            qcl_runtime::crash::find_since(&report_dir, started)
+                .and_then(|path| qcl_runtime::crash::read(&path))
+                .as_ref()
+                .map(CrashReportPayload::from)
+        } else {
+            None
+        };
+
         // 无论成功失败都要释放槽位，否则界面会一直显示「运行中」。
         if let Ok(mut slot) = slot_handle.lock() {
             // 只清理自己这一场：期间可能已经开始了新的一局。
@@ -229,6 +272,7 @@ pub async fn launch_game(
             Ok(outcome) => GameExitEvent {
                 code: outcome.exit_code,
                 duration_secs: outcome.duration.as_secs_f64(),
+                crash_report,
             },
             Err(error) => {
                 let _ = handle.emit(
@@ -241,6 +285,7 @@ pub async fn launch_game(
                 GameExitEvent {
                     code: None,
                     duration_secs: 0.0,
+                    crash_report: None,
                 }
             }
         };
@@ -261,6 +306,33 @@ pub fn stop_game(state: tauri::State<'_, AppState>) -> Result<(), String> {
         }
         None => Err("当前没有正在运行的游戏".to_owned()),
     }
+}
+
+/// 在系统文件管理器里选中崩溃报告。
+///
+/// 路径由前端回传，所以这里必须再校验一次：确认它落在当前游戏目录的
+/// `crash-reports/` 下。否则这个命令就成了「让系统用默认程序打开任意文件」的通道。
+#[tauri::command]
+pub fn reveal_crash_report(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    path: String,
+) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+
+    let (_, game_dir) = state.context()?;
+    let reports = dunce::canonicalize(qcl_runtime::crash::directory(&game_dir))
+        .map_err(|error| format!("崩溃报告目录不可用：{error}"))?;
+    let report = dunce::canonicalize(Path::new(&path))
+        .map_err(|error| format!("崩溃报告不存在：{error}"))?;
+
+    if !report.starts_with(&reports) {
+        return Err("崩溃报告不在游戏目录内，已拒绝".to_owned());
+    }
+
+    app.opener()
+        .reveal_item_in_dir(&report)
+        .map_err(|error| format!("打开文件管理器失败：{error}"))
 }
 
 /// 查询运行状态。界面重新挂载时用它同步。
@@ -305,8 +377,51 @@ fn launch_options_from(settings: &crate::settings::Settings) -> LaunchOptions {
 
 #[cfg(test)]
 mod tests {
-    use super::{launch_options_from, offline_account};
+    use super::{CrashReportPayload, GameExitEvent, launch_options_from, offline_account};
     use crate::settings::{DEFAULT_PLAYER_NAME, Settings};
+    use qcl_runtime::CrashReport;
+    use std::path::PathBuf;
+
+    #[test]
+    fn exit_event_carries_crash_report_in_camel_case() {
+        // 字段名是 IPC 契约，前端按 `crashReport.path` 取值；
+        // serde 的 rename 写错了界面会静默地拿不到报告。
+        let report = CrashReport {
+            path: PathBuf::from("/game/crash-reports/crash-1-client.txt"),
+            description: Some("Rendering overlay".to_owned()),
+            excerpt: vec!["java.lang.NullPointerException: boom".to_owned()],
+        };
+        let event = GameExitEvent {
+            code: Some(1),
+            duration_secs: 12.5,
+            crash_report: Some(CrashReportPayload::from(&report)),
+        };
+
+        let json = serde_json::to_value(&event).expect("序列化退出事件");
+        assert_eq!(json["code"], 1);
+        assert_eq!(json["durationSecs"], 12.5);
+        assert_eq!(
+            json["crashReport"]["path"],
+            "/game/crash-reports/crash-1-client.txt"
+        );
+        assert_eq!(json["crashReport"]["description"], "Rendering overlay");
+        assert_eq!(
+            json["crashReport"]["excerpt"][0],
+            "java.lang.NullPointerException: boom"
+        );
+    }
+
+    #[test]
+    fn exit_event_without_report_serializes_null() {
+        let event = GameExitEvent {
+            code: Some(0),
+            duration_secs: 1.0,
+            crash_report: None,
+        };
+
+        let json = serde_json::to_value(&event).expect("序列化退出事件");
+        assert!(json["crashReport"].is_null());
+    }
 
     #[test]
     fn memory_setting_reaches_launch_options() {

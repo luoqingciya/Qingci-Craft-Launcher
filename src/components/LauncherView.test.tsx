@@ -173,6 +173,7 @@ describe("崩溃摘要", () => {
         exitCode: 1,
         headline: "模组依赖或兼容性有问题，游戏在加载阶段退出",
         lines: ["Incompatible mod set!"],
+        reportPath: null,
       },
     });
 

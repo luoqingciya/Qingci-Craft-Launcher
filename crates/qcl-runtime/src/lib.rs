@@ -10,6 +10,8 @@
 //! 之所以单独成 crate：进程管理必须依赖异步运行时与平台 API，
 //! 而 `qcl-core` 要保持无 IO、可在任意平台完整测试。
 
+pub mod crash;
 pub mod process;
 
+pub use crash::CrashReport;
 pub use process::{GameProcess, LaunchError, LaunchOutcome, LogLine, LogStream, spawn};

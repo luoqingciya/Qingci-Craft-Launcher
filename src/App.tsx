@@ -19,6 +19,7 @@ import {
   rememberSelection,
   saveSettings,
   stopGame,
+  type CrashReport,
   type GameExitEvent,
   type GameLogEvent,
   type GameStatus,
@@ -54,6 +55,8 @@ export default function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   // 上次退出码：null 表示被用户终止，0 表示正常退出。
   const [exitCode, setExitCode] = useState<number | null | undefined>(undefined);
+  // 这一局的崩溃报告（游戏自己写的）。与退出码同生命周期。
+  const [crashReport, setCrashReport] = useState<CrashReport | null>(null);
   const [crashDismissed, setCrashDismissed] = useState(false);
   const logId = useRef(0);
 
@@ -202,8 +205,9 @@ export default function App() {
     register(
       listen<GameExitEvent>(GAME_EXIT_EVENT, (event) => {
         setStatus({ running: false, version: null });
-        const { code, durationSecs } = event.payload;
+        const { code, durationSecs, crashReport: report } = event.payload;
         setExitCode(code);
+        setCrashReport(report);
         pushLog({
           stream: "system",
           text: `—— 游戏退出（${code ?? "被终止"}），运行 ${durationSecs.toFixed(1)} 秒 ——`,
@@ -223,8 +227,8 @@ export default function App() {
     if (exitCode === undefined || crashDismissed) {
       return null;
     }
-    return summarizeCrash(logs, exitCode);
-  }, [logs, exitCode, crashDismissed]);
+    return summarizeCrash(logs, exitCode, crashReport);
+  }, [logs, exitCode, crashReport, crashDismissed]);
 
   const saveSettingsInput = useCallback(async (input: SettingsInput) => {
     setSavingSettings(true);
@@ -280,6 +284,7 @@ export default function App() {
     setError(null);
     setMessage(null);
     setExitCode(undefined);
+    setCrashReport(null);
     setCrashDismissed(false);
     try {
       await launchGame(selected, loader === "" ? null : loader);

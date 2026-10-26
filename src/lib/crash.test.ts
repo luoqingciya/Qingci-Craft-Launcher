@@ -97,6 +97,56 @@ describe("summarizeCrash", () => {
     expect(summary?.lines).toHaveLength(1);
     expect(summary?.lines[0]).toContain("boom");
   });
+
+  it("有崩溃报告时用报告里的 Description 作结论", () => {
+    // 日志里只有无关噪音，但游戏自己写了报告——结论应该来自报告。
+    const summary = summarizeCrash(logs(...OFFLINE_NOISE), 1, {
+      path: "/game/crash-reports/crash-1-client.txt",
+      description: "Rendering overlay",
+      excerpt: ["java.lang.NullPointerException: Cannot invoke \"Foo.bar()\""],
+    });
+
+    expect(summary?.headline).toContain("Rendering overlay");
+    expect(summary?.lines[0]).toContain("NullPointerException");
+    expect(summary?.reportPath).toContain("crash-1-client.txt");
+  });
+
+  it("报告里的堆栈排在日志行前面", () => {
+    const summary = summarizeCrash(
+      logs("java.lang.IllegalStateException: 来自日志"),
+      1,
+      {
+        path: "/game/crash-reports/crash-1-client.txt",
+        description: null,
+        excerpt: ["java.lang.NullPointerException: 来自报告"],
+      },
+    );
+
+    expect(summary?.lines[0]).toContain("来自报告");
+    expect(summary?.lines[1]).toContain("来自日志");
+  });
+
+  it("模组冲突仍然盖过报告里的泛泛描述", () => {
+    // 「Rendering overlay」不是可操作的结论，模组缺依赖才是。
+    const summary = summarizeCrash(
+      logs("Incompatible mod set!"),
+      1,
+      {
+        path: "/game/crash-reports/crash-1-client.txt",
+        description: "Rendering overlay",
+        excerpt: ["java.lang.RuntimeException: crash"],
+      },
+    );
+
+    expect(summary?.headline).toContain("模组");
+    expect(summary?.lines.some((line) => line.includes("Incompatible mod set"))).toBe(true);
+  });
+
+  it("没有报告时 reportPath 为 null", () => {
+    const summary = summarizeCrash(logs("java.lang.RuntimeException: boom"), 1);
+
+    expect(summary?.reportPath).toBeNull();
+  });
 });
 
 describe("formatSummary", () => {
@@ -105,6 +155,7 @@ describe("formatSummary", () => {
       exitCode: 1,
       headline: "模组依赖或兼容性有问题，游戏在加载阶段退出",
       lines: ["Incompatible mod set!"],
+      reportPath: null,
     });
 
     expect(text).toContain("退出码 1");
@@ -112,8 +163,24 @@ describe("formatSummary", () => {
   });
 
   it("没有关键行时只输出标题", () => {
-    const text = formatSummary({ exitCode: 1, headline: "游戏异常退出", lines: [] });
+    const text = formatSummary({
+      exitCode: 1,
+      headline: "游戏异常退出",
+      lines: [],
+      reportPath: null,
+    });
 
     expect(text).toBe("游戏异常退出（退出码 1）");
+  });
+
+  it("带上报告路径，方便别人按图索骥", () => {
+    const text = formatSummary({
+      exitCode: 1,
+      headline: "游戏崩溃：Rendering overlay",
+      lines: [],
+      reportPath: "/game/crash-reports/crash-1-client.txt",
+    });
+
+    expect(text).toContain("崩溃报告：/game/crash-reports/crash-1-client.txt");
   });
 });

@@ -4,10 +4,21 @@
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CrashSummary } from "../lib/crash";
 import { CrashCard } from "./CrashCard";
+
+const revealCrashReport = vi.fn();
+
+vi.mock("../api", () => ({
+  revealCrashReport: (...args: unknown[]) => revealCrashReport(...args),
+}));
+
+beforeEach(() => {
+  revealCrashReport.mockReset();
+  revealCrashReport.mockResolvedValue(undefined);
+});
 
 const SUMMARY: CrashSummary = {
   exitCode: 1,
@@ -16,6 +27,7 @@ const SUMMARY: CrashSummary = {
     "[main/ERROR]: Incompatible mod set!",
     "\t- Mod 'Sodium' requires version 1.0.0 of fabric-api, which is missing!",
   ],
+  reportPath: null,
 };
 
 describe("CrashCard", () => {
@@ -65,12 +77,47 @@ describe("CrashCard", () => {
   it("没有关键行时只显示结论", () => {
     render(
       <CrashCard
-        summary={{ exitCode: 1, headline: "游戏异常退出", lines: [] }}
+        summary={{ exitCode: 1, headline: "游戏异常退出", lines: [], reportPath: null }}
         onDismiss={vi.fn()}
       />,
     );
 
     expect(screen.getByText("游戏异常退出")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "复制摘要" })).toBeInTheDocument();
+  });
+
+  it("有崩溃报告时显示路径并能打开", async () => {
+    const path = "D:\\游戏\\crash-reports\\crash-2026-10-25_12.34.56-client.txt";
+    render(
+      <CrashCard
+        summary={{ ...SUMMARY, reportPath: path }}
+        onDismiss={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(new RegExp("crash-2026-10-25_12.34.56-client.txt"))).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "打开报告" }));
+    expect(revealCrashReport).toHaveBeenCalledWith(path);
+  });
+
+  it("没有报告时不显示「打开报告」", () => {
+    render(<CrashCard summary={SUMMARY} onDismiss={vi.fn()} />);
+
+    expect(screen.queryByRole("button", { name: "打开报告" })).toBeNull();
+  });
+
+  it("打开失败时把原因显示出来，而不是静默失败", async () => {
+    revealCrashReport.mockRejectedValueOnce("崩溃报告不存在：没有那个文件");
+    render(
+      <CrashCard
+        summary={{ ...SUMMARY, reportPath: "D:\\x\\crash-1-client.txt" }}
+        onDismiss={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "打开报告" }));
+
+    expect(await screen.findByText(/崩溃报告不存在/)).toBeInTheDocument();
   });
 });
