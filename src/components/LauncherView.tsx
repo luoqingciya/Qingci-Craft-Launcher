@@ -19,6 +19,7 @@ import { applyTheme, loadTheme, type Theme } from "../lib/theme";
 import { AboutPanel } from "./AboutPanel";
 import { LaunchPanel } from "./LaunchPanel";
 import { LogPanel } from "./LogPanel";
+import { ModsTab } from "./ModsTab";
 import { PickerDialog, type PickerItem } from "./PickerDialog";
 import { SettingsPanel } from "./SettingsPanel";
 
@@ -29,10 +30,11 @@ export type VersionsState =
   | { status: "failed"; message: string };
 
 /** 顶部分页。 */
-type Tab = "home" | "settings" | "about";
+type Tab = "home" | "mods" | "settings" | "about";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "home", label: "启动" },
+  { id: "mods", label: "模组" },
   { id: "settings", label: "设置" },
   { id: "about", label: "关于" },
 ];
@@ -208,6 +210,12 @@ export function LauncherView({
           <div className="flex min-w-0 flex-1 flex-col bg-gradient-to-br from-[var(--color-canvas-from)] to-[var(--color-canvas-to)] p-4">
             <LogPanel logs={logs} onClear={onClearLogs} />
           </div>
+        </div>
+      )}
+
+      {tab === "mods" && (
+        <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-br from-[var(--color-canvas-from)] to-[var(--color-canvas-to)]">
+          <ModsTab version={selected} loader={loader} />
         </div>
       )}
 

@@ -25,6 +25,7 @@ qcl-install = { version = "0.1.0", path = "../crates/qcl-install" }
 qcl-java = { version = "0.1.0", path = "../crates/qcl-java" }
 qcl-runtime = { version = "0.1.0", path = "../crates/qcl-runtime" }
 qcl-platform = { version = "0.1.0", path = "../crates/qcl-platform" }
+qcl-mods = { version = "0.1.0", path = "../crates/qcl-mods" }
 tauri = { version = "2.12.5", features = [] }
 tauri-plugin-dialog = "2.8.3"
 tauri-plugin-opener = "2.7.2"

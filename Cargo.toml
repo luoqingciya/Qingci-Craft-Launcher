@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/qcl-core", "crates/qcl-net", "crates/qcl-java", "crates/qcl-runtime", "crates/qcl-install", "crates/qcl-cli", "crates/qcl-platform", "crates/qcl-auth", "src-tauri"]
+members = ["crates/qcl-core", "crates/qcl-net", "crates/qcl-java", "crates/qcl-runtime", "crates/qcl-install", "crates/qcl-cli", "crates/qcl-platform", "crates/qcl-auth", "crates/qcl-mods", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"

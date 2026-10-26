@@ -182,6 +182,39 @@ impl HttpDownloader {
             .ok_or_else(|| DownloadError::Other(format!("无法解析 Content-Range：{header}")))
     }
 
+    /// 与 `fetch_text` 相同，但可指定 User-Agent。
+    ///
+    /// Modrinth 要求客户端标明身份，否则可能被限流；而全局改客户端的 UA
+    /// 会影响 Mojang 端点的行为，所以只在需要的地方单独带。
+    pub async fn fetch_text_with_user_agent(
+        &self,
+        url: &str,
+        user_agent: &str,
+    ) -> Result<String, DownloadError> {
+        let response = self
+            .client
+            .get(url)
+            .header(reqwest::header::USER_AGENT, user_agent)
+            .send()
+            .await
+            .map_err(|error| DownloadError::Network(error.to_string()))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let code = status.as_u16();
+            return Err(if is_retryable_status(code) {
+                DownloadError::Network(format!("HTTP {code}"))
+            } else {
+                DownloadError::Other(format!("HTTP {code}"))
+            });
+        }
+
+        response
+            .text()
+            .await
+            .map_err(|error| DownloadError::Network(error.to_string()))
+    }
+
     /// 主动校验磁盘上的文件是否与期望摘要一致。
     ///
     /// 与 [`DownloadOps::is_present`] 的区别：本方法**总是**做完整哈希，
