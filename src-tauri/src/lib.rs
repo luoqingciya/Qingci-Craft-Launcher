@@ -12,6 +12,7 @@
 
 mod game;
 mod install;
+mod mods;
 mod settings;
 
 use std::path::{Path, PathBuf};
@@ -350,6 +351,9 @@ pub fn run() {
             list_java,
             install::install_game_version,
             install::list_loaders,
+            mods::search_mods,
+            mods::install_mod,
+            mods::list_mods,
             game::launch_game,
             game::stop_game,
             game::game_status

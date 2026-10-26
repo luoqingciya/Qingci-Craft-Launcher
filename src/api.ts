@@ -161,3 +161,44 @@ export function stopGame(): Promise<void> {
 export function gameStatus(): Promise<GameStatus> {
   return invoke<GameStatus>("game_status");
 }
+
+/** 模组搜索结果。 */
+export interface ModHit {
+  /** 项目 id，安装时回传。 */
+  projectId: string;
+  /** 标题。 */
+  title: string;
+  /** 一句话描述。 */
+  description: string;
+  /** 下载量。 */
+  downloads: number;
+  /** 作者。 */
+  author: string;
+}
+
+/**
+ * 搜索模组。
+ *
+ * `loader` 传 `fabric` 这类分类名；空串表示不按加载器筛选。
+ */
+export function searchMods(
+  query: string,
+  version: string,
+  loader: string,
+): Promise<ModHit[]> {
+  return invoke<ModHit[]>("search_mods", { query, version, loader });
+}
+
+/** 安装模组，返回落地路径（相对游戏目录）。 */
+export function installMod(
+  projectId: string,
+  version: string,
+  loader: string,
+): Promise<string> {
+  return invoke<string>("install_mod", { projectId, version, loader });
+}
+
+/** 列出已安装的模组文件名。 */
+export function listMods(): Promise<string[]> {
+  return invoke<string[]>("list_mods");
+}

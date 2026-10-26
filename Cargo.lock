@@ -3049,6 +3049,7 @@ dependencies = [
  "qcl-core",
  "qcl-install",
  "qcl-java",
+ "qcl-mods",
  "qcl-net",
  "qcl-platform",
  "qcl-runtime",
@@ -3079,6 +3080,19 @@ dependencies = [
 
 [[package]]
 name = "qcl-java"
+version = "0.1.0"
+dependencies = [
+ "qcl-net",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "wiremock",
+]
+
+[[package]]
+name = "qcl-mods"
 version = "0.1.0"
 dependencies = [
  "qcl-net",
