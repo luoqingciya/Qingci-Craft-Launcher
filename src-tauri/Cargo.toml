@@ -33,6 +33,16 @@ dunce.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+# 关掉默认的 `zip` 特性：它只用于解压「打成 zip 的更新包」（旧式 .nsis.zip、
+# Linux 的压缩 AppImage、macOS 的 .tar.gz）。我们发的是裸 .exe，安装走
+# `extract_exe`，用不到它；而它带进来的 zip 4.x 有两个未修复的漏洞
+# （RUSTSEC-2026-0367 解压时保留 SUID/SGID、RUSTSEC-2026-0368 解压出的符号链接
+# 可指向目标目录之外）。代价是将来若改发 zip 包，安装会直接报错而不是静默解压。
+tauri-plugin-updater = { version = "2.14.0", default-features = false, features = [
+    "rustls-tls",
+    "system-proxy",
+] }
+tauri-plugin-process = "2.4.0"
 
 [dev-dependencies]
 tempfile = "3.27.0"

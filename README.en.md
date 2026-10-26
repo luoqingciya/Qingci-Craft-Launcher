@@ -124,6 +124,9 @@ This project uses a strict PR workflow: every change (including docs) goes throu
 branch → PR → green CI → review → squash merge.
 See [CONTRIBUTING.en.md](CONTRIBUTING.en.md) ([中文](CONTRIBUTING.md)).
 
+Release and auto-update setup, key management and troubleshooting:
+[docs/RELEASE.en.md](docs/RELEASE.en.md) ([中文](docs/RELEASE.md)).
+
 ## Disclaimer
 
 This is an unofficial launcher, not affiliated with Mojang Studios or Microsoft.

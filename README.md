@@ -119,6 +119,8 @@ cargo run -p qcl-cli -- 26.3 --dry-run
 本项目严格采用 PR 流程：任何改动（含文档）都必须经分支 → PR → CI 全绿 → 评审通过 → Squash 合并。
 详见 [CONTRIBUTING.md](CONTRIBUTING.md)（[English](CONTRIBUTING.en.md)）。
 
+发版与在线更新的配置、密钥管理与排错见 [docs/RELEASE.md](docs/RELEASE.md)（[English](docs/RELEASE.en.md)）。
+
 ## 免责声明
 
 本项目为非官方启动器，与 Mojang Studios、Microsoft 无任何隶属关系。

@@ -335,6 +335,32 @@ fn list_java(state: tauri::State<'_, AppState>) -> Result<Vec<JavaOption>, Strin
         .collect())
 }
 
+/// 本程序的运行环境信息。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeInfo {
+    /// 是否由安装程序装入。
+    ///
+    /// 判据是安装目录里有没有 NSIS 写的 `uninstall.exe`。用它而不是「路径在
+    /// %LOCALAPPDATA% 下」，是因为安装时允许自选路径，而卸载器在哪个目录都会写。
+    pub installed: bool,
+}
+
+/// 判断当前是否为安装版。
+///
+/// 界面要据此决定「检查更新」之后能不能自动安装：便携版自更新得替换正在运行的
+/// exe，Windows 不允许，只能引导用户去下载。
+#[tauri::command]
+fn runtime_info() -> Result<RuntimeInfo, String> {
+    let exe = std::env::current_exe().map_err(|error| format!("无法定位可执行文件：{error}"))?;
+    let installed = exe
+        .parent()
+        .map(|directory| directory.join("uninstall.exe").is_file())
+        .unwrap_or(false);
+
+    Ok(RuntimeInfo { installed })
+}
+
 /// 启动应用。
 ///
 /// # Panics
@@ -345,6 +371,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        // 在线更新：updater 负责校验签名并安装，process 负责装完重启自己。
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // 便携布局：默认游戏目录在可执行文件旁边，整个目录拷走即可迁移。
             let install_dir = std::env::current_exe()?
@@ -382,6 +411,7 @@ pub fn run() {
             save_settings,
             list_java,
             remember_selection,
+            runtime_info,
             install::install_game_version,
             install::list_loaders,
             mods::search_mods,

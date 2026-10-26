@@ -183,6 +183,17 @@ export function gameStatus(): Promise<GameStatus> {
   return invoke<GameStatus>("game_status");
 }
 
+/** 运行环境信息。 */
+export interface RuntimeInfo {
+  /** 是否由安装程序装入。便携版没有卸载器，因此无法自更新。 */
+  installed: boolean;
+}
+
+/** 查询运行环境。 */
+export function runtimeInfo(): Promise<RuntimeInfo> {
+  return invoke<RuntimeInfo>("runtime_info");
+}
+
 /** 在文件管理器里选中崩溃报告。 */
 export function revealCrashReport(path: string): Promise<void> {
   return invoke<void>("reveal_crash_report", { path });

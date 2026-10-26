@@ -45,5 +45,17 @@
         "language": "zh-CN"
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://qcl.luoqingciya.cn/releases/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY3QzJERDUxODc0M0QyM0QKUldROTBrT0hVZDNDWjhIK05ualVRZjQvdDhXSEVoa0xMZTNoelpGenFDVUFTeTlnbFVTeXpBMTgK",
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
