@@ -174,6 +174,8 @@ export interface ModHit {
   downloads: number;
   /** 作者。 */
   author: string;
+  /** 图标地址；项目没上传图标时为 null。 */
+  iconUrl: string | null;
 }
 
 /**
@@ -201,4 +203,9 @@ export function installMod(
 /** 列出已安装的模组文件名。 */
 export function listMods(): Promise<string[]> {
   return invoke<string[]>("list_mods");
+}
+
+/** 删除一个已安装的模组。只接受 mods/ 下的 .jar 文件名。 */
+export function removeMod(filename: string): Promise<void> {
+  return invoke<void>("remove_mod", { filename });
 }

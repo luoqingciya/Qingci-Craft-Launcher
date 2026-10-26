@@ -28,6 +28,8 @@ pub struct ModHit {
     pub downloads: u64,
     /// 作者。
     pub author: String,
+    /// 图标地址。
+    pub icon_url: Option<String>,
 }
 
 impl From<ModSummary> for ModHit {
@@ -38,6 +40,7 @@ impl From<ModSummary> for ModHit {
             description: summary.description,
             downloads: summary.downloads,
             author: summary.author,
+            icon_url: summary.icon_url,
         }
     }
 }
@@ -105,4 +108,14 @@ pub fn list_mods(state: tauri::State<'_, AppState>) -> Result<Vec<String>, Strin
 
     names.sort();
     Ok(names)
+}
+
+/// 删除一个已安装的模组。
+///
+/// 只删 mods/ 下的 .jar，并且要求文件名通过安全校验——
+/// 界面传来的名字同样不可信。
+#[tauri::command]
+pub fn remove_mod(state: tauri::State<'_, AppState>, filename: String) -> Result<(), String> {
+    let (_, game_dir) = state.context()?;
+    qcl_mods::remove(&game_dir, &filename).map_err(|error| error.to_string())
 }
