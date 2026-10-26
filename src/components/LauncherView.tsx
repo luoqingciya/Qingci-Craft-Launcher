@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import iconUrl from "../../src-tauri/icons/128x128.png";
 import type {
@@ -19,8 +19,8 @@ import { applyTheme, loadTheme, type Theme } from "../lib/theme";
 import { AboutPanel } from "./AboutPanel";
 import { LaunchPanel } from "./LaunchPanel";
 import { LogPanel } from "./LogPanel";
+import { PickerDialog, type PickerItem } from "./PickerDialog";
 import { SettingsPanel } from "./SettingsPanel";
-import { VersionList } from "./VersionList";
 
 /** 版本清单的加载状态。 */
 export type VersionsState =
@@ -29,11 +29,10 @@ export type VersionsState =
   | { status: "failed"; message: string };
 
 /** 顶部分页。 */
-type Tab = "home" | "versions" | "settings" | "about";
+type Tab = "home" | "settings" | "about";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "home", label: "启动" },
-  { id: "versions", label: "版本" },
   { id: "settings", label: "设置" },
   { id: "about", label: "关于" },
 ];
@@ -44,8 +43,7 @@ const TABS: { id: Tab; label: string }[] = [
  * 纯展示组件：业务状态与回调都由 `App` 传入，界面因此能用假数据单独渲染
  * （见 `src/preview.tsx`），也能直接对布局写测试。
  *
- * 自己持有的只有「当前标签页」与「主题」：前者是纯界面状态，
- * 后者要立刻生效，没必要绕一圈交给外层。
+ * 自己持有的只有「当前标签页」「主题」和「哪个选择器开着」——都是纯界面状态。
  */
 export function LauncherView({
   versions,
@@ -98,11 +96,44 @@ export function LauncherView({
 }) {
   const [tab, setTab] = useState<Tab>("home");
   const [theme, setTheme] = useState<Theme>(loadTheme);
+  const [picker, setPicker] = useState<"version" | "loader" | null>(null);
 
   const ready = versions.status === "ready";
   const canAct = ready && selected !== null && !busy;
   const running = status.running;
   const playerName = settings?.playerName ?? "Player";
+
+  const selectedVersion = useMemo(
+    () => (ready ? versions.versions.find((item) => item.id === selected) : undefined),
+    [ready, versions, selected]
+  );
+
+  // 版本项：九百多条，交给选择器去搜索与截断。
+  const versionItems: PickerItem[] = useMemo(() => {
+    if (!ready) {
+      return [];
+    }
+    return versions.versions.map((version) => ({
+      id: version.id,
+      label: version.id,
+      meta: version.releaseTime.slice(0, 10),
+      badge: version.type === "release" ? undefined : "快照",
+    }));
+  }, [ready, versions]);
+
+  const loaderItems: PickerItem[] = useMemo(
+    () => [
+      { id: "", label: "无（原版）", meta: "不加载任何加载器", accent: true },
+      ...loaders.map((option) => ({
+        id: option.version,
+        label: `Fabric ${option.version}`,
+        meta: option.stable ? "稳定版" : "测试版",
+      })),
+    ],
+    [loaders]
+  );
+
+  const loaderLabel = loader ? `Fabric ${loader}` : "无（原版）";
 
   function toggleTheme() {
     const next: Theme = theme === "dark" ? "light" : "dark";
@@ -111,12 +142,12 @@ export function LauncherView({
   }
 
   return (
-    <div className="flex h-full flex-col bg-[var(--color-surface)]">
-      {/* 顶栏用强调色渐变：整窗的主色块，避免界面看起来只有一片灰。 */}
+    <div className="relative flex h-full flex-col bg-[var(--color-surface)]">
+      {/* 顶栏保持中性：强调色只给按钮与选中态，整条铺色会显得廉价。 */}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] px-4">
         <img src={iconUrl} alt="" className="h-8 w-8 rounded-lg" />
 
-        <nav role="tablist" aria-label="主导航" className="ml-4 flex items-center gap-1">
+        <nav role="tablist" aria-label="主导航" className="ml-2 flex items-center gap-1">
           {TABS.map((item) => {
             const active = tab === item.id;
             return (
@@ -158,75 +189,24 @@ export function LauncherView({
             <LaunchPanel
               playerName={playerName}
               selected={selected}
-              selectedVersion={
-                ready ? versions.versions.find((item) => item.id === selected) : undefined
-              }
-              loaders={loaders}
-              loader={loader}
-              loaderBusy={loaderBusy}
+              selectedVersion={selectedVersion}
+              loaderLabel={loaderLabel}
               busy={busy}
               status={status}
               progress={progress}
               message={message}
               error={error}
               canAct={canAct}
-              onLoaderChange={onLoaderChange}
+              onPickVersion={() => setPicker("version")}
+              onPickLoader={() => setPicker("loader")}
               onLaunch={onLaunch}
               onInstall={onInstall}
               onStop={onStop}
-              onBrowseVersions={() => setTab("versions")}
             />
           </div>
 
           <div className="flex min-w-0 flex-1 flex-col bg-gradient-to-br from-[var(--color-canvas-from)] to-[var(--color-canvas-to)] p-4">
             <LogPanel logs={logs} onClear={onClearLogs} />
-          </div>
-        </div>
-      )}
-
-      {tab === "versions" && (
-        <div className="flex min-h-0 flex-1">
-          <aside className="flex w-[380px] shrink-0 flex-col border-r border-[var(--color-border-subtle)]">
-            <div className="flex h-11 shrink-0 items-center justify-between px-4">
-              <h2 className="text-[12px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
-                版本列表
-              </h2>
-              {ready && (
-                <span className="text-[12px] tabular-nums text-[var(--color-text-muted)]">
-                  {versions.versions.length} 个
-                </span>
-              )}
-            </div>
-
-            {versions.status === "loading" && (
-              <p className="px-4 py-6 text-[13px] text-[var(--color-text-secondary)]">
-                正在获取版本清单…
-              </p>
-            )}
-            {versions.status === "failed" && (
-              <p className="px-4 py-6 text-[13px] text-[var(--color-danger)]">
-                获取版本清单失败：{versions.message}
-              </p>
-            )}
-            {versions.status === "ready" && (
-              <VersionList
-                versions={versions.versions}
-                selected={selected}
-                disabled={busy || running}
-                onSelect={(id) => {
-                  onSelectVersion(id);
-                  setTab("home");
-                }}
-              />
-            )}
-          </aside>
-
-          <div className="min-w-0 flex-1 bg-gradient-to-br from-[var(--color-canvas-from)] to-[var(--color-canvas-to)] p-6">
-            <VersionDetail
-              version={ready ? versions.versions.find((item) => item.id === selected) : undefined}
-              selected={selected}
-              loader={loader}
-            />
           </div>
         </div>
       )}
@@ -260,69 +240,41 @@ export function LauncherView({
           <AboutPanel />
         </div>
       )}
+
+      {picker === "version" && (
+        <PickerDialog
+          title="选择版本"
+          placeholder="搜索版本号，如 1.20 或 26.3"
+          items={versionItems}
+          selectedId={selected}
+          emptyHint={ready ? "没有匹配的版本" : "版本清单还没加载完"}
+          onPick={(id) => {
+            onSelectVersion(id);
+            setPicker(null);
+          }}
+          onClose={() => setPicker(null)}
+        />
+      )}
+
+      {picker === "loader" && (
+        <PickerDialog
+          title={loaderBusy ? "加载器（正在读取…）" : "选择加载器"}
+          placeholder="搜索 Fabric 版本"
+          items={loaderItems}
+          selectedId={loader}
+          emptyHint="这个版本没有可用的 Fabric 加载器"
+          onPick={(value) => {
+            onLoaderChange(value);
+            setPicker(null);
+          }}
+          onClose={() => setPicker(null)}
+        />
+      )}
     </div>
   );
 }
 
-/** 选中版本的详情。让「版本」页右侧不至于空着，也给一个回到启动的入口。 */
-function VersionDetail({
-  version,
-  selected,
-  loader,
-}: {
-  version: VersionSummary | undefined;
-  selected: string | null;
-  loader: string;
-}) {
-  if (!selected) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-[13px] text-[var(--color-text-muted)]">从左侧选择一个版本</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-[560px]">
-      <div className="text-[12px] uppercase tracking-wider text-[var(--color-text-muted)]">
-        已选版本
-      </div>
-      <div className="mt-1 font-mono text-[26px] leading-tight text-[var(--color-text-primary)]">
-        {selected}
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2 text-[12px]">
-        {version && (
-          <>
-            <Tag>{version.type === "release" ? "正式版" : "快照"}</Tag>
-            <Tag>{version.releaseTime.slice(0, 10)}</Tag>
-          </>
-        )}
-        {loader && <Tag accent>Fabric {loader}</Tag>}
-      </div>
-
-      <p className="mt-6 text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
-        点击左侧任意版本即可切换，并自动回到「启动」页。
-      </p>
-    </div>
-  );
-}
-
-function Tag({ children, accent = false }: { children: React.ReactNode; accent?: boolean }) {
-  return (
-    <span
-      className={`rounded-lg px-2 py-1 ${
-        accent
-          ? "bg-[var(--color-accent-soft)] text-[var(--color-accent-text)]"
-          : "bg-[var(--color-surface-raised)] text-[var(--color-text-secondary)] ring-1 ring-inset ring-[var(--color-border-subtle)]"
-      }`}
-    >
-      {children}
-    </span>
-  );
-}
-
-/** 运行状态。顶栏是彩色的，所以这里用半透明白底而不是灰底。 */
+/** 运行状态。 */
 function StatusChip({ running, version }: { running: boolean; version: string | null }) {
   return (
     <span

@@ -2,52 +2,50 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
 
-import type { GameStatus, InstallProgressEvent, LoaderOption, VersionSummary } from "../api";
+import type { GameStatus, InstallProgressEvent, VersionSummary } from "../api";
 import { InstallProgressBar } from "./SettingsPanel";
-import { LoaderSelect } from "./LoaderSelect";
 
 /**
  * 「启动」页的左栏：账户 + 当前版本 + 启动按钮。
  *
  * 把这三块放在同一栏，是因为它们回答的是同一个问题——「我现在点一下会启动什么」。
- * 版本列表放到独立标签页，避免左栏被几百个版本撑爆。
+ *
+ * 版本与加载器都用「点击打开选择器」而不是下拉框：原版清单九百多项、
+ * 加载器上百项，下拉框里翻不动。选择器带搜索与键盘导航（见 PickerDialog）。
  */
 export function LaunchPanel({
   playerName,
   selected,
   selectedVersion,
-  loaders,
-  loader,
-  loaderBusy,
+  loaderLabel,
   busy,
   status,
   progress,
   message,
   error,
   canAct,
-  onLoaderChange,
+  onPickVersion,
+  onPickLoader,
   onLaunch,
   onInstall,
   onStop,
-  onBrowseVersions,
 }: {
   playerName: string;
   selected: string | null;
   selectedVersion: VersionSummary | undefined;
-  loaders: LoaderOption[];
-  loader: string;
-  loaderBusy: boolean;
+  /** 当前加载器的显示文案，如「无（原版）」或「Fabric 0.20.1」。 */
+  loaderLabel: string;
   busy: boolean;
   status: GameStatus;
   progress: InstallProgressEvent | null;
   message: string | null;
   error: string | null;
   canAct: boolean;
-  onLoaderChange: (value: string) => void;
+  onPickVersion: () => void;
+  onPickLoader: () => void;
   onLaunch: () => void;
   onInstall: () => void;
   onStop: () => void;
-  onBrowseVersions: () => void;
 }) {
   const running = status.running;
   const initial = playerName.trim().charAt(0) || "?";
@@ -57,7 +55,7 @@ export function LaunchPanel({
       {/* 账户 */}
       <section className="rounded-2xl bg-[var(--color-surface-raised)] p-4 ring-1 ring-inset ring-[var(--color-border-subtle)]">
         <div className="flex items-center gap-3">
-          <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-[#14b8a6] to-[var(--color-accent)] text-[22px] font-semibold text-white shadow-[0_8px_20px_-8px_rgba(20,184,166,0.8)]">
+          <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-[#22a7c4] to-[var(--color-accent)] text-[22px] font-semibold text-white shadow-[0_8px_20px_-8px_var(--color-accent-shadow)]">
             {initial}
           </span>
           <div className="min-w-0">
@@ -70,58 +68,65 @@ export function LaunchPanel({
         </div>
       </section>
 
-      {/* 当前版本 */}
-      <section className="rounded-2xl bg-[var(--color-surface-raised)] p-4 ring-1 ring-inset ring-[var(--color-border-subtle)]">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-[12px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-            当前版本
-          </h2>
-          <button
-            type="button"
-            onClick={onBrowseVersions}
-            className="rounded-md px-1.5 py-0.5 text-[12px] text-[var(--color-accent-text)] hover:bg-[var(--color-accent-soft)]"
-          >
-            选择…
-          </button>
-        </div>
-
-        <div className="truncate font-mono text-[17px] text-[var(--color-text-primary)]">
-          {selected ?? "未选择"}
-        </div>
-        {selectedVersion && (
-          <div className="mt-1 text-[12px] text-[var(--color-text-muted)]">
-            {selectedVersion.type === "release" ? "正式版" : "快照"} ·{" "}
-            {selectedVersion.releaseTime.slice(0, 10)}
+      {/* 当前版本 + 加载器：两行都是「可点击的选择入口」 */}
+      <section className="overflow-hidden rounded-2xl bg-[var(--color-surface-raised)] ring-1 ring-inset ring-[var(--color-border-subtle)]">
+        <button
+          type="button"
+          onClick={onPickVersion}
+          disabled={running}
+          aria-label="更换版本"
+          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--color-surface-hover)] disabled:opacity-60"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="text-[12px] text-[var(--color-text-muted)]">版本</div>
+            <div className="mt-0.5 truncate font-mono text-[16px] text-[var(--color-text-primary)]">
+              {selected ?? "未选择"}
+            </div>
+            {selectedVersion && (
+              <div className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
+                {selectedVersion.type === "release" ? "正式版" : "快照"} ·{" "}
+                {selectedVersion.releaseTime.slice(0, 10)}
+              </div>
+            )}
           </div>
-        )}
+          <span className="shrink-0 text-[12px] text-[var(--color-accent-text)]">更换</span>
+        </button>
 
-        <div className="mt-3">
-          <LoaderSelect
-            loaders={loaders}
-            value={loader}
-            busy={loaderBusy}
-            disabled={!canAct || running || !selected}
-            onChange={onLoaderChange}
-          />
-        </div>
+        <div className="h-px bg-[var(--color-border-subtle)]" />
+
+        <button
+          type="button"
+          onClick={onPickLoader}
+          disabled={running || !selected}
+          aria-label="更换加载器"
+          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--color-surface-hover)] disabled:opacity-60"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="text-[12px] text-[var(--color-text-muted)]">加载器</div>
+            <div className="mt-0.5 truncate text-[14px] text-[var(--color-text-primary)]">
+              {selected ? loaderLabel : "先选择版本"}
+            </div>
+          </div>
+          <span className="shrink-0 text-[12px] text-[var(--color-accent-text)]">更换</span>
+        </button>
       </section>
 
       <div className="mt-auto flex flex-col gap-2">
         {/* 没选版本时不要给一个点不动的死按钮：直接变成「选择版本」的入口。 */}
         <button
           type="button"
-          onClick={selected ? onLaunch : onBrowseVersions}
+          onClick={selected ? onLaunch : onPickVersion}
           disabled={selected ? !canAct || running : false}
-          className="group flex h-16 flex-col items-center justify-center gap-0.5 rounded-xl bg-[var(--color-accent)] text-white shadow-[0_10px_24px_-10px_var(--color-accent-shadow)] transition-all hover:bg-[var(--color-accent-strong)] active:translate-y-px disabled:bg-[var(--color-surface-raised)] disabled:text-[var(--color-text-muted)] disabled:shadow-none disabled:ring-1 disabled:ring-inset disabled:ring-[var(--color-border-subtle)]"
+          className="flex h-16 flex-col items-center justify-center gap-0.5 rounded-xl bg-[var(--color-accent)] text-white shadow-[0_10px_24px_-10px_var(--color-accent-shadow)] transition-all hover:bg-[var(--color-accent-strong)] active:translate-y-px disabled:bg-[var(--color-surface-raised)] disabled:text-[var(--color-text-muted)] disabled:shadow-none disabled:ring-1 disabled:ring-inset disabled:ring-[var(--color-border-subtle)]"
         >
           <span className="text-[16px] font-semibold">
             {selected ? (running ? "游戏运行中" : "启动游戏") : "选择版本"}
           </span>
           <span className="text-[11px] opacity-80">
             {selected
-              ? loader
-                ? `${selected} · Fabric ${loader}`
-                : selected
+              ? loaderLabel === "无（原版）"
+                ? selected
+                : `${selected} · ${loaderLabel}`
               : "还没有选择版本"}
           </span>
         </button>
