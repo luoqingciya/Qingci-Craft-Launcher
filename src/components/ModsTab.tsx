@@ -5,13 +5,16 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
+  checkModUpdates,
   installMod,
   listModCategories,
   listMods,
   removeMod,
   searchMods,
+  updateMod,
   type ModCategory,
   type ModHit,
+  type ModUpdate,
 } from "../api";
 
 /**
@@ -43,6 +46,9 @@ export function ModsTab({
   // 删除是两步的：先点「删除」进入待确认，再点「确认删除」才真的动文件。
   const [confirming, setConfirming] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [updates, setUpdates] = useState<ModUpdate[]>([]);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [updatingFile, setUpdatingFile] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
@@ -96,6 +102,43 @@ export function ModsTab({
       cancelled = true;
     };
   }, []);
+
+  async function checkUpdates() {
+    if (!version) {
+      return;
+    }
+    setCheckingUpdates(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const found = await checkModUpdates(version, modLoader);
+      setUpdates(found);
+      setNotice(found.length === 0 ? "所有模组都是最新版本" : `${found.length} 个模组有新版本`);
+    } catch (cause: unknown) {
+      setError(String(cause));
+    } finally {
+      setCheckingUpdates(false);
+    }
+  }
+
+  async function applyUpdate(update: ModUpdate) {
+    if (!version) {
+      return;
+    }
+    setUpdatingFile(update.fileName);
+    setError(null);
+    setNotice(null);
+    try {
+      await updateMod(update.projectId, update.fileName, version, modLoader);
+      setNotice(`已更新到 ${update.latestVersion}`);
+      setUpdates((current) => current.filter((item) => item.fileName !== update.fileName));
+      await refreshInstalled();
+    } catch (cause: unknown) {
+      setError(String(cause));
+    } finally {
+      setUpdatingFile(null);
+    }
+  }
 
   function toggleCategory(id: string) {
     setSelectedCategories((current) =>
@@ -302,20 +345,48 @@ export function ModsTab({
       </div>
 
       <section className="shrink-0 rounded-xl bg-[var(--color-surface-raised)] p-3.5 ring-1 ring-inset ring-[var(--color-border-subtle)]">
-        <h3 className="text-[12px] uppercase tracking-wider text-[var(--color-text-muted)]">
-          已安装 {installed.length} 个
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-[12px] uppercase tracking-wider text-[var(--color-text-muted)]">
+            已安装 {installed.length} 个
+          </h3>
+          <button
+            type="button"
+            onClick={() => void checkUpdates()}
+            disabled={checkingUpdates || installed.length === 0}
+            className="rounded-md px-2 py-1 text-[11px] text-[var(--color-accent-text)] hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
+          >
+            {checkingUpdates ? "检查中…" : "检查更新"}
+          </button>
+        </div>
         {installed.length === 0 ? (
           <p className="mt-2 text-[12px] text-[var(--color-text-muted)]">
             还没有安装任何模组。
           </p>
         ) : (
           <ul className="mt-2 flex flex-col gap-1">
-            {installed.map((name) => (
+            {installed.map((name) => {
+              const update = updates.find((item) => item.fileName === name);
+              return (
               <li key={name} className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-[var(--color-text-secondary)]">
                   {name}
                 </span>
+
+                {update && (
+                  <>
+                    <span className="shrink-0 text-[11px] text-[var(--color-warning)]">
+                      {update.currentVersion} → {update.latestVersion}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void applyUpdate(update)}
+                      disabled={updatingFile !== null}
+                      className="shrink-0 rounded-md px-2 py-1 text-[11px] text-[var(--color-accent-text)] ring-1 ring-inset ring-[var(--color-accent)]/40 hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
+                    >
+                      {updatingFile === name ? "更新中…" : "更新"}
+                    </button>
+                  </>
+                )}
 
                 {confirming === name ? (
                   <>
@@ -345,7 +416,8 @@ export function ModsTab({
                   </button>
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </section>

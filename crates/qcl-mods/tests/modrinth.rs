@@ -513,3 +513,108 @@ async fn search_puts_selected_categories_in_one_or_group() {
         "实际 URL：{url}"
     );
 }
+
+#[tokio::test]
+async fn check_updates_reports_newer_files_only() {
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+    let mods = dir.path().join("mods");
+    std::fs::create_dir_all(&mods).expect("应能建目录");
+
+    // 两个已装模组：sodium 有新版本，lithium 没有。
+    std::fs::write(mods.join("sodium-old.jar"), b"x").expect("应能写入");
+    std::fs::write(mods.join("lithium.jar"), b"x").expect("应能写入");
+    qcl_mods::manifest::remember(&mods, "sodium-old.jar", "AANobbMI", "0.9.0").expect("应能记下");
+    qcl_mods::manifest::remember(&mods, "lithium.jar", "gvQqBUqZ", "0.26.0").expect("应能记下");
+
+    // sodium 最新文件换了名字（版本号变了）；lithium 还是同名。
+    mount_project(&server, "AANobbMI", "sodium-new.jar", b"new", &[]).await;
+    mount_project(&server, "gvQqBUqZ", "lithium.jar", b"same", &[]).await;
+
+    let updates = qcl_mods::check_updates_from(&downloader(&dir), &server.uri(), "26.3", "fabric")
+        .await
+        .expect("应能检查");
+
+    assert_eq!(updates.len(), 1, "只有文件名变了才算更新：{updates:?}");
+    assert_eq!(updates[0].file_name, "sodium-old.jar");
+    assert_eq!(updates[0].latest_file_name, "sodium-new.jar");
+}
+
+#[tokio::test]
+async fn check_updates_ignores_mods_without_manifest_entry() {
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+    let mods = dir.path().join("mods");
+    std::fs::create_dir_all(&mods).expect("应能建目录");
+
+    // 用户手动丢进来的 jar：没有清单条目，无从得知项目 id。
+    std::fs::write(mods.join("manual.jar"), b"x").expect("应能写入");
+
+    let updates = qcl_mods::check_updates_from(&downloader(&dir), &server.uri(), "26.3", "fabric")
+        .await
+        .expect("应能检查");
+
+    assert!(updates.is_empty());
+}
+
+#[tokio::test]
+async fn check_updates_skips_projects_without_compatible_file() {
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+    let mods = dir.path().join("mods");
+    std::fs::create_dir_all(&mods).expect("应能建目录");
+    std::fs::write(mods.join("gone.jar"), b"x").expect("应能写入");
+    qcl_mods::manifest::remember(&mods, "gone.jar", "dead-project", "1.0").expect("应能记下");
+
+    // 该版本下没有适配文件（空列表）。
+    Mock::given(method("GET"))
+        .and(path("/project/dead-project/version"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("[]"))
+        .mount(&server)
+        .await;
+
+    let updates = qcl_mods::check_updates_from(&downloader(&dir), &server.uri(), "26.3", "fabric")
+        .await
+        .expect("单个项目失败不该让整次检查失败");
+
+    assert!(updates.is_empty());
+}
+
+#[tokio::test]
+#[ignore = "需要访问 api.modrinth.com 并下载真实文件"]
+async fn live_install_then_detect_update() {
+    let dir = TempDir::new().expect("临时目录");
+    let downloader = Arc::new(downloader(&dir));
+
+    // 1) 真装一个 Sodium。
+    let installed =
+        qcl_mods::install_with_dependencies(Arc::clone(&downloader), "AANobbMI", "26.3", "fabric")
+            .await
+            .expect("应能安装");
+    assert!(!installed.is_empty());
+
+    // 2) 刚装完就是最新，不该报更新。
+    let updates = qcl_mods::check_updates(&downloader, "26.3", "fabric")
+        .await
+        .expect("应能检查");
+    assert!(updates.is_empty(), "刚装完不该有更新：{updates:?}");
+
+    // 3) 把清单改成一个旧版本的文件名（模拟「装的是老版本」），应能识别出更新。
+    let mods_dir = dir.path().join("mods");
+    let manifest = qcl_mods::manifest::load(&mods_dir);
+    let (file_name, entry) = manifest.iter().next().expect("应有一条记录");
+    let fake_old = "sodium-fabric-0.0.1-old.jar".to_owned();
+    std::fs::rename(mods_dir.join(file_name), mods_dir.join(&fake_old)).expect("应能改名");
+    qcl_mods::manifest::remember(&mods_dir, &fake_old, &entry.project_id, "0.0.1")
+        .expect("应能记下");
+    qcl_mods::manifest::forget(&mods_dir, file_name).expect("应能忘掉旧名");
+
+    let updates = qcl_mods::check_updates(&downloader, "26.3", "fabric")
+        .await
+        .expect("应能检查");
+
+    assert_eq!(updates.len(), 1, "应识别出一个更新：{updates:?}");
+    assert_eq!(updates[0].file_name, fake_old);
+    assert_eq!(updates[0].current_version, "0.0.1");
+    assert_ne!(updates[0].latest_file_name, fake_old);
+}

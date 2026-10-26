@@ -389,6 +389,8 @@ pub fn run() {
             mods::install_mod,
             mods::list_mods,
             mods::remove_mod,
+            mods::check_mod_updates,
+            mods::update_mod,
             game::launch_game,
             game::stop_game,
             game::game_status
