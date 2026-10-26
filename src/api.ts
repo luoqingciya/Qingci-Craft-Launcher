@@ -191,17 +191,40 @@ export interface ModHit {
   zhName: string | null;
 }
 
+/** 一个可筛选的内容分类。 */
+export interface ModCategory {
+  /** Modrinth 的分类 id，如 `optimization`。 */
+  id: string;
+  /** 中文标签。 */
+  label: string;
+}
+
+/** 搜索结果：附带实际使用的查询词。 */
+export interface SearchOutcome {
+  /** 实际发给 Modrinth 的查询词（中文会被换成英文关键词）。 */
+  query: string;
+  /** 命中的项目。 */
+  hits: ModHit[];
+}
+
 /**
  * 搜索模组。
  *
  * `loader` 传 `fabric` 这类分类名；空串表示不按加载器筛选。
+ * `categories` 是内容分类，多个之间是「或」。
  */
 export function searchMods(
   query: string,
   version: string,
   loader: string,
-): Promise<ModHit[]> {
-  return invoke<ModHit[]>("search_mods", { query, version, loader });
+  categories: string[],
+): Promise<SearchOutcome> {
+  return invoke<SearchOutcome>("search_mods", { query, version, loader, categories });
+}
+
+/** 列出可用于筛选的模组分类。 */
+export function listModCategories(): Promise<ModCategory[]> {
+  return invoke<ModCategory[]>("list_mod_categories");
 }
 
 /** 安装模组及其必需依赖，返回本次实际落地的路径列表。 */

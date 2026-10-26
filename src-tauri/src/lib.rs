@@ -385,6 +385,7 @@ pub fn run() {
             install::install_game_version,
             install::list_loaders,
             mods::search_mods,
+            mods::list_mod_categories,
             mods::install_mod,
             mods::list_mods,
             mods::remove_mod,

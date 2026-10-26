@@ -35,12 +35,14 @@ const searchMods = vi.fn();
 const installMod = vi.fn();
 const listMods = vi.fn();
 const removeMod = vi.fn();
+const listModCategories = vi.fn();
 
 vi.mock("../api", () => ({
   searchMods: (...args: unknown[]) => searchMods(...args),
   installMod: (...args: unknown[]) => installMod(...args),
   listMods: () => listMods(),
   removeMod: (...args: unknown[]) => removeMod(...args),
+  listModCategories: () => listModCategories(),
 }));
 
 beforeEach(() => {
@@ -48,6 +50,8 @@ beforeEach(() => {
   installMod.mockReset();
   listMods.mockReset();
   removeMod.mockReset();
+  listModCategories.mockReset();
+  listModCategories.mockResolvedValue([]);
   listMods.mockResolvedValue([]);
 });
 
@@ -66,12 +70,12 @@ describe("ModsTab", () => {
   });
 
   it("搜索时带上游戏版本与 fabric 分类", async () => {
-    searchMods.mockResolvedValue(HITS);
+    searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
     render(<ModsTab version="26.3" loader="0.20.1" />);
 
     await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
 
-    expect(searchMods).toHaveBeenCalledWith("sodium", "26.3", "fabric");
+    expect(searchMods).toHaveBeenCalledWith("sodium", "26.3", "fabric", []);
     expect(await screen.findByText("钠")).toBeInTheDocument();
     // 英文标题作为副标题仍然显示，方便对照。
     expect(screen.getByText("Sodium")).toBeInTheDocument();
@@ -79,7 +83,7 @@ describe("ModsTab", () => {
   });
 
   it("安装后提示落地路径并刷新已装列表", async () => {
-    searchMods.mockResolvedValue(HITS);
+    searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
     installMod.mockResolvedValue(["mods/sodium.jar"]);
     listMods.mockResolvedValueOnce([]).mockResolvedValueOnce(["sodium.jar"]);
 
@@ -103,7 +107,7 @@ describe("ModsTab", () => {
   });
 
   it("没有结果时给出提示", async () => {
-    searchMods.mockResolvedValue([]);
+    searchMods.mockResolvedValue({ query: "zzz", hits: [] });
     render(<ModsTab version="26.3" loader="0.20.1" />);
 
     await userEvent.type(screen.getByRole("textbox"), "zzz{Enter}");
@@ -170,7 +174,7 @@ describe("卸载", () => {
 
 describe("依赖", () => {
   it("装了多个文件时提示带依赖，而不是只报一个路径", async () => {
-    searchMods.mockResolvedValue(HITS);
+    searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
     // 主模组 + Fabric API 两个文件。
     installMod.mockResolvedValue(["mods/modmenu.jar", "mods/fabric-api.jar"]);
 
@@ -185,7 +189,7 @@ describe("依赖", () => {
 
 describe("中文译名", () => {
   it("有译名时中文优先，英文作为副标题", async () => {
-    searchMods.mockResolvedValue(HITS);
+    searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
     render(<ModsTab version="26.3" loader="0.20.1" />);
 
     await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
@@ -196,7 +200,7 @@ describe("中文译名", () => {
   });
 
   it("没有译名时只显示英文，不显示空的中文名", async () => {
-    searchMods.mockResolvedValue(HITS);
+    searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
     render(<ModsTab version="26.3" loader="0.20.1" />);
 
     await userEvent.type(screen.getByRole("textbox"), "lithium{Enter}");
@@ -205,12 +209,89 @@ describe("中文译名", () => {
   });
 
   it("提供在 Modrinth 查看原页的入口", async () => {
-    searchMods.mockResolvedValue(HITS);
+    searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
     render(<ModsTab version="26.3" loader="0.20.1" />);
 
     await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
 
     // 描述保持英文，所以必须有一个能看原页的入口。
     expect(await screen.findAllByRole("button", { name: "在 Modrinth 查看" })).toHaveLength(2);
+  });
+});
+
+describe("中文搜索与分类筛选", () => {
+  it("中文输入被换成英文时给出提示", async () => {
+    searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+
+    await userEvent.type(screen.getByRole("textbox"), "钠{Enter}");
+
+    // 用户搜的是中文，实际用的是英文关键词——必须说清楚，否则会以为搜错了。
+    expect(await screen.findByText(/已按/)).toBeInTheDocument();
+    expect(screen.getByText("sodium")).toBeInTheDocument();
+  });
+
+  it("输入本身就是英文时不做多余提示", async () => {
+    searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+
+    await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
+
+    expect(await screen.findByText("钠")).toBeInTheDocument();
+    expect(screen.queryByText(/已按/)).not.toBeInTheDocument();
+  });
+
+  it("分类按钮点选后作为筛选条件传给搜索", async () => {
+    listModCategories.mockResolvedValue([
+      { id: "optimization", label: "优化" },
+      { id: "technology", label: "科技" },
+    ]);
+    searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
+
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+
+    const chip = await screen.findByRole("button", { name: "优化" });
+    await userEvent.click(chip);
+    expect(chip).toHaveAttribute("aria-pressed", "true");
+
+    await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
+
+    expect(searchMods).toHaveBeenCalledWith("sodium", "26.3", "fabric", ["optimization"]);
+  });
+
+  it("再点一次取消该分类", async () => {
+    listModCategories.mockResolvedValue([{ id: "optimization", label: "优化" }]);
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+
+    const chip = await screen.findByRole("button", { name: "优化" });
+    await userEvent.click(chip);
+    await userEvent.click(chip);
+
+    expect(chip).toHaveAttribute("aria-pressed", "false");
+  });
+});
+
+describe("纯分类浏览", () => {
+  it("只选分类、不输关键词也能搜索", async () => {
+    listModCategories.mockResolvedValue([{ id: "optimization", label: "优化" }]);
+    searchMods.mockResolvedValue({ query: "", hits: HITS });
+
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+
+    const button = screen.getByRole("button", { name: "搜索" });
+    expect(button).toBeDisabled();
+
+    await userEvent.click(await screen.findByRole("button", { name: "优化" }));
+    expect(button).toBeEnabled();
+
+    await userEvent.click(button);
+    expect(searchMods).toHaveBeenCalledWith("", "26.3", "fabric", ["optimization"]);
+  });
+
+  it("既没关键词也没分类时不发请求", async () => {
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+
+    expect(screen.getByRole("button", { name: "搜索" })).toBeDisabled();
+    expect(searchMods).not.toHaveBeenCalled();
   });
 });

@@ -4,7 +4,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { installMod, listMods, removeMod, searchMods, type ModHit } from "../api";
+import {
+  installMod,
+  listModCategories,
+  listMods,
+  removeMod,
+  searchMods,
+  type ModCategory,
+  type ModHit,
+} from "../api";
 
 /**
  * 模组页：从 Modrinth 搜索、安装、卸载。
@@ -24,6 +32,10 @@ export function ModsTab({
   loader: string;
 }) {
   const [query, setQuery] = useState("");
+  const [categories, setCategories] = useState<ModCategory[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  // 中文输入会被换成英文关键词，把实际用的词显示出来，避免「我明明搜的是钠」的困惑。
+  const [resolvedQuery, setResolvedQuery] = useState<string | null>(null);
   const [results, setResults] = useState<ModHit[]>([]);
   const [installed, setInstalled] = useState<string[]>([]);
   const [searching, setSearching] = useState(false);
@@ -50,6 +62,25 @@ export function ModsTab({
   // effect 里同步 setState 会多渲染一轮（lint 的 set-state-in-effect 也会拦）。
   useEffect(() => {
     let cancelled = false;
+    listModCategories()
+      .then((list) => {
+        if (!cancelled) {
+          setCategories(list);
+        }
+      })
+      .catch(() => {
+        // 拉不到分类就不显示筛选条，不影响搜索。
+        if (!cancelled) {
+          setCategories([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
     listMods()
       .then((names) => {
         if (!cancelled) {
@@ -66,15 +97,29 @@ export function ModsTab({
     };
   }, []);
 
+  function toggleCategory(id: string) {
+    setSelectedCategories((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+    );
+  }
+
   async function submit() {
-    if (!version || !query.trim()) {
+    // 只选分类、不输关键词也是有效搜索（按类别浏览）。
+    if (!version || (!query.trim() && selectedCategories.length === 0)) {
       return;
     }
     setSearching(true);
     setError(null);
     setNotice(null);
     try {
-      setResults(await searchMods(query.trim(), version, modLoader));
+      const outcome = await searchMods(
+        query.trim(),
+        version,
+        modLoader,
+        selectedCategories
+      );
+      setResults(outcome.hits);
+      setResolvedQuery(outcome.query === query.trim() ? null : outcome.query);
       setSearched(true);
     } catch (cause: unknown) {
       setError(String(cause));
@@ -154,18 +199,47 @@ export function ModsTab({
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索模组，如 sodium / lithium"
+          placeholder="搜索模组，如 sodium / 钠（也可只点下面的分类）"
           spellCheck={false}
           className="min-w-0 flex-1 rounded-xl bg-[var(--color-surface-raised)] px-3.5 py-2.5 text-[13px] ring-1 ring-inset ring-[var(--color-border-subtle)] outline-none placeholder:text-[var(--color-text-muted)] focus:ring-[var(--color-accent)]"
         />
         <button
           type="submit"
-          disabled={searching || !query.trim()}
+          disabled={searching || (!query.trim() && selectedCategories.length === 0)}
           className="rounded-xl bg-[var(--color-accent)] px-5 text-[13px] font-medium text-white transition-colors hover:bg-[var(--color-accent-strong)] disabled:opacity-40"
         >
           {searching ? "搜索中…" : "搜索"}
         </button>
       </form>
+
+      {categories.length > 0 && (
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="按分类筛选">
+          {categories.map((category) => {
+            const active = selectedCategories.includes(category.id);
+            return (
+              <button
+                key={category.id}
+                type="button"
+                aria-pressed={active}
+                onClick={() => toggleCategory(category.id)}
+                className={`rounded-full px-3 py-1 text-[12px] transition-colors ${
+                  active
+                    ? "bg-[var(--color-accent-soft)] text-[var(--color-accent-text)] ring-1 ring-inset ring-[var(--color-accent)]"
+                    : "text-[var(--color-text-secondary)] ring-1 ring-inset ring-[var(--color-border-subtle)] hover:bg-[var(--color-surface-hover)]"
+                }`}
+              >
+                {category.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {resolvedQuery && (
+        <p className="text-[11px] text-[var(--color-text-muted)]">
+          已按 <span className="font-mono">{resolvedQuery}</span> 搜索（Modrinth 只索引英文）
+        </p>
+      )}
 
       {notice && <p className="text-[12px] text-[var(--color-success)]">{notice}</p>}
       {error && <p className="text-[12px] text-[var(--color-danger)]">{error}</p>}

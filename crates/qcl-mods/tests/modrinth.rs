@@ -479,3 +479,37 @@ async fn resolve_file_ignores_optional_dependencies() {
 
     assert_eq!(file.dependencies, vec!["fabric-api".to_owned()]);
 }
+
+#[tokio::test]
+async fn search_puts_selected_categories_in_one_or_group() {
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/search"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(SEARCH_BODY))
+        .mount(&server)
+        .await;
+
+    let categories = vec!["optimization".to_owned(), "technology".to_owned()];
+    qcl_mods::search_with_filters_from(
+        &downloader(&dir),
+        &server.uri(),
+        "x",
+        "26.3",
+        "fabric",
+        &categories,
+        10,
+    )
+    .await
+    .expect("应能搜索");
+
+    let requests = server.received_requests().await.expect("应能读到请求");
+    let url = requests[0].url.as_str().to_string();
+
+    // 多个分类必须在同一个 facets 组里（组内是「或」），否则会变成取交集。
+    assert!(
+        url.contains("%5B%22categories:optimization%22,%22categories:technology%22%5D"),
+        "实际 URL：{url}"
+    );
+}

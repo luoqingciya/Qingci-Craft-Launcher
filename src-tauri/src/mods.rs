@@ -49,28 +49,102 @@ impl From<ModSummary> for ModHit {
     }
 }
 
+/// 搜索结果：附带实际使用的查询词。
+///
+/// 用户输入中文（如「钠」）时会被换成英文关键词（`sodium`）再去请求，
+/// 把实际用的词回传，界面才能如实说明「已按 sodium 搜索」。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchOutcome {
+    /// 实际发给 Modrinth 的查询词。
+    pub query: String,
+    /// 命中的项目。
+    pub hits: Vec<ModHit>,
+}
+
 /// 搜索模组。
 ///
-/// `loader` 传 `fabric` 这类分类名；空串表示不按加载器筛选（原版也能搜到通用模组）。
+/// `loader` 传 `fabric` 这类分类名；空串表示不按加载器筛选。
+/// `categories` 是内容分类（如 `optimization`），多个之间是「或」。
 #[tauri::command]
 pub async fn search_mods(
     state: tauri::State<'_, AppState>,
     query: String,
     version: String,
     loader: String,
-) -> Result<Vec<ModHit>, String> {
+    categories: Vec<String>,
+) -> Result<SearchOutcome, String> {
     let (downloader, _game_dir) = state.context()?;
 
-    let trimmed = query.trim();
-    if trimmed.is_empty() {
-        return Ok(Vec::new());
+    // 中文输入先换成英文关键词：Modrinth 的索引只有英文。
+    let resolved = qcl_mods::zh_names::resolve_query(&query);
+
+    // 关键词和分类都为空才真的没得搜；只选分类是「按类别浏览」，必须放行
+    // ——实测空查询 + 分类筛选能返回几百条结果，这是最不需要英文能力的入口。
+    if resolved.is_empty() && categories.is_empty() {
+        return Ok(SearchOutcome {
+            query: resolved,
+            hits: Vec::new(),
+        });
     }
 
-    let results = qcl_mods::search(&downloader, trimmed, &version, &loader, 20)
-        .await
-        .map_err(|error| error.to_string())?;
+    let results =
+        qcl_mods::search_with_filters(&downloader, &resolved, &version, &loader, &categories, 20)
+            .await
+            .map_err(|error| error.to_string())?;
 
-    Ok(results.into_iter().map(ModHit::from).collect())
+    Ok(SearchOutcome {
+        query: resolved,
+        hits: results.into_iter().map(ModHit::from).collect(),
+    })
+}
+
+/// 一个可筛选的内容分类。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryOption {
+    /// Modrinth 的分类 id，如 `optimization`。
+    pub id: String,
+    /// 中文标签。
+    pub label: String,
+}
+
+/// 列出可用于筛选的模组分类。
+///
+/// 分类是写死的 19 个（Modrinth 的固定标签），中文标签来自本地译名表；
+/// 因此不需要联网。
+#[tauri::command]
+pub fn list_mod_categories() -> Vec<CategoryOption> {
+    const IDS: [&str; 19] = [
+        "optimization",
+        "technology",
+        "magic",
+        "adventure",
+        "decoration",
+        "worldgen",
+        "mobs",
+        "equipment",
+        "storage",
+        "transportation",
+        "food",
+        "management",
+        "utility",
+        "game-mechanics",
+        "economy",
+        "minigame",
+        "social",
+        "library",
+        "cursed",
+    ];
+
+    IDS.iter()
+        .map(|id| CategoryOption {
+            id: (*id).to_owned(),
+            label: qcl_mods::zh_names::category_label(id)
+                .unwrap_or(id)
+                .to_owned(),
+        })
+        .collect()
 }
 
 /// 安装模组及其必需依赖，返回本次实际落地的路径列表。

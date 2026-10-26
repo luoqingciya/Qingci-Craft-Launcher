@@ -26,6 +26,12 @@ use std::sync::OnceLock;
 /// 译名库原文。编译期嵌入，运行时零 IO。
 const RAW: &str = include_str!("../../../assets/data/mod-zh.json");
 
+/// 中文搜索别名 → 英文关键词。
+const ALIASES_RAW: &str = include_str!("../../../assets/data/mod-search-aliases.json");
+
+/// Modrinth 分类 id → 中文标签。
+const CATEGORIES_RAW: &str = include_str!("../../../assets/data/mod-categories-zh.json");
+
 fn table() -> &'static HashMap<String, String> {
     static TABLE: OnceLock<HashMap<String, String>> = OnceLock::new();
     TABLE.get_or_init(|| {
@@ -42,6 +48,42 @@ fn table() -> &'static HashMap<String, String> {
 #[must_use]
 pub fn zh_name(slug: &str) -> Option<&'static str> {
     table().get(slug).map(String::as_str)
+}
+
+fn parse(raw: &'static str, name: &str) -> HashMap<String, String> {
+    serde_json::from_str(raw).unwrap_or_else(|error| {
+        eprintln!("{name} 解析失败：{error}");
+        HashMap::new()
+    })
+}
+
+fn aliases() -> &'static HashMap<String, String> {
+    static TABLE: OnceLock<HashMap<String, String>> = OnceLock::new();
+    TABLE.get_or_init(|| parse(ALIASES_RAW, "中文搜索别名表"))
+}
+
+fn categories() -> &'static HashMap<String, String> {
+    static TABLE: OnceLock<HashMap<String, String>> = OnceLock::new();
+    TABLE.get_or_init(|| parse(CATEGORIES_RAW, "分类译名表"))
+}
+
+/// 把中文搜索词换成英文关键词。
+///
+/// Modrinth 的索引只有英文（「钠」返回 0 条），所以输入中文时先查这张表。
+/// 查不到就原样返回——用户可能本来就在搜英文。
+#[must_use]
+pub fn resolve_query(input: &str) -> String {
+    let trimmed = input.trim();
+    aliases()
+        .get(trimmed)
+        .cloned()
+        .unwrap_or_else(|| trimmed.to_owned())
+}
+
+/// 取分类的中文标签。没有译名时返回 `None`，界面退回原始 id。
+#[must_use]
+pub fn category_label(id: &str) -> Option<&'static str> {
+    categories().get(id).map(String::as_str)
 }
 
 /// 译名库的条目数，用于自检与日志。
@@ -105,5 +147,55 @@ mod tests {
         }
 
         assert_eq!(seen.len(), entry_count(), "行数应与条目数一致");
+    }
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::{ALIASES_RAW, CATEGORIES_RAW, category_label, resolve_query};
+
+    #[test]
+    fn chinese_alias_resolves_to_english() {
+        // Modrinth 只认英文关键词，中文输入必须先过这层。
+        assert_eq!(resolve_query("钠"), "sodium");
+        assert_eq!(resolve_query("  锂  "), "lithium");
+        assert_eq!(resolve_query("光影"), "shaders");
+    }
+
+    #[test]
+    fn english_input_passes_through() {
+        // 用户本来就在搜英文时不能被改写。
+        assert_eq!(resolve_query("sodium"), "sodium");
+        assert_eq!(resolve_query("create"), "create");
+        assert_eq!(resolve_query("   "), "");
+    }
+
+    #[test]
+    fn unknown_chinese_passes_through_unchanged() {
+        // 表里没有就原样搜——总比悄悄换成别的词好。
+        assert_eq!(resolve_query("某个没收录的模组"), "某个没收录的模组");
+    }
+
+    #[test]
+    fn category_labels_are_translated() {
+        assert_eq!(category_label("optimization"), Some("优化"));
+        assert_eq!(category_label("technology"), Some("科技"));
+        assert_eq!(category_label("unknown-category"), None);
+    }
+
+    #[test]
+    fn tables_are_valid_and_non_empty() {
+        let aliases: std::collections::HashMap<String, String> =
+            serde_json::from_str(ALIASES_RAW).expect("别名表必须是合法 JSON");
+        let categories: std::collections::HashMap<String, String> =
+            serde_json::from_str(CATEGORIES_RAW).expect("分类表必须是合法 JSON");
+
+        assert!(!aliases.is_empty());
+        assert_eq!(categories.len(), 19, "Modrinth 的模组分类有 19 个");
+
+        for (key, value) in aliases.iter().chain(categories.iter()) {
+            assert!(!key.trim().is_empty(), "键不能为空");
+            assert!(!value.trim().is_empty(), "{key} 的值不能为空");
+        }
     }
 }
