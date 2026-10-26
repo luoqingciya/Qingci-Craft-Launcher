@@ -158,6 +158,9 @@ export function LauncherView({
             <LaunchPanel
               playerName={playerName}
               selected={selected}
+              selectedVersion={
+                ready ? versions.versions.find((item) => item.id === selected) : undefined
+              }
               loaders={loaders}
               loader={loader}
               loaderBusy={loaderBusy}
@@ -210,7 +213,10 @@ export function LauncherView({
                 versions={versions.versions}
                 selected={selected}
                 disabled={busy || running}
-                onSelect={onSelectVersion}
+                onSelect={(id) => {
+                  onSelectVersion(id);
+                  setTab("home");
+                }}
               />
             )}
           </aside>
@@ -220,7 +226,6 @@ export function LauncherView({
               version={ready ? versions.versions.find((item) => item.id === selected) : undefined}
               selected={selected}
               loader={loader}
-              onGoHome={() => setTab("home")}
             />
           </div>
         </div>
@@ -264,12 +269,10 @@ function VersionDetail({
   version,
   selected,
   loader,
-  onGoHome,
 }: {
   version: VersionSummary | undefined;
   selected: string | null;
   loader: string;
-  onGoHome: () => void;
 }) {
   if (!selected) {
     return (
@@ -299,16 +302,8 @@ function VersionDetail({
       </div>
 
       <p className="mt-6 text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
-        安装与启动都在「启动」页进行。切换版本后回到启动页即可。
+        点击左侧任意版本即可切换，并自动回到「启动」页。
       </p>
-
-      <button
-        type="button"
-        onClick={onGoHome}
-        className="mt-4 h-10 rounded-xl bg-[var(--color-accent)] px-5 text-[13px] font-medium text-white transition-colors hover:bg-[var(--color-accent-strong)]"
-      >
-        去启动页
-      </button>
     </div>
   );
 }

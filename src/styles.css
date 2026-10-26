@@ -15,12 +15,12 @@
   --color-text-primary: #e8eef4;
   --color-text-secondary: #94a3b3;
   --color-text-muted: #66788a;
-  /* 强调色取自应用图标：青绿环 + 深藏青底。 */
-  --color-accent: #0f766e;
-  --color-accent-strong: #115e59;
-  --color-accent-soft: #10312f;
+  /* 强调色取自应用图标的青绿环，整体偏青蓝而不是纯绿。 */
+  --color-accent: #0e7490;
+  --color-accent-strong: #155e75;
+  --color-accent-soft: #0c2b36;
   /* 深色背景上的强调色文字必须更亮，否则对比度不够。 */
-  --color-accent-text: #5eead4;
+  --color-accent-text: #67e8f9;
   --color-success: #34d399;
   --color-danger: #f87171;
   --color-warning: #fbbf24;
@@ -48,11 +48,12 @@
   --color-text-muted: #8194a0;
   --color-accent: #0f766e;
   --color-accent-strong: #115e59;
-  --color-accent-soft: #e0f5f2;
-  --color-accent-text: #0b6b63;
+  --color-accent-soft: #e0f2fe;
+  --color-accent-text: #0e7490;
   --color-success: #0d9488;
   --color-danger: #cf3b3b;
   --color-warning: #b45309;
+  --color-accent-shadow: rgba(14, 116, 144, 0.35);
   --color-log-surface: #f2f6f6;
   --color-scrollbar: #c6d3d4;
   --color-scrollbar-hover: #a9bbbd;
