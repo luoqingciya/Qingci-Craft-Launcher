@@ -185,10 +185,14 @@ jobs:
   # 合并各平台产物、生成清单、推送 COS、建 Release。
   # 单独成 job 而不是塞进 build：latest.json 要同时包含两个平台的签名，
   # 只有拿到全部产物之后才写得出来。
+  #
+  # 用 windows-latest 而不是 ubuntu：到 COS 广州是国际链路，COS 会在带宽不达标时
+  # 直接回 400 UserNetworkTooSlow。目前唯一一次成功的大文件上传是在 Windows runner
+  # 上发生的，先沿用它；脚本里另有退避重试兜底。
   publish:
     name: 发布
     needs: [prepare, build]
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:

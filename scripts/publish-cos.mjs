@@ -108,34 +108,101 @@ if (/\s/.test(secretId) || /\s/.test(secretKey)) {
   throw new Error("TENCENT_SECRET_ID / TENCENT_SECRET_KEY 中间含有空白字符，请重新设置 secret");
 }
 
-const cos = new COS({ SecretId: secretId, SecretKey: secretKey });
+// 从 GitHub 的 runner 到 COS 广州是国际链路，速度经常抖。COS 会在带宽不达标时
+// 直接回 400 `UserNetworkTooSlow`——它不是「你配置错了」，而是「这次传输太慢，
+// 我不收」。同一份文件换个时间重传往往就过，所以这类错误必须重试。
+const RETRYABLE_CODES = new Set([
+  "UserNetworkTooSlow",
+  "RequestTimeout",
+  "InternalError",
+  "ServiceUnavailable",
+  "SlowDown",
+]);
 
-for (const object of objects) {
-  const name = basename(object.key);
-  // 逐个串行上传：并发在 CI 上收益不大，而失败时定位会难很多。
-  try {
-    const result = await cos.putObject({
-      Bucket: bucket,
-      Region: region,
-      Key: object.key,
-      Body: createReadStream(object.local),
-      ContentLength: object.size,
-      ContentType: contentType(name),
-      CacheControl: cacheControl(name),
-      // 桶默认可能是私有读；更新清单要能被任何人取到，所以显式给公共读。
-      ACL: "public-read",
-    });
-    console.log(`✓ ${object.key} (ETag ${result.ETag})`);
-  } catch (error) {
-    // SDK 的错误对象很大（含整个响应头），直接抛出去会把 CI 日志刷满，
-    // 而真正有用的只有 code / message / requestId。
-    const parts = [
+// 网络层错误也有 code（ENOTFOUND / ECONNRESET 都是），所以不能靠「有没有 code」判断。
+// 只挑真正可能是瞬时的那些：ENOTFOUND 这种多半是区域写错，重试只是浪费时间。
+const RETRYABLE_NETWORK = new Set([
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "ECONNABORTED",
+  "EPIPE",
+  "EAI_AGAIN",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+]);
+
+const MAX_ATTEMPTS = 4;
+
+// 默认超时对几十 MB 的文件不够：慢链路下客户端会先自己掐断，拿到的错误还看不出原因。
+const cos = new COS({
+  SecretId: secretId,
+  SecretKey: secretKey,
+  Timeout: 10 * 60 * 1000,
+});
+
+function isRetryable(error) {
+  if (!error) {
+    return false;
+  }
+  if (RETRYABLE_CODES.has(error.code) || RETRYABLE_NETWORK.has(error.code)) {
+    return true;
+  }
+  if (/socket hang up/i.test(error.message ?? "")) {
+    return true;
+  }
+  return typeof error.statusCode === "number" && error.statusCode >= 500;
+}
+
+function describe(error) {
+  // SDK 的错误对象很大（含整个响应头），直接抛出去会把 CI 日志刷满，
+  // 而真正有用的只有 code / message / requestId。
+  return (
+    [
       error?.statusCode && `HTTP ${error.statusCode}`,
       error?.code,
       error?.message,
       error?.RequestId && `requestId=${error.RequestId}`,
-    ].filter(Boolean);
-    console.error(`✗ ${object.key} 上传失败：${parts.join(" / ") || String(error)}`);
+    ]
+      .filter(Boolean)
+      .join(" / ") || String(error)
+  );
+}
+
+for (const object of objects) {
+  const name = basename(object.key);
+  // 逐个串行上传：并发在 CI 上收益不大，而失败时定位会难很多。
+  let lastError;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const result = await cos.putObject({
+        Bucket: bucket,
+        Region: region,
+        Key: object.key,
+        Body: createReadStream(object.local),
+        ContentLength: object.size,
+        ContentType: contentType(name),
+        CacheControl: cacheControl(name),
+        // 桶默认可能是私有读；更新清单要能被任何人取到，所以显式给公共读。
+        ACL: "public-read",
+      });
+      console.log(`✓ ${object.key} (ETag ${result.ETag})`);
+      lastError = undefined;
+      break;
+    } catch (error) {
+      lastError = error;
+      if (!isRetryable(error) || attempt === MAX_ATTEMPTS) {
+        break;
+      }
+      const waitMs = 5000 * 3 ** (attempt - 1);
+      console.log(
+        `… ${object.key} 第 ${attempt} 次失败（${error?.code ?? error?.message}），${waitMs / 1000}s 后重试`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+  }
+
+  if (lastError) {
+    console.error(`✗ ${object.key} 上传失败：${describe(lastError)}`);
     process.exit(1);
   }
 }
