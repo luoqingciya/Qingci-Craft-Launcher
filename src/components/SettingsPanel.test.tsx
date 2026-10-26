@@ -19,6 +19,8 @@ function settings(overrides: Partial<SettingsView> = {}): SettingsView {
     memoryMb: null,
     javaPath: null,
     memoryRange: [512, 65536],
+  selectedVersion: null,
+  loaderVersion: null,
     ...overrides,
   };
 }

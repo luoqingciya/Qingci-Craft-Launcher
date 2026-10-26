@@ -16,6 +16,7 @@ import {
   listLoaders,
   listJava,
   listVersions,
+  rememberSelection,
   saveSettings,
   stopGame,
   type GameExitEvent,
@@ -58,6 +59,50 @@ export default function App() {
     setLogs((previous) => appendLog(previous, line));
   }, []);
 
+  // 否则换了版本后还会用上一个版本的加载器 id 去启动。
+  //
+  // 刻意不用 useEffect：重置状态与发起请求都是由「用户点了某个版本」这一个事件引起的，
+  // 放进 effect 会多一轮渲染，而且 effect 里同步 setState 本身就是反模式（lint 也会拦）。
+  const loadLoaders = useCallback(async (id: string) => {
+    const request = ++loaderRequest.current;
+    setLoaderBusy(true);
+
+    try {
+      const options = await listLoaders(id);
+      if (loaderRequest.current === request) {
+        setLoaders(options);
+      }
+    } catch {
+      // 拉不到加载器列表不影响原版安装，界面退化成只有「无（原版）」。
+      if (loaderRequest.current === request) {
+        setLoaders([]);
+      }
+    } finally {
+      if (loaderRequest.current === request) {
+        setLoaderBusy(false);
+      }
+    }
+  }, []);
+
+  const selectVersion = useCallback(
+    async (id: string) => {
+      setSelected(id);
+      setLoader("");
+      // 换版本意味着加载器也要重选，所以这里连同加载器一起清掉。
+      void rememberSelection(id, null);
+      await loadLoaders(id);
+    },
+    [loadLoaders]
+  );
+
+  const changeLoader = useCallback(
+    (value: string) => {
+      setLoader(value);
+      void rememberSelection(selected, value === "" ? null : value);
+    },
+    [selected]
+  );
+
   // 初始数据：版本清单、设置、运行状态。
   useEffect(() => {
     let cancelled = false;
@@ -76,8 +121,19 @@ export default function App() {
 
     getSettings()
       .then((view) => {
-        if (!cancelled) {
-          setSettings(view);
+        if (cancelled) {
+          return;
+        }
+        setSettings(view);
+
+        // 恢复上次选择。
+        //
+        // 刻意不走 selectVersion：它会把选择持久化成「版本 + 无加载器」，
+        // 等于把刚读出来的加载器又抹掉。这里只设状态并拉一次加载器列表。
+        if (view.selectedVersion) {
+          setSelected(view.selectedVersion);
+          setLoader(view.loaderVersion ?? "");
+          void loadLoaders(view.selectedVersion);
         }
       })
       .catch((cause: unknown) => {
@@ -109,7 +165,8 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // loadLoaders 用 useCallback([]) 声明，引用稳定，不会让 effect 重跑。
+  }, [loadLoaders]);
 
   // 事件订阅。监听是异步注册的，因此要先判断是否已卸载再决定保留还是立刻注销。
   useEffect(() => {
@@ -179,33 +236,6 @@ export default function App() {
   }, []);
 
   // 选择版本时重新拉取加载器列表，并清掉「可启动版本」——
-  // 否则换了版本后还会用上一个版本的加载器 id 去启动。
-  //
-  // 刻意不用 useEffect：重置状态与发起请求都是由「用户点了某个版本」这一个事件引起的，
-  // 放进 effect 会多一轮渲染，而且 effect 里同步 setState 本身就是反模式（lint 也会拦）。
-  const selectVersion = useCallback(async (id: string) => {
-    const request = ++loaderRequest.current;
-    setSelected(id);
-    setLoader("");
-    setLoaderBusy(true);
-
-    try {
-      const options = await listLoaders(id);
-      if (loaderRequest.current === request) {
-        setLoaders(options);
-      }
-    } catch {
-      // 拉不到加载器列表不影响原版安装，界面退化成只有「无（原版）」。
-      if (loaderRequest.current === request) {
-        setLoaders([]);
-      }
-    } finally {
-      if (loaderRequest.current === request) {
-        setLoaderBusy(false);
-      }
-    }
-  }, []);
-
   const install = useCallback(async () => {
     if (!selected) {
       return;
@@ -274,7 +304,7 @@ export default function App() {
       message={message}
       error={error}
       onSelectVersion={(id) => void selectVersion(id)}
-      onLoaderChange={setLoader}
+      onLoaderChange={changeLoader}
       onInstall={() => void install()}
       onLaunch={() => void launch()}
       onStop={() => void stop()}

@@ -93,6 +93,10 @@ struct SettingsView {
     java_path: Option<String>,
     /// 允许的内存范围，前端据此校验输入。
     memory_range: [u32; 2],
+    /// 上次选择的版本。
+    selected_version: Option<String>,
+    /// 上次选择的加载器版本。
+    loader_version: Option<String>,
 }
 
 /// 前端提交的设置。
@@ -185,6 +189,8 @@ impl AppState {
                 .as_ref()
                 .map(|path| path.display().to_string()),
             memory_range: [settings::MIN_MEMORY_MB, settings::MAX_MEMORY_MB],
+            selected_version: inner.settings.selected_version.clone(),
+            loader_version: inner.settings.loader_version.clone(),
         }
     }
 }
@@ -245,11 +251,15 @@ async fn save_settings(
             .map_err(|error| format!("{} 不可写：{error}", dir.display()))?;
     }
 
+    // 保留已有选择：保存设置是表单提交，不该顺手把「上次玩的版本」清掉。
+    let previous = state.settings_snapshot()?;
     let saved = settings::Settings {
         game_dir: requested_dir,
         player_name: normalize(input.player_name),
         memory_mb: input.memory_mb,
         java_path: normalize(input.java_path).map(PathBuf::from),
+        selected_version: previous.selected_version,
+        loader_version: previous.loader_version,
     };
 
     // 校验放在写盘之前：任何一项不合法都不该留下半套配置。
@@ -273,6 +283,28 @@ async fn save_settings(
     inner.downloader = Arc::new(downloader);
 
     Ok(state.view(&inner))
+}
+
+/// 记住当前选择（版本 + 加载器）。
+///
+/// 与 `save_settings` 分开：切换版本是高频操作，不该连带把设置表单里
+/// 还没提交的改动写进去；反过来保存设置也不该清掉选择。
+#[tauri::command]
+fn remember_selection(
+    state: tauri::State<'_, AppState>,
+    version: Option<String>,
+    loader: Option<String>,
+) -> Result<(), String> {
+    let mut inner = state
+        .inner
+        .write()
+        .map_err(|_| "内部状态锁已中毒".to_owned())?;
+
+    let saved = inner.settings.with_selection(version, loader);
+    settings::save(&state.config_path, &saved).map_err(|error| format!("保存选择失败：{error}"))?;
+    inner.settings = saved;
+
+    Ok(())
 }
 
 /// 列出本机可用的 Java，供设置页选择。
@@ -349,6 +381,7 @@ pub fn run() {
             get_settings,
             save_settings,
             list_java,
+            remember_selection,
             install::install_game_version,
             install::list_loaders,
             mods::search_mods,
