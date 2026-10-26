@@ -101,6 +101,8 @@ describe("ModsTab", () => {
 
     expect(installMod).toHaveBeenCalledWith("AANobbMI", "26.3", "fabric");
     expect(await screen.findByText("已安装到 mods/sodium.jar")).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole("button", { name: /展开/ }));
     expect(await screen.findByText("sodium.jar")).toBeInTheDocument();
   });
 
@@ -145,6 +147,7 @@ describe("卸载", () => {
     removeMod.mockResolvedValue(undefined);
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.click(await screen.findByRole("button", { name: /展开/ }));
     const deleteButton = await screen.findByRole("button", { name: "删除" });
 
     await userEvent.click(deleteButton);
@@ -159,6 +162,7 @@ describe("卸载", () => {
   it("可以取消删除", async () => {
     listMods.mockResolvedValue(["sodium.jar"]);
     render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.click(await screen.findByRole("button", { name: /展开/ }));
 
     await userEvent.click(await screen.findByRole("button", { name: "删除" }));
     await userEvent.click(screen.getByRole("button", { name: "取消" }));
@@ -172,6 +176,7 @@ describe("卸载", () => {
     removeMod.mockRejectedValue("文件被占用");
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.click(await screen.findByRole("button", { name: /展开/ }));
     await userEvent.click(await screen.findByRole("button", { name: "删除" }));
     await userEvent.click(screen.getByRole("button", { name: "确认删除" }));
 
@@ -330,6 +335,7 @@ describe("更新检查", () => {
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
     await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
+    await userEvent.click(await screen.findByRole("button", { name: /展开/ }));
 
     expect(await screen.findByText("0.9.0 → 0.9.3")).toBeInTheDocument();
 
@@ -348,5 +354,56 @@ describe("更新检查", () => {
     render(<ModsTab version="26.3" loader="0.20.1" />);
 
     expect(screen.getByRole("button", { name: "检查更新" })).toBeDisabled();
+  });
+});
+
+describe("布局密度", () => {
+  it("已装列表默认收起，点展开才显示", async () => {
+    listMods.mockResolvedValue(["sodium.jar"]);
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+
+    // 收起时连文件名都不渲染——它固定占一块高度，会把搜索结果挤扁。
+    expect(await screen.findByText("已安装 1 个")).toBeInTheDocument();
+    expect(screen.queryByText("sodium.jar")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /展开/ }));
+    expect(screen.getByText("sodium.jar")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /收起/ }));
+    expect(screen.queryByText("sodium.jar")).not.toBeInTheDocument();
+  });
+
+  it("有更新时在标题旁标出数量，不用展开也能看到", async () => {
+    listMods.mockResolvedValue(["sodium-old.jar"]);
+    checkModUpdates.mockResolvedValue([
+      {
+        fileName: "sodium-old.jar",
+        projectId: "AANobbMI",
+        currentVersion: "0.9.0",
+        latestVersion: "0.9.3",
+        latestFileName: "sodium-new.jar",
+      },
+    ]);
+
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
+
+    expect(await screen.findByText("1 个可更新")).toBeInTheDocument();
+  });
+
+  it("分类默认只露前 8 个，其余收进「更多」", async () => {
+    const many = Array.from({ length: 12 }, (_, index) => ({
+      id: `cat-${index}`,
+      label: `分类${index}`,
+    }));
+    listModCategories.mockResolvedValue(many);
+
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+
+    expect(await screen.findByRole("button", { name: "分类0" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "分类8" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /更多 4/ }));
+    expect(screen.getByRole("button", { name: "分类8" })).toBeInTheDocument();
   });
 });

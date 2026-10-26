@@ -49,6 +49,10 @@ export function ModsTab({
   const [updates, setUpdates] = useState<ModUpdate[]>([]);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [updatingFile, setUpdatingFile] = useState<string | null>(null);
+  // 已装列表默认折叠：它固定占一块高度，会把搜索结果挤成一条半。
+  const [showInstalled, setShowInstalled] = useState(false);
+  // 分类默认只显示常用的几个，其余收进「更多」。
+  const [showAllCategories, setShowAllCategories] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
@@ -256,8 +260,12 @@ export function ModsTab({
       </form>
 
       {categories.length > 0 && (
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="按分类筛选">
-          {categories.map((category) => {
+        <div
+          className="flex gap-1.5 overflow-x-auto pb-0.5"
+          role="group"
+          aria-label="按分类筛选"
+        >
+          {(showAllCategories ? categories : categories.slice(0, 8)).map((category) => {
             const active = selectedCategories.includes(category.id);
             return (
               <button
@@ -265,7 +273,7 @@ export function ModsTab({
                 type="button"
                 aria-pressed={active}
                 onClick={() => toggleCategory(category.id)}
-                className={`rounded-full px-3 py-1 text-[12px] transition-colors ${
+                className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[12px] transition-colors ${
                   active
                     ? "bg-[var(--color-accent-soft)] text-[var(--color-accent-text)] ring-1 ring-inset ring-[var(--color-accent)]"
                     : "text-[var(--color-text-secondary)] ring-1 ring-inset ring-[var(--color-border-subtle)] hover:bg-[var(--color-surface-hover)]"
@@ -275,6 +283,16 @@ export function ModsTab({
               </button>
             );
           })}
+
+          {categories.length > 8 && (
+            <button
+              type="button"
+              onClick={() => setShowAllCategories((current) => !current)}
+              className="shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[12px] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"
+            >
+              {showAllCategories ? "收起" : `更多 ${categories.length - 8}`}
+            </button>
+          )}
         </div>
       )}
 
@@ -345,15 +363,33 @@ export function ModsTab({
       </div>
 
       <section className="shrink-0 rounded-xl bg-[var(--color-surface-raised)] p-3.5 ring-1 ring-inset ring-[var(--color-border-subtle)]">
-        <div className="flex items-center justify-between">
-          <h3 className="text-[12px] uppercase tracking-wider text-[var(--color-text-muted)]">
-            已安装 {installed.length} 个
-          </h3>
+        <div className="flex items-center justify-between gap-2">
+          {/* 已装列表默认收起：它固定占一块高度，展开时会把搜索结果挤成一条半。 */}
+          <button
+            type="button"
+            onClick={() => setShowInstalled((current) => !current)}
+            disabled={installed.length === 0}
+            className="flex min-w-0 items-center gap-2 text-left disabled:cursor-default"
+          >
+            <h3 className="text-[12px] uppercase tracking-wider text-[var(--color-text-muted)]">
+              已安装 {installed.length} 个
+            </h3>
+            {updates.length > 0 && (
+              <span className="rounded bg-[var(--color-warning)]/15 px-1.5 py-0.5 text-[11px] text-[var(--color-warning)]">
+                {updates.length} 个可更新
+              </span>
+            )}
+            {installed.length > 0 && (
+              <span className="text-[11px] text-[var(--color-text-secondary)]">
+                {showInstalled ? "收起" : "展开"}
+              </span>
+            )}
+          </button>
           <button
             type="button"
             onClick={() => void checkUpdates()}
             disabled={checkingUpdates || installed.length === 0}
-            className="rounded-md px-2 py-1 text-[11px] text-[var(--color-accent-text)] hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
+            className="shrink-0 rounded-md px-2 py-1 text-[11px] text-[var(--color-accent-text)] hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
           >
             {checkingUpdates ? "检查中…" : "检查更新"}
           </button>
@@ -362,8 +398,8 @@ export function ModsTab({
           <p className="mt-2 text-[12px] text-[var(--color-text-muted)]">
             还没有安装任何模组。
           </p>
-        ) : (
-          <ul className="mt-2 flex flex-col gap-1">
+        ) : showInstalled ? (
+          <ul className="mt-2 flex max-h-[32vh] flex-col gap-1 overflow-y-auto">
             {installed.map((name) => {
               const update = updates.find((item) => item.fileName === name);
               return (
@@ -419,7 +455,7 @@ export function ModsTab({
               );
             })}
           </ul>
-        )}
+        ) : null}
       </section>
     </div>
   );
