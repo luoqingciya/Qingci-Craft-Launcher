@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Qingci Craft Launcher</title>
+    <!--
+      窗口在首帧渲染前是隐藏的（见 tauri.conf.json 的 visible: false），
+      但 WebView 自身在 CSS 加载完成前会先铺一层白底。这里用内联样式兜住底色，
+      避免「先白一下再变深」。跟随系统是为了浅色模式下不闪黑。
+    -->
+    <style>
+      html {
+        background: #0b0d12;
+      }
+      @media (prefers-color-scheme: light) {
+        html {
+          background: #f7f8fa;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

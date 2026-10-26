@@ -311,6 +311,7 @@ fn list_java(state: tauri::State<'_, AppState>) -> Result<Vec<JavaOption>, Strin
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // 便携布局：默认游戏目录在可执行文件旁边，整个目录拷走即可迁移。
             let install_dir = std::env::current_exe()?
