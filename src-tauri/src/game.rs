@@ -377,8 +377,51 @@ fn launch_options_from(settings: &crate::settings::Settings) -> LaunchOptions {
 
 #[cfg(test)]
 mod tests {
-    use super::{launch_options_from, offline_account};
+    use super::{CrashReportPayload, GameExitEvent, launch_options_from, offline_account};
     use crate::settings::{DEFAULT_PLAYER_NAME, Settings};
+    use qcl_runtime::CrashReport;
+    use std::path::PathBuf;
+
+    #[test]
+    fn exit_event_carries_crash_report_in_camel_case() {
+        // 字段名是 IPC 契约，前端按 `crashReport.path` 取值；
+        // serde 的 rename 写错了界面会静默地拿不到报告。
+        let report = CrashReport {
+            path: PathBuf::from("/game/crash-reports/crash-1-client.txt"),
+            description: Some("Rendering overlay".to_owned()),
+            excerpt: vec!["java.lang.NullPointerException: boom".to_owned()],
+        };
+        let event = GameExitEvent {
+            code: Some(1),
+            duration_secs: 12.5,
+            crash_report: Some(CrashReportPayload::from(&report)),
+        };
+
+        let json = serde_json::to_value(&event).expect("序列化退出事件");
+        assert_eq!(json["code"], 1);
+        assert_eq!(json["durationSecs"], 12.5);
+        assert_eq!(
+            json["crashReport"]["path"],
+            "/game/crash-reports/crash-1-client.txt"
+        );
+        assert_eq!(json["crashReport"]["description"], "Rendering overlay");
+        assert_eq!(
+            json["crashReport"]["excerpt"][0],
+            "java.lang.NullPointerException: boom"
+        );
+    }
+
+    #[test]
+    fn exit_event_without_report_serializes_null() {
+        let event = GameExitEvent {
+            code: Some(0),
+            duration_secs: 1.0,
+            crash_report: None,
+        };
+
+        let json = serde_json::to_value(&event).expect("序列化退出事件");
+        assert!(json["crashReport"].is_null());
+    }
 
     #[test]
     fn memory_setting_reaches_launch_options() {
