@@ -196,3 +196,72 @@ pub fn remove_mod(state: tauri::State<'_, AppState>, filename: String) -> Result
     let (_, game_dir) = state.context()?;
     qcl_mods::remove(&game_dir, &filename).map_err(|error| error.to_string())
 }
+
+/// 一个可更新的模组。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModUpdateDto {
+    /// 已安装的文件名。
+    pub file_name: String,
+    /// Modrinth 项目 id。
+    pub project_id: String,
+    /// 当前版本号。
+    pub current_version: String,
+    /// 最新版本号。
+    pub latest_version: String,
+    /// 最新版本的文件名。
+    pub latest_file_name: String,
+}
+
+/// 检查已安装模组是否有新版本。
+#[tauri::command]
+pub async fn check_mod_updates(
+    state: tauri::State<'_, AppState>,
+    version: String,
+    loader: String,
+) -> Result<Vec<ModUpdateDto>, String> {
+    let (downloader, _game_dir) = state.context()?;
+
+    let updates = qcl_mods::check_updates(&downloader, &version, &loader)
+        .await
+        .map_err(|error| error.to_string())?;
+
+    Ok(updates
+        .into_iter()
+        .map(|update| ModUpdateDto {
+            file_name: update.file_name,
+            project_id: update.project_id,
+            current_version: update.current_version,
+            latest_version: update.latest_version,
+            latest_file_name: update.latest_file_name,
+        })
+        .collect())
+}
+
+/// 更新一个模组：装最新版本，再删掉旧文件。
+///
+/// 顺序不能反：先删后装的话，装失败就会丢掉一个能用的模组。
+#[tauri::command]
+pub async fn update_mod(
+    state: tauri::State<'_, AppState>,
+    project_id: String,
+    old_file: String,
+    version: String,
+    loader: String,
+) -> Result<Vec<String>, String> {
+    let (downloader, game_dir) = state.context()?;
+
+    let installed = qcl_mods::install_with_dependencies(downloader, &project_id, &version, &loader)
+        .await
+        .map_err(|error| error.to_string())?;
+
+    // 新版本换了文件名时，旧文件要删掉，否则游戏会同时加载两个版本。
+    let replaced = installed
+        .iter()
+        .any(|path| path == &format!("mods/{old_file}"));
+    if !replaced {
+        qcl_mods::remove(&game_dir, &old_file).map_err(|error| error.to_string())?;
+    }
+
+    Ok(installed)
+}

@@ -13,6 +13,7 @@
 //! 依赖解析（模组的依赖树）刻意没做：Modrinth 的依赖关系不保证完整，
 //! 猜错了会让人装上一个启动即崩的组合。缺依赖时游戏自己的日志说得更清楚。
 
+pub mod manifest;
 pub mod zh_names;
 
 use qcl_net::{DownloadOps, DownloadOptions, DownloadPlan, DownloadTask, HttpDownloader};
@@ -318,6 +319,7 @@ pub async fn install(downloader: Arc<HttpDownloader>, file: &ModFile) -> Result<
         size: file.size,
     };
 
+    let mods_dir = downloader.game_dir().join("mods");
     let ops: Arc<dyn DownloadOps> = downloader;
     let report = qcl_net::execute_plan(
         &DownloadPlan { tasks: vec![task] },
@@ -329,6 +331,13 @@ pub async fn install(downloader: Arc<HttpDownloader>, file: &ModFile) -> Result<
 
     if let Some(failure) = report.failures.into_iter().next() {
         return Err(ModError::Download(failure.error.to_string()));
+    }
+
+    // 记下来源，更新检查才有依据。失败不影响安装本身——
+    // 最坏情况是这个模组不参与更新检查。
+    if let Err(error) = manifest::remember(&mods_dir, &safe, &file.project_id, &file.version_number)
+    {
+        eprintln!("记录模组来源失败：{error}");
     }
 
     Ok(path)
@@ -378,7 +387,12 @@ pub fn remove(game_dir: &std::path::Path, filename: &str) -> Result<(), ModError
         return Err(ModError::UnsafeFilename(filename.to_owned()));
     }
 
-    std::fs::remove_file(&real).map_err(|error| ModError::Download(error.to_string()))
+    std::fs::remove_file(&real).map_err(|error| ModError::Download(error.to_string()))?;
+
+    // 清单里的条目一起清掉，否则更新检查会对一个不存在的文件反复报「有新版本」。
+    manifest::forget(&mods_dir, &safe)?;
+
+    Ok(())
 }
 
 /// 优先取 primary 文件，没有就取第一个。
@@ -485,4 +499,67 @@ pub async fn install_with_dependencies_from(
     }
 
     Ok(installed)
+}
+
+/// 一个可更新的模组。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModUpdate {
+    /// 已安装的文件名。
+    pub file_name: String,
+    /// Modrinth 项目 id。
+    pub project_id: String,
+    /// 当前版本号。
+    pub current_version: String,
+    /// 最新版本号。
+    pub latest_version: String,
+    /// 最新版本的文件名。
+    pub latest_file_name: String,
+}
+
+/// 检查已安装模组有没有新版本。
+///
+/// 判断依据是**文件名不同**：Modrinth 的每个版本文件名都带版本号，
+/// 同名意味着同一个文件。这比解析版本号字符串可靠——各作者的命名格式差别很大。
+///
+/// 清单里没有的（用户手动丢进 `mods/` 的 jar）不参与检查：无法可靠地反推项目 id。
+pub async fn check_updates(
+    downloader: &HttpDownloader,
+    game_version: &str,
+    loader: &str,
+) -> Result<Vec<ModUpdate>, ModError> {
+    check_updates_from(downloader, MODRINTH_API, game_version, loader).await
+}
+
+/// 同 [`check_updates`]，但可指定 API 根地址。
+pub async fn check_updates_from(
+    downloader: &HttpDownloader,
+    api: &str,
+    game_version: &str,
+    loader: &str,
+) -> Result<Vec<ModUpdate>, ModError> {
+    let mods_dir = downloader.game_dir().join("mods");
+    let manifest = manifest::prune(&mods_dir, manifest::load(&mods_dir));
+
+    let mut updates = Vec::new();
+
+    for (file_name, installed) in manifest {
+        // 某个模组在新版本里没有适配文件时跳过，而不是让整次检查失败。
+        let Ok(latest) =
+            resolve_file_from(downloader, api, &installed.project_id, game_version, loader).await
+        else {
+            continue;
+        };
+
+        if latest.filename != file_name {
+            updates.push(ModUpdate {
+                file_name,
+                project_id: installed.project_id,
+                current_version: installed.version_number,
+                latest_version: latest.version_number,
+                latest_file_name: latest.filename,
+            });
+        }
+    }
+
+    Ok(updates)
 }

@@ -36,6 +36,8 @@ const installMod = vi.fn();
 const listMods = vi.fn();
 const removeMod = vi.fn();
 const listModCategories = vi.fn();
+const checkModUpdates = vi.fn();
+const updateMod = vi.fn();
 
 vi.mock("../api", () => ({
   searchMods: (...args: unknown[]) => searchMods(...args),
@@ -43,6 +45,8 @@ vi.mock("../api", () => ({
   listMods: () => listMods(),
   removeMod: (...args: unknown[]) => removeMod(...args),
   listModCategories: () => listModCategories(),
+  checkModUpdates: (...args: unknown[]) => checkModUpdates(...args),
+  updateMod: (...args: unknown[]) => updateMod(...args),
 }));
 
 beforeEach(() => {
@@ -51,6 +55,9 @@ beforeEach(() => {
   listMods.mockReset();
   removeMod.mockReset();
   listModCategories.mockReset();
+  checkModUpdates.mockReset();
+  checkModUpdates.mockResolvedValue([]);
+  updateMod.mockReset();
   listModCategories.mockResolvedValue([]);
   listMods.mockResolvedValue([]);
 });
@@ -293,5 +300,53 @@ describe("纯分类浏览", () => {
 
     expect(screen.getByRole("button", { name: "搜索" })).toBeDisabled();
     expect(searchMods).not.toHaveBeenCalled();
+  });
+});
+
+describe("更新检查", () => {
+  it("没有更新时给出明确结论", async () => {
+    listMods.mockResolvedValue(["sodium.jar"]);
+    checkModUpdates.mockResolvedValue([]);
+
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
+
+    expect(checkModUpdates).toHaveBeenCalledWith("26.3", "fabric");
+    expect(await screen.findByText("所有模组都是最新版本")).toBeInTheDocument();
+  });
+
+  it("有新版本时显示版本变化并可更新", async () => {
+    listMods.mockResolvedValue(["sodium-old.jar"]);
+    checkModUpdates.mockResolvedValue([
+      {
+        fileName: "sodium-old.jar",
+        projectId: "AANobbMI",
+        currentVersion: "0.9.0",
+        latestVersion: "0.9.3",
+        latestFileName: "sodium-new.jar",
+      },
+    ]);
+    updateMod.mockResolvedValue(["mods/sodium-new.jar"]);
+
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
+
+    expect(await screen.findByText("0.9.0 → 0.9.3")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "更新" }));
+
+    expect(updateMod).toHaveBeenCalledWith(
+      "AANobbMI",
+      "sodium-old.jar",
+      "26.3",
+      "fabric"
+    );
+    expect(await screen.findByText("已更新到 0.9.3")).toBeInTheDocument();
+  });
+
+  it("没有已装模组时不能点检查更新", () => {
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+
+    expect(screen.getByRole("button", { name: "检查更新" })).toBeDisabled();
   });
 });

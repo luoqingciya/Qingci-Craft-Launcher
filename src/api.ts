@@ -255,3 +255,32 @@ export function removeMod(filename: string): Promise<void> {
 export function rememberSelection(version: string | null, loader: string | null): Promise<void> {
   return invoke<void>("remember_selection", { version, loader });
 }
+
+/** 一个可更新的模组。 */
+export interface ModUpdate {
+  /** 已安装的文件名。 */
+  fileName: string;
+  /** Modrinth 项目 id。 */
+  projectId: string;
+  /** 当前版本号。 */
+  currentVersion: string;
+  /** 最新版本号。 */
+  latestVersion: string;
+  /** 最新版本的文件名。 */
+  latestFileName: string;
+}
+
+/** 检查已安装模组是否有新版本。 */
+export function checkModUpdates(version: string, loader: string): Promise<ModUpdate[]> {
+  return invoke<ModUpdate[]>("check_mod_updates", { version, loader });
+}
+
+/** 更新一个模组：装最新版本并删掉旧文件，返回本次落地的路径。 */
+export function updateMod(
+  projectId: string,
+  oldFile: string,
+  version: string,
+  loader: string,
+): Promise<string[]> {
+  return invoke<string[]>("update_mod", { projectId, oldFile, version, loader });
+}
