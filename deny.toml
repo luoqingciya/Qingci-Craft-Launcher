@@ -16,8 +16,23 @@
 # 3. 影响面仅限 Linux 构建，Windows/macOS 的依赖树里没有它。
 #
 # 移除条件：tauri 升级到使用 gtk-rs 0.19+ 后，这条豁免应立即删除。
+#
+# RUSTSEC-2026-0370 / 0371 / 0372：`zvariant`、`zbus_names`、`zvariant_derive`
+# 被标记为「不再作为独立 crate 维护」——注意公告措辞是 **no longer maintained
+# as a standalone crate**，即这些子 crate 已并入 zbus 主 crate，而不是被弃用。
+#
+# 它们来自 `tauri-plugin-opener`（Linux 上通过 zbus 调用 xdg-desktop-portal 打开链接）：
+#   qcl-desktop → tauri-plugin-opener → zbus → zvariant / zbus_names
+#
+# 为什么豁免而不是去掉插件：关于页的仓库链接需要它——Tauri 默认拦截外部导航，
+# 没有插件时链接点了没有任何反应。三个公告都不是漏洞，且影响面仅限 Linux 构建。
+#
+# 移除条件：tauri-plugin-opener 改用 zbus 6+（子 crate 合回主干）后删除这三条。
 ignore = [
     { id = "RUSTSEC-2024-0370", reason = "来自 Linux 专属的 gtk-rs 0.18 链路（tauri→wry→webkit2gtk→glib-macros），升级权不在本项目；该公告是「停止维护」而非漏洞，且只在编译期展开宏" },
+    { id = "RUSTSEC-2026-0370", reason = "zvariant 已并入 zbus 主 crate（公告为「不再作为独立 crate 维护」而非弃用）；来自 Linux 专属的 tauri-plugin-opener→zbus 链路" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names 已并入 zbus 主 crate；同上，非漏洞" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive 已并入 zbus 主 crate；同上，非漏洞" },
 ]
 
 [licenses]
