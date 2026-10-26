@@ -74,7 +74,7 @@ describe("ModsTab", () => {
 
   it("安装后提示落地路径并刷新已装列表", async () => {
     searchMods.mockResolvedValue(HITS);
-    installMod.mockResolvedValue("mods/sodium.jar");
+    installMod.mockResolvedValue(["mods/sodium.jar"]);
     listMods.mockResolvedValueOnce([]).mockResolvedValueOnce(["sodium.jar"]);
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
@@ -159,5 +159,20 @@ describe("卸载", () => {
     await userEvent.click(screen.getByRole("button", { name: "确认删除" }));
 
     expect(await screen.findByText("文件被占用")).toBeInTheDocument();
+  });
+});
+
+describe("依赖", () => {
+  it("装了多个文件时提示带依赖，而不是只报一个路径", async () => {
+    searchMods.mockResolvedValue(HITS);
+    // 主模组 + Fabric API 两个文件。
+    installMod.mockResolvedValue(["mods/modmenu.jar", "mods/fabric-api.jar"]);
+
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.type(screen.getByRole("textbox"), "modmenu{Enter}");
+    const buttons = await screen.findAllByRole("button", { name: "安装" });
+    await userEvent.click(buttons[0]);
+
+    expect(await screen.findByText("已安装 2 个文件（含依赖）")).toBeInTheDocument();
   });
 });

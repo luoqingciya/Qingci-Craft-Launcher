@@ -7,9 +7,7 @@
 //! 这里只做参数整理与错误转换；搜索、解析、下载校验都在 crate 里，
 //! 因此那些逻辑仍然能在无 GUI 的测试中覆盖。
 
-use std::sync::Arc;
-
-use qcl_mods::{ModFile, ModSummary};
+use qcl_mods::ModSummary;
 use serde::Serialize;
 
 use crate::AppState;
@@ -69,21 +67,20 @@ pub async fn search_mods(
     Ok(results.into_iter().map(ModHit::from).collect())
 }
 
-/// 安装模组，返回落地路径（相对游戏目录）。
+/// 安装模组及其必需依赖，返回本次实际落地的路径列表。
+///
+/// 必须连依赖一起装：大多数 Fabric 模组依赖 Fabric API，只装本体游戏会在
+/// 加载阶段报 `requires fabric-api`。
 #[tauri::command]
 pub async fn install_mod(
     state: tauri::State<'_, AppState>,
     project_id: String,
     version: String,
     loader: String,
-) -> Result<String, String> {
+) -> Result<Vec<String>, String> {
     let (downloader, _game_dir) = state.context()?;
 
-    let file: ModFile = qcl_mods::resolve_file(&downloader, &project_id, &version, &loader)
-        .await
-        .map_err(|error| error.to_string())?;
-
-    qcl_mods::install(Arc::clone(&downloader), &file)
+    qcl_mods::install_with_dependencies(downloader, &project_id, &version, &loader)
         .await
         .map_err(|error| error.to_string())
 }

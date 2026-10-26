@@ -186,6 +186,7 @@ async fn install_writes_into_mods_and_verifies_digest() {
         url: format!("{}/sodium.jar", server.uri()),
         sha1: digest,
         size: body.len() as u64,
+        dependencies: Vec::new(),
     };
 
     let downloader = Arc::new(downloader(&dir));
@@ -218,6 +219,7 @@ async fn install_rejects_unsafe_filenames() {
             url: "http://127.0.0.1:1/x.jar".to_owned(),
             sha1: "0".repeat(40),
             size: 1,
+            dependencies: Vec::new(),
         };
 
         let error = install(Arc::clone(&downloader), &file)
@@ -338,4 +340,142 @@ async fn search_parses_icon_url() {
         results[0].icon_url.as_deref(),
         Some("https://cdn.modrinth.com/data/AANobbMI/icon.png")
     );
+}
+
+/// 造一个「项目 → 版本」的 mock：`deps` 是该项目声明的必需依赖。
+async fn mount_project(server: &MockServer, id: &str, filename: &str, body: &[u8], deps: &[&str]) {
+    let dependencies: Vec<String> = deps
+        .iter()
+        .map(|dep| format!(r#"{{"project_id":"{dep}","dependency_type":"required"}}"#))
+        .collect();
+    // 顺带混入一个可选依赖，确认它不会被装。
+    let payload = format!(
+        r#"[{{"version_number":"1.0","files":[{{"url":"{}/files/{filename}","filename":"{filename}","primary":true,"size":{},"hashes":{{"sha1":"{}"}}}}],"dependencies":[{}]}}]"#,
+        server.uri(),
+        body.len(),
+        hex_sha1(body),
+        {
+            let mut all = dependencies;
+            all.push(r#"{"project_id":"optional-dep","dependency_type":"optional"}"#.to_owned());
+            all.join(",")
+        }
+    );
+
+    Mock::given(method("GET"))
+        .and(path(format!("/project/{id}/version")))
+        .respond_with(ResponseTemplate::new(200).set_body_string(payload))
+        .mount(server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path(format!("/files/{filename}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(body.to_vec()))
+        .mount(server)
+        .await;
+}
+
+#[tokio::test]
+async fn install_pulls_required_dependencies() {
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+
+    // 主模组依赖 fabric-api；fabric-api 自身没有依赖。
+    mount_project(&server, "main", "main.jar", b"main", &["fabric-api"]).await;
+    mount_project(&server, "fabric-api", "fabric-api.jar", b"api", &[]).await;
+
+    let installed = qcl_mods::install_with_dependencies_from(
+        Arc::new(downloader(&dir)),
+        &server.uri(),
+        "main",
+        "26.3",
+        "fabric",
+    )
+    .await
+    .expect("应能安装");
+
+    assert!(
+        installed.contains(&"mods/main.jar".to_owned()),
+        "实际：{installed:?}"
+    );
+    assert!(
+        installed.contains(&"mods/fabric-api.jar".to_owned()),
+        "依赖必须一起装，否则游戏会报 requires fabric-api：{installed:?}"
+    );
+    assert_eq!(installed.len(), 2, "可选依赖不该被安装：{installed:?}");
+    assert!(dir.path().join("mods/fabric-api.jar").is_file());
+}
+
+#[tokio::test]
+async fn dependency_installation_dedupes_shared_dependencies() {
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+
+    // 主模组同时依赖 A 与 B，而 A、B 都依赖 shared —— shared 只该装一次。
+    mount_project(&server, "main", "main.jar", b"main", &["a", "b"]).await;
+    mount_project(&server, "a", "a.jar", b"a", &["shared"]).await;
+    mount_project(&server, "b", "b.jar", b"b", &["shared"]).await;
+    mount_project(&server, "shared", "shared.jar", b"shared", &[]).await;
+
+    let installed = qcl_mods::install_with_dependencies_from(
+        Arc::new(downloader(&dir)),
+        &server.uri(),
+        "main",
+        "26.3",
+        "fabric",
+    )
+    .await
+    .expect("应能安装");
+
+    let shared_count = installed
+        .iter()
+        .filter(|path| path.ends_with("shared.jar"))
+        .count();
+    assert_eq!(shared_count, 1, "共享依赖只应装一次：{installed:?}");
+    assert_eq!(installed.len(), 4, "实际：{installed:?}");
+}
+
+#[tokio::test]
+async fn installing_again_skips_existing_files() {
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+
+    mount_project(&server, "main", "main.jar", b"main", &[]).await;
+
+    let downloader = Arc::new(downloader(&dir));
+    let first = qcl_mods::install_with_dependencies_from(
+        Arc::clone(&downloader),
+        &server.uri(),
+        "main",
+        "26.3",
+        "fabric",
+    )
+    .await
+    .expect("首次应能安装");
+    assert_eq!(first.len(), 1);
+
+    // 再装一次不该重复下载。
+    let second = qcl_mods::install_with_dependencies_from(
+        Arc::clone(&downloader),
+        &server.uri(),
+        "main",
+        "26.3",
+        "fabric",
+    )
+    .await
+    .expect("重复安装应成功");
+    assert!(second.is_empty(), "已存在的文件应跳过：{second:?}");
+}
+
+#[tokio::test]
+async fn resolve_file_ignores_optional_dependencies() {
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+
+    mount_project(&server, "main", "main.jar", b"main", &["fabric-api"]).await;
+
+    let file = resolve_file_from(&downloader(&dir), &server.uri(), "main", "26.3", "fabric")
+        .await
+        .expect("应能解析");
+
+    assert_eq!(file.dependencies, vec!["fabric-api".to_owned()]);
 }

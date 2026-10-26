@@ -161,6 +161,27 @@ pub async fn install_game_version(
     let meta = load_meta_with_loader(&downloader, &version, loader.as_deref()).await?;
     let options = VersionInstallOptions::for_version(&meta.id);
 
+    let report = install_with_progress(&app, &downloader, &meta, &options).await?;
+
+    Ok(InstallSummary {
+        version: meta.id,
+        files: report.planned_files,
+        downloaded: report.downloaded,
+        skipped: report.skipped,
+        assets: report.assets.objects,
+        natives: report.natives.extracted,
+    })
+}
+
+/// 安装并向前端推送进度。
+///
+/// 启动前也要调它做「补齐」，所以抽出来而不是留在命令里。
+pub(crate) async fn install_with_progress(
+    app: &AppHandle,
+    downloader: &Arc<HttpDownloader>,
+    meta: &VersionMeta,
+    options: &VersionInstallOptions,
+) -> Result<qcl_install::VersionInstallReport, String> {
     // 进度事件按 1% 粒度节流：5147 个资产对象逐个 emit 会把 IPC 淹掉，
     // 而界面上的进度条只需要 1% 的精度。
     let last = Arc::new(Mutex::new((None::<InstallPhase>, u32::MAX)));
@@ -199,24 +220,15 @@ pub async fn install_game_version(
         );
     };
 
-    let report = install_version(
-        Arc::clone(&downloader),
-        &meta,
+    install_version(
+        Arc::clone(downloader),
+        meta,
         &launch_context(),
-        &options,
+        options,
         progress,
     )
     .await
-    .map_err(|error| error.to_string())?;
-
-    Ok(InstallSummary {
-        version: meta.id,
-        files: report.planned_files,
-        downloaded: report.downloaded,
-        skipped: report.skipped,
-        assets: report.assets.objects,
-        natives: report.natives.extracted,
-    })
+    .map_err(|error| error.to_string())
 }
 
 /// 一个可选的加载器版本，供界面下拉选择。

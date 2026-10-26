@@ -147,9 +147,14 @@ export function listLoaders(version: string): Promise<LoaderOption[]> {
   return invoke<LoaderOption[]>("list_loaders", { version });
 }
 
-/** 启动游戏。立即返回，日志与退出通过事件推送。 */
-export function launchGame(version: string): Promise<void> {
-  return invoke<void>("launch_game", { version });
+/**
+ * 启动游戏。立即返回，日志与退出通过事件推送。
+ *
+ *  与安装时保持一致：后端据此推导目标版本（原版或合并后的加载器版本），
+ * 不再依赖界面上的临时状态。
+ */
+export function launchGame(version: string, loader: string | null): Promise<void> {
+  return invoke<void>("launch_game", { version, loader });
 }
 
 /** 请求停止游戏。 */
@@ -191,13 +196,13 @@ export function searchMods(
   return invoke<ModHit[]>("search_mods", { query, version, loader });
 }
 
-/** 安装模组，返回落地路径（相对游戏目录）。 */
+/** 安装模组及其必需依赖，返回本次实际落地的路径列表。 */
 export function installMod(
   projectId: string,
   version: string,
   loader: string,
-): Promise<string> {
-  return invoke<string>("install_mod", { projectId, version, loader });
+): Promise<string[]> {
+  return invoke<string[]>("install_mod", { projectId, version, loader });
 }
 
 /** 列出已安装的模组文件名。 */

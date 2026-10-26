@@ -60,6 +60,11 @@ pub struct ModFile {
     pub sha1: String,
     /// 文件大小。
     pub size: u64,
+    /// 必需的依赖（Modrinth 项目 id）。
+    ///
+    /// 大多数 Fabric 模组依赖 Fabric API（项目 id `P7dR8mSH`），
+    /// 只装模组本体、不装依赖，游戏会在加载阶段报「requires fabric-api」。
+    pub dependencies: Vec<String>,
 }
 
 /// 模组操作中的错误。
@@ -112,6 +117,8 @@ struct VersionEntry {
     version_number: String,
     #[serde(default)]
     files: Vec<VersionFile>,
+    #[serde(default)]
+    dependencies: Vec<DependencyEntry>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -124,6 +131,14 @@ struct VersionFile {
     size: u64,
     #[serde(default)]
     hashes: Hashes,
+}
+
+#[derive(Debug, Deserialize)]
+struct DependencyEntry {
+    #[serde(default)]
+    project_id: Option<String>,
+    #[serde(default)]
+    dependency_type: String,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -230,6 +245,14 @@ pub async fn resolve_file_from(
             )));
         }
 
+        // 只取「必需」的依赖：可选依赖（如联动模组）装上去反而可能冲突。
+        let dependencies = version
+            .dependencies
+            .iter()
+            .filter(|dep| dep.dependency_type == "required")
+            .filter_map(|dep| dep.project_id.clone())
+            .collect();
+
         return Ok(ModFile {
             project_id: project_id.to_owned(),
             version_number: version.version_number,
@@ -237,6 +260,7 @@ pub async fn resolve_file_from(
             url: file.url.clone(),
             sha1: file.hashes.sha1.clone(),
             size: file.size,
+            dependencies,
         });
     }
 
@@ -353,4 +377,65 @@ fn encode_query_value(value: &str) -> String {
         }
     }
     out
+}
+
+/// 递归安装一个模组及其必需依赖。
+///
+/// 为什么必须做：大多数 Fabric 模组依赖 **Fabric API**，只装模组本体的话
+/// 游戏会在加载阶段直接报 `requires fabric-api`。依赖关系由 Modrinth 的
+/// `dependencies` 字段给出（`dependency_type == "required"`），比自己猜可靠。
+///
+/// 边界：
+/// - 深度上限 [`MAX_DEPENDENCY_DEPTH`]，防止上游数据出问题时无限递归
+/// - 同一个项目只装一次（用访问集合去重，也顺带处理循环依赖）
+/// - 已存在同名文件的跳过，因此重复点「安装」不会重复下载
+pub async fn install_with_dependencies(
+    downloader: Arc<HttpDownloader>,
+    project_id: &str,
+    game_version: &str,
+    loader: &str,
+) -> Result<Vec<String>, ModError> {
+    install_with_dependencies_from(downloader, MODRINTH_API, project_id, game_version, loader).await
+}
+
+/// 依赖递归的最大深度。
+///
+/// 实测 Fabric 生态的依赖链通常只有 1 层（模组 → Fabric API），
+/// 取 4 是留出余量同时兜住上游数据异常。
+pub const MAX_DEPENDENCY_DEPTH: usize = 4;
+
+/// 同 [`install_with_dependencies`]，但可指定 API 根地址。
+pub async fn install_with_dependencies_from(
+    downloader: Arc<HttpDownloader>,
+    api: &str,
+    project_id: &str,
+    game_version: &str,
+    loader: &str,
+) -> Result<Vec<String>, ModError> {
+    let mut installed = Vec::new();
+    let mut visited: Vec<String> = Vec::new();
+    let mut queue: Vec<(String, usize)> = vec![(project_id.to_owned(), 0)];
+
+    while let Some((id, depth)) = queue.pop() {
+        if visited.iter().any(|seen| seen == &id) {
+            continue;
+        }
+        visited.push(id.clone());
+
+        let file = resolve_file_from(&downloader, api, &id, game_version, loader).await?;
+
+        // 同名文件已存在就跳过：重复安装同一模组不该再下载一次。
+        let relative = format!("mods/{}", file.filename);
+        if !downloader.game_dir().join(&relative).is_file() {
+            installed.push(install(Arc::clone(&downloader), &file).await?);
+        }
+
+        if depth + 1 < MAX_DEPENDENCY_DEPTH {
+            for dependency in &file.dependencies {
+                queue.push((dependency.clone(), depth + 1));
+            }
+        }
+    }
+
+    Ok(installed)
 }

@@ -91,8 +91,12 @@ export function ModsTab({
     setError(null);
     setNotice(null);
     try {
-      const path = await installMod(hit.projectId, version, modLoader);
-      setNotice(`已安装到 ${path}`);
+      const paths = await installMod(hit.projectId, version, modLoader);
+      setNotice(
+        paths.length > 1
+          ? `已安装 ${paths.length} 个文件（含依赖）`
+          : `已安装到 ${paths[0] ?? "mods/"}`,
+      );
       await refreshInstalled();
     } catch (cause: unknown) {
       setError(String(cause));
