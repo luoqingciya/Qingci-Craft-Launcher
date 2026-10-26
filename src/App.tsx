@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import {
@@ -29,6 +29,7 @@ import {
   type SettingsView,
 } from "./api";
 import { LauncherView, type VersionsState } from "./components/LauncherView";
+import { summarizeCrash } from "./lib/crash";
 import { appendLog, type LogEntry, type LogStreamKind } from "./lib/logs";
 
 export default function App() {
@@ -51,6 +52,9 @@ export default function App() {
 
   const [status, setStatus] = useState<GameStatus>({ running: false, version: null });
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  // 上次退出码：null 表示被用户终止，0 表示正常退出。
+  const [exitCode, setExitCode] = useState<number | null | undefined>(undefined);
+  const [crashDismissed, setCrashDismissed] = useState(false);
   const logId = useRef(0);
 
   const pushLog = useCallback((entry: { stream: LogStreamKind; text: string }) => {
@@ -199,6 +203,7 @@ export default function App() {
       listen<GameExitEvent>(GAME_EXIT_EVENT, (event) => {
         setStatus({ running: false, version: null });
         const { code, durationSecs } = event.payload;
+        setExitCode(code);
         pushLog({
           stream: "system",
           text: `—— 游戏退出（${code ?? "被终止"}），运行 ${durationSecs.toFixed(1)} 秒 ——`,
@@ -213,6 +218,13 @@ export default function App() {
       });
     };
   }, [pushLog]);
+
+  const crash = useMemo(() => {
+    if (exitCode === undefined || crashDismissed) {
+      return null;
+    }
+    return summarizeCrash(logs, exitCode);
+  }, [logs, exitCode, crashDismissed]);
 
   const saveSettingsInput = useCallback(async (input: SettingsInput) => {
     setSavingSettings(true);
@@ -267,6 +279,8 @@ export default function App() {
     setBusy(true);
     setError(null);
     setMessage(null);
+    setExitCode(undefined);
+    setCrashDismissed(false);
     try {
       await launchGame(selected, loader === "" ? null : loader);
       setStatus({ running: true, version: selected });
@@ -297,6 +311,8 @@ export default function App() {
       progress={progress}
       status={status}
       logs={logs}
+      crash={crash}
+      onDismissCrash={() => setCrashDismissed(true)}
       settings={settings}
       javaOptions={javaOptions}
       savingSettings={savingSettings}

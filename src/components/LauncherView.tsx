@@ -14,9 +14,11 @@ import type {
   SettingsView,
   VersionSummary,
 } from "../api";
+import type { CrashSummary } from "../lib/crash";
 import type { LogEntry } from "../lib/logs";
 import { applyTheme, loadTheme, type Theme } from "../lib/theme";
 import { AboutPanel } from "./AboutPanel";
+import { CrashCard } from "./CrashCard";
 import { LaunchPanel } from "./LaunchPanel";
 import { LogPanel } from "./LogPanel";
 import { ModsTab } from "./ModsTab";
@@ -57,6 +59,7 @@ export function LauncherView({
   progress,
   status,
   logs,
+  crash,
   settings,
   javaOptions,
   savingSettings,
@@ -69,6 +72,7 @@ export function LauncherView({
   onLaunch,
   onStop,
   onClearLogs,
+  onDismissCrash,
   onSaveSettings,
   onRefreshJava,
 }: {
@@ -81,6 +85,8 @@ export function LauncherView({
   progress: InstallProgressEvent | null;
   status: GameStatus;
   logs: LogEntry[];
+  /** 崩溃摘要；`null` 表示这次不是异常退出，或用户已收起。 */
+  crash: CrashSummary | null;
   settings: SettingsView | null;
   javaOptions: JavaOption[];
   savingSettings: boolean;
@@ -93,6 +99,7 @@ export function LauncherView({
   onLaunch: () => void;
   onStop: () => void;
   onClearLogs: () => void;
+  onDismissCrash: () => void;
   onSaveSettings: (input: SettingsInput) => void;
   onRefreshJava: () => void;
 }) {
@@ -208,6 +215,7 @@ export function LauncherView({
           </div>
 
           <div className="flex min-w-0 flex-1 flex-col bg-gradient-to-br from-[var(--color-canvas-from)] to-[var(--color-canvas-to)] p-4">
+            {crash && <CrashCard summary={crash} onDismiss={onDismissCrash} />}
             <LogPanel logs={logs} onClear={onClearLogs} />
           </div>
         </div>
