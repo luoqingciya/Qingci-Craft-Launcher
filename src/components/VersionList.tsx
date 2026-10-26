@@ -25,7 +25,7 @@ export function VersionList({
 }) {
   if (versions.length === 0) {
     return (
-      <p className="px-4 py-6 text-xs text-[var(--color-text-secondary)]">没有可用版本。</p>
+      <p className="px-4 py-6 text-[13px] text-[var(--color-text-secondary)]">没有可用版本。</p>
     );
   }
 
@@ -40,7 +40,7 @@ export function VersionList({
               disabled={disabled}
               aria-pressed={active}
               onClick={() => onSelect(version.id)}
-              className={`group relative flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors disabled:cursor-not-allowed ${
+              className={`group relative flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors disabled:cursor-not-allowed ${
                 active
                   ? "bg-[var(--color-accent-soft)]"
                   : "hover:bg-[var(--color-surface-hover)] disabled:opacity-50"
@@ -53,9 +53,9 @@ export function VersionList({
                 }`}
               />
               <span
-                className={`truncate font-mono text-xs ${
+                className={`truncate font-mono text-[13px] ${
                   active
-                    ? "text-[var(--color-accent)]"
+                    ? "text-[var(--color-accent-text)]"
                     : "text-[var(--color-text-primary)]"
                 }`}
               >
@@ -64,11 +64,11 @@ export function VersionList({
               <span className="ml-auto flex shrink-0 items-center gap-1.5">
                 {/* 只标非正式版：清单里绝大多数是 release，逐行重复「正式版」纯属噪音。 */}
                 {version.type !== "release" && (
-                  <span className="rounded bg-[var(--color-surface-hover)] px-1.5 py-0.5 text-[10px] text-[var(--color-warning)]">
+                  <span className="rounded bg-[var(--color-surface-hover)] px-1.5 py-0.5 text-[11px] text-[var(--color-warning)]">
                     {typeLabel(version.type)}
                   </span>
                 )}
-                <span className="w-[74px] text-right text-[10px] tabular-nums text-[var(--color-text-muted)]">
+                <span className="w-[78px] text-right text-[11px] tabular-nums text-[var(--color-text-muted)]">
                   {formatDate(version.releaseTime)}
                 </span>
               </span>
