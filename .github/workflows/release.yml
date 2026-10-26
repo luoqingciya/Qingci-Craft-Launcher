@@ -1,0 +1,174 @@
+name: Release
+
+# 发版流程：打 tag → 构建 NSIS 安装包并签名 → 推送 COS → 建 GitHub Release。
+#
+# 客户端启动后从 https://qcl.luoqingciya.cn/releases/latest.json 读清单，
+# 按里面的地址下载安装包，并用内置公钥校验 minisign 签名。所以这里必须
+# 用同一个私钥签名——换了私钥，所有已发布的客户端都会拒绝后续更新。
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "只构建并生成 latest.json，不推送 COS、不创建 Release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # 桶名与地域不是机密：它们出现在每一个下载地址里。机密是下面两个 secret。
+  COS_BUCKET: qcl-1331847184
+  COS_REGION: ap-guangzhou
+  COS_PREFIX: releases
+  PUBLIC_BASE_URL: https://qcl.luoqingciya.cn/releases
+
+jobs:
+  publish:
+    name: 构建并发布
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # 版本号写在三个地方，任何一处忘了改，客户端就会认为「没有更新」
+      # （或者反复提示同一个版本）。
+      - name: 校验版本号一致
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          conf=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          pkg=$(node -p "require('./package.json').version")
+          echo "version=$conf" >> "$GITHUB_OUTPUT"
+
+          if [ "$conf" != "$pkg" ]; then
+            echo "::error::tauri.conf.json 是 $conf，package.json 是 $pkg，必须一致"
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#v}"
+            if [ "$tag" != "$conf" ]; then
+              echo "::error::标签是 v$tag，配置里是 $conf。先改版本号再打标签"
+              exit 1
+            fi
+          fi
+
+      - name: 检查签名密钥
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEY" ]; then
+            echo "::error::缺少 TAURI_SIGNING_PRIVATE_KEY。没有它产不出 .sig，客户端会拒绝安装更新。"
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99.1"
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      # 只出 NSIS：Windows 上 updater 装的就是它（installMode=passive 静默装并重启）。
+      # MSI 需要 WiX，多一份产物但没有对应的更新路径。
+      #
+      # createUpdaterArtifacts 只在这份 release 配置里打开：它要求构建时必须提供私钥，
+      # 而贡献者本地打包不该被这个要求挡住（见 tauri.release.json）。
+      - name: 构建并签名
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build --bundles nsis --config src-tauri/tauri.release.json
+
+      # 安装包原名带空格（"Qingci Craft Launcher_0.1.1_x64-setup.exe"）。
+      # 换成一个纯 ASCII 名字，URL 里就不用再操心编码。
+      - name: 整理产物
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          src="target/release/bundle/nsis/Qingci Craft Launcher_${VERSION}_x64-setup.exe"
+          dst="out/QingciCraftLauncher_${VERSION}_x64-setup.exe"
+          cp "$src" "$dst"
+          cp "$src.sig" "$dst.sig"
+          ls -l out
+
+      - name: 生成更新清单
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            notes="清辞 ${VERSION}。完整说明见 ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}"
+          else
+            notes="清辞 ${VERSION}（手动触发的构建）"
+          fi
+          node scripts/make-latest-json.mjs \
+            --version "$VERSION" \
+            --installer "out/QingciCraftLauncher_${VERSION}_x64-setup.exe" \
+            --signature "out/QingciCraftLauncher_${VERSION}_x64-setup.exe.sig" \
+            --base-url "$PUBLIC_BASE_URL" \
+            --notes "$notes" \
+            --out out/latest.json
+
+      - name: 预览将要上传的对象（dry run）
+        if: github.event_name != 'push' && github.event.inputs.dry_run != 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat out/latest.json
+          node scripts/publish-cos.mjs \
+            --bucket "$COS_BUCKET" --region "$COS_REGION" --prefix "$COS_PREFIX" \
+            --file "out/QingciCraftLauncher_${{ steps.version.outputs.version }}_x64-setup.exe" \
+            --file out/latest.json \
+            --dry-run
+
+      # 清单最后上传（脚本里保证顺序）：它一可读，客户端就会照着里面的地址下载。
+      - name: 推送 COS
+        if: github.event_name == 'push' || github.event.inputs.dry_run == 'false'
+        shell: bash
+        env:
+          TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
+          TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          node scripts/publish-cos.mjs \
+            --bucket "$COS_BUCKET" --region "$COS_REGION" --prefix "$COS_PREFIX" \
+            --file "out/QingciCraftLauncher_${{ steps.version.outputs.version }}_x64-setup.exe" \
+            --file out/latest.json
+
+      - name: 创建 GitHub Release
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          # 重跑同一次发版时 Release 可能已经存在。
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" out/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" out/* \
+              --title "清辞 v${VERSION}" \
+              --generate-notes
+          fi

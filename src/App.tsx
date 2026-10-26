@@ -17,6 +17,7 @@ import {
   listJava,
   listVersions,
   rememberSelection,
+  runtimeInfo,
   saveSettings,
   stopGame,
   type CrashReport,
@@ -32,6 +33,7 @@ import {
 import { LauncherView, type VersionsState } from "./components/LauncherView";
 import { summarizeCrash } from "./lib/crash";
 import { appendLog, type LogEntry, type LogStreamKind } from "./lib/logs";
+import { useUpdate } from "./lib/useUpdate";
 
 export default function App() {
   const [state, setState] = useState<VersionsState>({ status: "loading" });
@@ -59,6 +61,22 @@ export default function App() {
   const [crashReport, setCrashReport] = useState<CrashReport | null>(null);
   const [crashDismissed, setCrashDismissed] = useState(false);
   const logId = useRef(0);
+
+  // 更新：挂载时静默查一次，结果同时驱动「关于」标签上的提示点。
+  const update = useUpdate();
+  // 便携版没有卸载器，装不了更新。默认按便携版处理——宁可少给一个按钮，
+  // 也不要让用户点了「下载并安装」之后被装出一份新的副本。
+  const [portable, setPortable] = useState(true);
+
+  useEffect(() => {
+    void runtimeInfo()
+      .then((info) => {
+        setPortable(!info.installed);
+      })
+      .catch(() => {
+        // 查不到就维持「便携版」这个保守判断。
+      });
+  }, []);
 
   const pushLog = useCallback((entry: { stream: LogStreamKind; text: string }) => {
     logId.current += 1;
@@ -318,6 +336,10 @@ export default function App() {
       logs={logs}
       crash={crash}
       onDismissCrash={() => setCrashDismissed(true)}
+      update={update.state}
+      portable={portable}
+      onCheckUpdate={update.check}
+      onInstallUpdate={update.install}
       settings={settings}
       javaOptions={javaOptions}
       savingSettings={savingSettings}

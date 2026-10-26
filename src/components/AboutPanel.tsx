@@ -5,15 +5,35 @@
 import { version } from "../../package.json";
 // 用已生成好的 128px 图标而不是 929 KB 的源文件：界面里最大也只显示 56px。
 import iconUrl from "../../src-tauri/icons/128x128.png";
+import type { UpdateState } from "../lib/useUpdate";
+
+/**
+ * 下载页地址：便携版用户要自己去换 exe。
+ *
+ * 指向 GitHub Releases 而不是 COS 的目录：COS 的 `/releases/` 在没开静态网站
+ * 或对象列表时访问会 403，而且那里也没有版本说明。
+ */
+const DOWNLOAD_URL = "https://github.com/luoqingciya/Qingci-Craft-Launcher/releases/latest";
 
 /**
  * 关于页。
  *
- * 这里的信息都是**用户需要知道、但主界面放不下**的内容：版本号、许可证、
- * 以及「这不是官方启动器」的免责声明。放在标签页里而不是弹窗里，
+ * 这里的信息都是**用户需要知道、但主界面放不下**的内容：版本号、更新、
+ * 许可证、以及「这不是官方启动器」的免责声明。放在标签页里而不是弹窗里，
  * 是因为它可能被截图、被复制，弹窗容易被误关。
  */
-export function AboutPanel() {
+export function AboutPanel({
+  update,
+  portable,
+  onCheck,
+  onInstall,
+}: {
+  update: UpdateState;
+  /** 便携版无法自更新（Windows 不允许替换正在运行的 exe）。 */
+  portable: boolean;
+  onCheck: () => void;
+  onInstall: () => void;
+}) {
   return (
     <div className="mx-auto flex w-full max-w-[620px] flex-col gap-4 px-6 py-8">
       <div className="flex items-center gap-4">
@@ -30,6 +50,10 @@ export function AboutPanel() {
         基于 Tauri 2 与 Rust 的轻量级 Minecraft Java 版启动器。
         版本、依赖库与 JVM 参数全部从官方清单推导，不硬编码任何版本列表。
       </p>
+
+      <Section title="更新">
+        <UpdateRow update={update} portable={portable} onCheck={onCheck} onInstall={onInstall} />
+      </Section>
 
       <Section title="链接">
         <LinkRow href="https://github.com/luoqingciya/Qingci-Craft-Launcher">
@@ -58,6 +82,123 @@ export function AboutPanel() {
     </div>
   );
 }
+
+/**
+ * 更新状态与操作。
+ *
+ * 状态机在 `useUpdate` 里，这里只负责把每种状态翻译成一句话和一个按钮：
+ * 同一时刻只该有一个明确的下一步动作。
+ */
+function UpdateRow({
+  update,
+  portable,
+  onCheck,
+  onInstall,
+}: {
+  update: UpdateState;
+  portable: boolean;
+  onCheck: () => void;
+  onInstall: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[13px] text-[var(--color-text-secondary)]">
+          {headline(update, portable)}
+        </span>
+        {action(update, portable, onCheck, onInstall)}
+      </div>
+
+      {update.kind === "available" && update.info.notes && (
+        <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--color-text-muted)]">
+          {update.info.notes}
+        </p>
+      )}
+
+      {update.kind === "installing" && (
+        <div
+          className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-surface-hover)]"
+          role="progressbar"
+          aria-valuenow={Math.round(update.percent)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="更新下载进度"
+        >
+          <div
+            className="h-full rounded-full bg-[var(--color-accent)] transition-[width]"
+            style={{ width: `${Math.max(2, update.percent)}%` }}
+          />
+        </div>
+      )}
+
+      {update.kind === "available" && portable && (
+        <p className="text-[12px] text-[var(--color-text-muted)]">
+          当前是便携版，无法自动替换正在运行的程序，请到 <LinkRow href={DOWNLOAD_URL}>下载页</LinkRow>{" "}
+          换用新版。
+        </p>
+      )}
+
+      {update.kind === "error" && (
+        <p className="break-all text-[12px] text-[var(--color-danger)]">{update.message}</p>
+      )}
+    </div>
+  );
+}
+
+function headline(update: UpdateState, portable: boolean): string {
+  switch (update.kind) {
+    case "checking":
+      return "正在检查更新…";
+    case "latest":
+      return "已是最新版本";
+    case "available":
+      return portable
+        ? `发现新版本 v${update.info.version}（便携版需手动替换）`
+        : `发现新版本 v${update.info.version}`;
+    case "installing":
+      // 装完之后进程会被安装程序接管，先说清楚，免得用户以为程序自己关了。
+      return update.percent >= 100
+        ? "正在安装，完成后应用会自动重启"
+        : `正在下载更新 ${Math.round(update.percent)}%`;
+    case "error":
+      return "检查更新失败";
+    default:
+      return "启动时会自动检查一次";
+  }
+}
+
+function action(
+  update: UpdateState,
+  portable: boolean,
+  onCheck: () => void,
+  onInstall: () => void,
+) {
+  if (update.kind === "installing") {
+    return null;
+  }
+  if (update.kind === "available") {
+    return portable ? (
+      <LinkRow href={DOWNLOAD_URL}>去下载</LinkRow>
+    ) : (
+      <button type="button" onClick={onInstall} className={BUTTON}>
+        下载并安装
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onCheck}
+      disabled={update.kind === "checking"}
+      className={BUTTON}
+    >
+      {update.kind === "checking" ? "检查中…" : update.kind === "error" ? "重试" : "检查更新"}
+    </button>
+  );
+}
+
+const BUTTON =
+  "shrink-0 rounded-lg px-3 py-1.5 text-[12px] text-[var(--color-accent-text)] ring-1 ring-inset ring-[var(--color-border-strong)] transition-colors hover:bg-[var(--color-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (

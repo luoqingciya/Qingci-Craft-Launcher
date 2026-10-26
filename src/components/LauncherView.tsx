@@ -17,6 +17,7 @@ import type {
 import type { CrashSummary } from "../lib/crash";
 import type { LogEntry } from "../lib/logs";
 import { applyTheme, loadTheme, type Theme } from "../lib/theme";
+import type { UpdateState } from "../lib/useUpdate";
 import { AboutPanel } from "./AboutPanel";
 import { CrashCard } from "./CrashCard";
 import { LaunchPanel } from "./LaunchPanel";
@@ -60,6 +61,8 @@ export function LauncherView({
   status,
   logs,
   crash,
+  update,
+  portable,
   settings,
   javaOptions,
   savingSettings,
@@ -73,6 +76,8 @@ export function LauncherView({
   onStop,
   onClearLogs,
   onDismissCrash,
+  onCheckUpdate,
+  onInstallUpdate,
   onSaveSettings,
   onRefreshJava,
 }: {
@@ -87,6 +92,10 @@ export function LauncherView({
   logs: LogEntry[];
   /** 崩溃摘要；`null` 表示这次不是异常退出，或用户已收起。 */
   crash: CrashSummary | null;
+  /** 更新流程状态。 */
+  update: UpdateState;
+  /** 便携版无法自更新。 */
+  portable: boolean;
   settings: SettingsView | null;
   javaOptions: JavaOption[];
   savingSettings: boolean;
@@ -100,6 +109,8 @@ export function LauncherView({
   onStop: () => void;
   onClearLogs: () => void;
   onDismissCrash: () => void;
+  onCheckUpdate: () => void;
+  onInstallUpdate: () => void;
   onSaveSettings: (input: SettingsInput) => void;
   onRefreshJava: () => void;
 }) {
@@ -159,6 +170,9 @@ export function LauncherView({
         <nav role="tablist" aria-label="主导航" className="ml-2 flex items-center gap-1">
           {TABS.map((item) => {
             const active = tab === item.id;
+            // 查到新版本时在「关于」上点一个提示点：自动检查不能是无声的，
+            // 否则用户永远不知道有新版本。
+            const notice = item.id === "about" && update.kind === "available";
             return (
               <button
                 key={item.id}
@@ -166,13 +180,20 @@ export function LauncherView({
                 role="tab"
                 aria-selected={active}
                 onClick={() => setTab(item.id)}
-                className={`rounded-lg px-3.5 py-1.5 text-[14px] transition-colors ${
+                className={`relative rounded-lg px-3.5 py-1.5 text-[14px] transition-colors ${
                   active
                     ? "bg-[var(--color-accent-soft)] font-medium text-[var(--color-accent-text)]"
                     : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
                 }`}
               >
                 {item.label}
+                {notice && (
+                  <span
+                    aria-label="有新版本"
+                    title="有新版本"
+                    className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[var(--color-danger)]"
+                  />
+                )}
               </button>
             );
           })}
@@ -253,7 +274,12 @@ export function LauncherView({
 
       {tab === "about" && (
         <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-br from-[var(--color-canvas-from)] to-[var(--color-canvas-to)]">
-          <AboutPanel />
+          <AboutPanel
+            update={update}
+            portable={portable}
+            onCheck={onCheckUpdate}
+            onInstall={onInstallUpdate}
+          />
         </div>
       )}
 
