@@ -348,6 +348,7 @@ pub fn run() {
             save_settings,
             list_java,
             install::install_game_version,
+            install::list_loaders,
             game::launch_game,
             game::stop_game,
             game::game_status

@@ -13,6 +13,7 @@ import {
   getSettings,
   installGameVersion,
   launchGame,
+  listLoaders,
   listJava,
   listVersions,
   saveSettings,
@@ -22,10 +23,12 @@ import {
   type GameStatus,
   type InstallProgressEvent,
   type JavaOption,
+  type LoaderOption,
   type SettingsInput,
   type SettingsView,
   type VersionSummary,
 } from "./api";
+import { LoaderSelect } from "./components/LoaderSelect";
 import { InstallProgressBar, SettingsPanel } from "./components/SettingsPanel";
 import { LogPanel } from "./components/LogPanel";
 import { appendLog, type LogEntry, type LogStreamKind } from "./lib/logs";
@@ -45,6 +48,14 @@ export default function App() {
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<string | null>(null);
+  // 加载器列表的请求序号：快速切换版本时丢弃过期响应，避免列表与选中版本错位。
+  const loaderRequest = useRef(0);
+  const [loaders, setLoaders] = useState<LoaderOption[]>([]);
+  const [loader, setLoader] = useState("");
+  const [loaderBusy, setLoaderBusy] = useState(false);
+  // 安装完成后实际可启动的版本 id：装加载器时会变成 `fabric-loader-<loader>-<game>`。
+  // 它与用户选中的原版 id 不同，所以必须单独记。
+  const [activeVersion, setActiveVersion] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<InstallProgressEvent | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -180,6 +191,35 @@ export default function App() {
     }
   }, []);
 
+  // 选择版本时重新拉取加载器列表，并清掉「可启动版本」——
+  // 否则换了版本后还会用上一个版本的加载器 id 去启动。
+  //
+  // 刻意不用 useEffect：重置状态与发起请求都是由「用户点了某个版本」这一个事件引起的，
+  // 放进 effect 会多一轮渲染，而且 effect 里同步 setState 本身就是反模式（lint 也会拦）。
+  const selectVersion = useCallback(async (id: string) => {
+    const request = ++loaderRequest.current;
+    setSelected(id);
+    setLoader("");
+    setActiveVersion(null);
+    setLoaderBusy(true);
+
+    try {
+      const options = await listLoaders(id);
+      if (loaderRequest.current === request) {
+        setLoaders(options);
+      }
+    } catch {
+      // 拉不到加载器列表不影响原版安装，界面退化成只有「无（原版）」。
+      if (loaderRequest.current === request) {
+        setLoaders([]);
+      }
+    } finally {
+      if (loaderRequest.current === request) {
+        setLoaderBusy(false);
+      }
+    }
+  }, []);
+
   const install = useCallback(async () => {
     if (!selected) {
       return;
@@ -189,7 +229,8 @@ export default function App() {
     setMessage(null);
     setProgress(null);
     try {
-      const summary = await installGameVersion(selected);
+      const summary = await installGameVersion(selected, loader === "" ? null : loader);
+      setActiveVersion(summary.version);
       setMessage(
         `${summary.version} 已就绪：版本文件 ${summary.downloaded} 个下载 / ${summary.skipped} 个跳过，` +
           `资产 ${summary.assets} 个，natives ${summary.natives} 个`,
@@ -200,24 +241,26 @@ export default function App() {
       setBusy(false);
       setProgress(null);
     }
-  }, [selected]);
+  }, [selected, loader]);
 
   const launch = useCallback(async () => {
     if (!selected) {
       return;
     }
+    // 装了加载器就启动合并后的版本，否则启动原版。
+    const target = activeVersion ?? selected;
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      await launchGame(selected);
-      setStatus({ running: true, version: selected });
+      await launchGame(target);
+      setStatus({ running: true, version: target });
     } catch (cause: unknown) {
       setError(String(cause));
     } finally {
       setBusy(false);
     }
-  }, [selected]);
+  }, [selected, activeVersion]);
 
   const stop = useCallback(async () => {
     setError(null);
@@ -255,7 +298,7 @@ export default function App() {
 
       <section className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
             {selected ? (
               <>
                 已选版本 <span className="font-mono text-[var(--color-accent)]">{selected}</span>
@@ -264,6 +307,16 @@ export default function App() {
               <span className="text-[var(--color-text-secondary)]">
                 在下方列表中选择一个版本
               </span>
+            )}
+
+            {selected && (
+              <LoaderSelect
+                loaders={loaders}
+                value={loader}
+                busy={loaderBusy}
+                disabled={!canAct || status.running}
+                onChange={setLoader}
+              />
             )}
           </div>
 
@@ -314,7 +367,7 @@ export default function App() {
               versions={state.versions}
               selected={selected}
               disabled={busy || status.running}
-              onSelect={setSelected}
+              onSelect={(id) => void selectVersion(id)}
             />
           )}
         </div>
