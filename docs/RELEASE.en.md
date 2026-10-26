@@ -78,19 +78,54 @@ needed. Add it if you ever regenerate with a password.
 
 - Bucket `qcl-1331847184`, region `ap-guangzhou`, prefix `releases/`
 - Custom domain `qcl.luoqingciya.cn`, **HTTPS required** — the client rejects http endpoints
-- Object ACL: the upload script sets `public-read` per object. If the bucket disables
-  object-level ACLs, grant anonymous read on the bucket or on this prefix instead
 - The bucket must not enable a referer allowlist, or the client cannot fetch the manifest
+
+**How read access is granted.** Bucket ACL and object ACL are two separate things:
+
+| Option | Bucket ACL | What makes `releases/` anonymously readable |
+| --- | --- | --- |
+| A (current) | public-read / private-write | the bucket ACL itself |
+| B (tighter, recommended) | **private** | the upload script sets `public-read` per object |
+
+Switching from A to B is safe because `scripts/publish-cos.mjs` already sends
+`ACL: public-read` on every upload. Two things to watch:
+
+1. **Objects uploaded before the switch may become private with the bucket.** Verify immediately
+   afterwards: `curl -I https://qcl.luoqingciya.cn/releases/latest.json` must return 200. If it
+   returns 403, set those two objects to public-read in the console.
+2. If the bucket disables object-level ACLs, option B is not available — `putObject` will fail. Use a
+   bucket policy instead: resource `qcl-1331847184/releases/*` (**plural `releases`**), action "read
+   operations", and do not enable "list objects". A one-letter typo in the prefix matches nothing,
+   and while the bucket is public-read that mistake is completely invisible — it only shows up as a
+   403 the day you switch to a private bucket.
+
+Verify the permissions with these three probes; together they tell "is the bucket really private"
+apart from "is the prefix really effective":
+
+```bash
+# 1. the manifest itself: 200 means it works
+curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/releases/latest.json
+# 2. a missing key inside the prefix: 404 = anonymous read allowed here
+curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/releases/nope.txt
+# 3. a missing key outside the prefix: 403 = the bucket really is private
+curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/nope.txt
+```
+
+The key insight: **a private bucket answers 403 for a missing object, while a readable prefix answers
+404**. Testing only probe 1 cannot distinguish "permissions are wrong" from "the file is not uploaded
+yet".
 
 ## Releasing
 
 ```bash
-# 1. bump the version in two places (CI fails if they disagree)
+# 1. bump the version in three places (CI fails if they disagree)
 #    package.json               "version"
-#    src-tauri/tauri.conf.json  "version"
+#    src-tauri/tauri.conf.json  "version"      ← this is what the client compares
+#    Cargo.toml                 [workspace.package] version
+#      └─ reaches the game's --version and the HTTP User-Agent via qcl_core::LAUNCHER_VERSION
 
 # 2. commit and tag
-git commit -am "chore: release 0.1.1"
+git commit -am "chore(release): 0.1.1"
 git tag v0.1.1
 git push origin main --tags
 ```
@@ -106,6 +141,20 @@ the same version means users who already upgraded will not update again. Bump th
 `workflow_dispatch` defaults to `dry_run = true`: it builds and prints `latest.json` plus
 the objects it would upload, without touching COS or creating a Release. Run it once
 after configuring secrets.
+
+## Platform status
+
+**Only Windows artifacts are published today.** `latest.json` contains a single
+`windows-x86_64` entry.
+
+macOS and Linux build paths work in CI's `build` job but are not wired into the release yet:
+
+- **Linux**: would need AppImage and deb bundles. Auto-update works for a plain AppImage; users who
+  installed the deb can only upgrade manually.
+- **macOS**: auto-update needs the updater's `zip` feature to unpack `.app.tar.gz`, and that feature
+  is currently disabled because of two extraction vulnerabilities (RUSTSEC-2026-0367 / 0368) — see
+  the comment in `src-tauri/Cargo.toml`. An unsigned dmg is also blocked outright by Gatekeeper, so
+  proper distribution needs a paid developer account and notarization.
 
 ## Client behaviour
 

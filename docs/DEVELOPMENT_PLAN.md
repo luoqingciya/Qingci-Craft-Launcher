@@ -1,7 +1,8 @@
 # Qingci Craft Launcher 开发规划
 
-> 文档状态：Draft v0.1 ｜ 最后更新：2026-10-24 ｜ 仓库：`luoqingciya/Qingci-Craft-Launcher`
+> 文档状态：Draft v0.1 ｜ 最后更新：2026-10-26 ｜ 仓库：`luoqingciya/Qingci-Craft-Launcher`
 > 本文档为项目立项基线。所有技术决策以本文为准；变更须走 PR 并同步更新本文件。
+> 各 Phase 的实际完成情况见第 7 节；发布流程的现状见 8.2。
 
 ---
 
@@ -115,10 +116,16 @@
 |---|---|---|---|
 | `qcl-core` | 领域模型、manifest 解析、rules 求值、classpath 组装、参数模板替换、实例管理 | serde, thiserror | 单测 + `insta` 快照（以 26.3 真实 json 为夹具） |
 | `qcl-net` | 下载队列、并发控制、校验、重试、进度事件、磁盘预检 | reqwest, tokio, sha1 | `wiremock` 模拟端点 + 失败注入 |
-| `qcl-auth` | 设备码登录、XBL/XSTS 换取、刷新、`keyring` 持久化 | reqwest, keyring | 纯函数化状态机单测 + 录制回放 |
+| `qcl-install` | 安装编排：版本文件、资产、natives、Fabric profile 拉取与合并 | qcl-core, qcl-net | 临时目录夹具 + 真实链路（`#[ignore]`） |
+| `qcl-runtime` | 游戏进程启动、日志转发、停止、`crash-reports/` 解析 | tokio, qcl-core | 进程夹具 + 纯函数解析单测 |
+| `qcl-platform` | 平台探测（系统版本决定 GC 参数） | — | 纯函数单测 |
+| `qcl-auth` | 设备码登录、XBL/XSTS 换取、刷新 | reqwest | 纯函数化状态机单测 + 真实端点（`#[ignore]`） |
 | `qcl-java` | 本机 JRE 探测（JAVA_HOME / PATH / 常见安装路径 / 注册表）、按需安装 | reqwest, zip | 目录扫描夹具单测 |
+| `qcl-mods` | Modrinth 搜索、安装（含依赖补全）、卸载、更新检查、中文译名库 | reqwest, qcl-net | 纯逻辑单测 + 数据表校验 |
 | `qcl-cli` | headless 启动入口，用于 CI 冒烟与问题复现 | clap | 集成测试（Linux + xvfb） |
-| `src-tauri` | IPC 命令、事件、窗口、托盘 | tauri, 上述 crate | E2E（可选） |
+| `src-tauri` | IPC 命令、事件、窗口 | tauri, 上述 crate | 纯函数与 IPC 契约单测 |
+
+> `keyring` 尚未引入：令牌持久化还没实现（当前只有离线账户）。
 
 ### 3.3 一次启动的数据流
 
@@ -318,7 +325,7 @@ Qingci-Craft-Launcher/
 | #8 | `feat(java): JRE 探测 + Mojang runtime 安装` | 目录夹具覆盖 Win/mac/Linux 布局；版本匹配规则单测 |
 | #9 | `feat(cli): headless 启动闭环` | CI 上 `qcl-cli launch 26.3` 下载完成并启动至主菜单（Linux + xvfb），退出码 0 |
 
-### Phase 2 · 桌面 MVP ✅ 已完成（实例管理与崩溃摘要除外）
+### Phase 2 · 桌面 MVP ✅ 已完成（实例管理除外）
 
 | PR | 内容 | 验收标准 |
 |---|---|---|
@@ -334,7 +341,7 @@ Qingci-Craft-Launcher/
 | #14 | `feat(auth): 设备码登录 + 令牌刷新 + keyring 存储` | 断网/过期场景下静默刷新成功；令牌不出现于任何日志 |
 | #15 | `feat(ui): 登录流程 + 皮肤头像` | 正版账号启动后显示正确用户名与皮肤头部 |
 
-### Phase 4 · 模组加载器 🟡 Fabric 合并逻辑已完成，界面待接入
+### Phase 4 · 模组加载器 🟡 Fabric 已接入；Forge / NeoForge 未开始
 
 | PR | 内容 | 验收标准 |
 |---|---|---|
@@ -342,9 +349,15 @@ Qingci-Craft-Launcher/
 | #17 | `feat(loader): Forge / NeoForge`（安装器流程 + 库合并） | 至少覆盖一个 LTS 版本；失败时有明确错误码 |
 | #18 | `feat(mods): Modrinth 搜索与安装` | 依赖解析不破坏现有实例（安装前快照） |
 
-### Phase 5 · 发布工程 ⬜ 未开始
+Fabric 的界面（选版本 → 选加载器 → 安装 → 启动）已在后续 PR 中接入；#18 也已落地，
+并额外做了卸载、更新检查、依赖补全与中文译名库。Quilt 与 Forge 仍未开始。
 
-签名（Windows Authenticode / macOS codesign + notarize）、`tauri-plugin-updater` 自动更新、i18n（zh-CN / en-US）、`v1.0.0` 正式版。
+### Phase 5 · 发布工程 🟡 在线更新已完成，其余未开始
+
+已完成：`tauri-plugin-updater` 自动更新（签名校验 + 静默安装 + 重启）、COS 分发、
+GitHub Release 自动创建。
+
+未完成：Windows Authenticode 签名、macOS codesign + 公证、i18n（zh-CN / en-US）、`v1.0.0`。
 
 **版本号策略**：MVP 前保持 `0.x.y`，Phase 5 完成后发布 `1.0.0`；此后 SemVer + `CHANGELOG.md` 由 `git-cliff` 从 Conventional Commits 生成。
 
@@ -385,27 +398,37 @@ apt 的 `.deb` 与软件源索引（自定义 composite action，见 `.github/ac
 
 ### 8.2 发布流水线（`.github/workflows/release.yml`）
 
-触发：推送 `v*` tag（或 `workflow_dispatch` 手动触发预发布）。
+触发：推送 `v*` tag（或 `workflow_dispatch`，默认 dry run）。
 
 ```
-tag v0.1.0
-  └─ build (matrix: windows / macos-universal / ubuntu-22.04)
-       ├─ tauri-action：编译 + 打包（NSIS / dmg / AppImage + deb）
-       ├─ 签名：macOS codesign + notarytool；Windows 可选 Authenticode
-       ├─ 生成 updater 产物与 latest.json（TAURI_SIGNING_PRIVATE_KEY）
-       └─ 创建 **draft** Release，上传全部产物
-  └─ 人工校验 draft → 手动 publish（不做全自动发布）
+tag v0.1.1
+  └─ publish (windows-latest)
+       ├─ 校验 tag / package.json / tauri.conf.json / Cargo.toml 四处版本一致
+       ├─ pnpm tauri build --bundles nsis --config tauri.release.json
+       │    （createUpdaterArtifacts 只在这份 release 配置里打开，
+       │      贡献者本地打包不需要签名密钥）
+       ├─ 生成 latest.json（版本、说明、安装包 URL、.sig 原文）
+       ├─ 上传 COS：先传安装包，最后传 latest.json
+       └─ 创建 GitHub Release（安装包 + .sig + latest.json）
 ```
+
+**为什么分发走 COS 而不是 GitHub Releases**：GitHub 的下载在国内不可靠，而更新检查是每次
+启动都会发生的动作。GitHub Release 仍然保留，作为人工下载与版本说明的入口。
 
 **签名与密钥管理**（全部走 GitHub Secrets，禁止入库）：
 
 | Secret | 用途 |
 |---|---|
-| `TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD` | 自动更新签名（必填） |
-| `APPLE_CERTIFICATE` / `_PASSWORD` / `APPLE_ID` / `APPLE_TEAM_ID` / `APPLE_PASSWORD` | macOS 签名与公证 |
-| `WINDOWS_CERTIFICATE` / `_PASSWORD` | Authenticode（可选，可先用 SignPath.io 的开源免费签名） |
+| `TAURI_SIGNING_PRIVATE_KEY` | 自动更新签名（必填）。私钥丢失等于再也发不出能被现有客户端接受的更新 |
+| `TENCENT_SECRET_ID` / `TENCENT_SECRET_KEY` | 推送 COS |
 
-**Ubuntu 版本选择**：用 `ubuntu-22.04` 而非 `latest`，保证 glibc 基线为 2.35，向下兼容面更广；`ubuntu-24.04` 构建的产物在旧发行版上会直接无法启动。
+macOS 的 codesign + 公证、Windows 的 Authenticode 目前都**没有**——前者需要付费开发者账号，
+后者需要代码签名证书。两者都不影响更新通道的完整性（那是 minisign 签名负责的），
+只影响系统对程序来源的信任提示。
+
+**当前只发布 Windows 产物。** Linux 的 AppImage/deb 与 macOS 的 dmg 构建链路在 CI 里能跑通，
+但还没接进发布流程；macOS 的更新路径还需要重新启用 `tauri-plugin-updater` 的 `zip` 特性
+（该特性目前因两个解压漏洞被关掉，见 `src-tauri/Cargo.toml` 注释）。
 
 ### 8.3 分支保护（main）
 
@@ -487,13 +510,16 @@ tag v0.1.0
 
 ---
 
-## 13. 立即可执行的下一步
+## 13. 下一步
 
-1. **补齐本机环境**：当前工作区未检测到 Rust 工具链（`rustc`/`cargo` 均不在 PATH），需先安装 `rustup` + MSVC Build Tools，并确认 `cargo tauri` 可用。
-2. **合并本规划**：以 `docs/development-plan` 分支提 PR，评审通过后 squash 合并。
-3. **执行 Phase 0 / PR #1**：仓库基建（模板、规范、工具链固定）。
-4. **执行 Phase 0 / PR #2–#3**：CI 门禁与三平台打包链路验证。**在写任何业务代码之前，先证明发布链路是通的。**
-5. **注册 Azure 应用**（R6），拿到 `client_id` 备用；同步确认 Apple 开发者账号与 Windows 签名方案（R2/R3）。
+Phase 0–2 已完成，Fabric 与模组管理已接入，在线更新已上线。接下来按优先级：
+
+1. **实例管理**（Phase 2 剩余项）：多份独立游戏目录，切换实例不互相污染。
+2. **Forge / NeoForge**（Phase 4 剩余项，风险 R5）。
+3. **正版登录界面**（Phase 3）：协议层已完成，卡在 Mojang 审核。
+4. **跨平台发布产物**：Linux 的 AppImage/deb 与 macOS 的 dmg 尚未接进发布流程；
+   macOS 还需要 Apple 开发者账号（R3）与重新评估 updater 的 `zip` 特性。
+5. **代码签名**（R2）：Windows Authenticode / macOS 公证，缓解 SmartScreen 拦截。
 
 ---
 
@@ -501,7 +527,7 @@ tag v0.1.0
 
 | ADR | 主题 | 状态 |
 |---|---|---|
-| ADR-0001 | 选择 Tauri 2 而非 Electron | 待撰写（Phase 0） |
-| ADR-0002 | 前端选用 React 19 | 待撰写（Phase 0） |
-| ADR-0003 | 配置用 JSON 而非 SQLite | 待撰写（Phase 2） |
-| ADR-0004 | 认证采用设备码流程 | 待撰写（Phase 3） |
+| ADR-0001 | 选择 Tauri 2 而非 Electron | [已撰写](adr/0001-tauri-over-electron.md) |
+| ADR-0002 | 前端选用 React 19 | [已撰写](adr/0002-react-19.md) |
+| ADR-0003 | 配置用 JSON 而非 SQLite | 待撰写 |
+| ADR-0004 | 认证采用设备码流程 | 待撰写 |

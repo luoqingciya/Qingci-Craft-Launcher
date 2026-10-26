@@ -58,7 +58,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 Allowed `type`: `feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
 
-Common `scope`: `core` `net` `auth` `java` `app` `ui` `loader` `mods` `ci` `deps`
+Common `scope`: `core` `net` `auth` `java` `app` `ui` `loader` `mods` `update` `release` `ci` `deps`
 
 PR titles must follow this format: merges are squashed, so **the PR title becomes the commit
 message** and ends up verbatim in the changelog.
@@ -174,3 +174,19 @@ Conventions:
 - Use a middle dot for qualifiers: `"iris": "铱 · 光影加载器"`.
 - The database ships with the binary and is not fetched at runtime, so changes take effect in the
   next release.
+
+## 11. Releases
+
+Releasing is the maintainer's job, but changes can break the release pipeline, so the rules live here:
+
+- **The version lives in three places**: `package.json`, `src-tauri/tauri.conf.json` and
+  `[workspace.package]` in `Cargo.toml`. All three must match; the release workflow verifies this and
+  fails otherwise.
+- **Do not bump the version in a normal PR** unless that PR is the release preparation itself.
+  Version bumps in unrelated branches only create conflicts.
+- If you touch `src-tauri/tauri.conf.json`, `src-tauri/capabilities/`, `.github/workflows/release.yml`
+  or `scripts/`, read [docs/RELEASE.en.md](docs/RELEASE.en.md) first — mistakes there only surface
+  during a release.
+
+Full release process, signing key management and troubleshooting:
+[docs/RELEASE.en.md](docs/RELEASE.en.md) ([中文](docs/RELEASE.md)).

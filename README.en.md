@@ -11,11 +11,13 @@
 
 A cross-platform, lightweight Minecraft: Java Edition launcher built with **Tauri 2 + Rust**.
 
-> Status: **it installs, launches and stops.** The full path for vanilla versions
-> (26.3, plus older releases such as 1.7.10 with the legacy asset layout) works end to end:
+> Status: **it installs, launches, manages mods and updates itself.** The full path for vanilla
+> versions (26.3, plus older releases such as 1.7.10 with the legacy asset layout) works end to end:
 > fetch manifest → download ~598 MB → pick Java → assemble command → launch → stream logs → stop.
-> The settings page is usable (game directory / player name / memory / Java).
-> Fabric loader merging is implemented but not yet wired into the UI.
+> Fabric is selectable per version; the mods tab supports search, install (required dependencies
+> pulled in automatically), removal and update checks. Abnormal exits produce a crash summary that
+> also reads the game's own `crash-reports/`. Installed builds update in place: check, download,
+> verify the signature, install silently, relaunch.
 > Roadmap: [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) · Changes: [CHANGELOG.md](CHANGELOG.md).
 
 ## Feature status
@@ -27,16 +29,23 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 | Java selection | ✅ | Picks by version requirement; manual override is validated, not trusted blindly |
 | Launch & logs | ✅ | Streams stdout/stderr live; "Stop" really terminates the process |
 | Settings | ✅ | Game directory, offline player name, max heap, Java runtime |
-| Fabric loader | 🟡 | Profile parsing and merging done and tested; **not wired into the UI** |
+| Fabric loader | ✅ | Version → loader → install → launch; the merged profile is persisted |
+| Mod management | ✅ | Modrinth search / install / remove / update check; required dependencies installed automatically |
+| Chinese names & filters | ✅ | Local name database, Chinese keyword aliases, 19 localised categories |
+| Crash summary | ✅ | Non-zero exit produces a verdict; reads `crash-reports/` when present |
+| Auto-update | ✅ | Installed builds check automatically; nothing installs without a valid signature |
 | Microsoft login | 🟡 | Device code + Xbox chain done and verified against live endpoints; **UI pending**, blocked on Mojang review |
 | Instances | ⬜ | Multiple isolated game directories |
-| Mods / Forge / auto-update | ⬜ | See roadmap |
+| Forge / NeoForge | ⬜ | See roadmap |
 
 ## Design principles
 
-- **Lightweight**: uses the system WebView. Portable executable is 9.5 MB, NSIS installer 2.8 MB.
+- **Lightweight**: uses the system WebView. Portable executable is 11 MB, NSIS installer 3.3 MB.
 - **Cross-platform**: Windows 10+ / macOS 12+ / Linux (glibc 2.31+); CI builds and tests on all three.
-- **Testable**: core logic (version parsing, rule evaluation, argument assembly, auth protocols) lives in GUI-free Rust crates — 219 Rust tests + 27 frontend tests in CI.
+  Only Windows artifacts are published today.
+- **Testable**: core logic (version parsing, rule evaluation, argument assembly, auth protocols, mod
+  resolution, crash report parsing) lives in GUI-free Rust crates — 278 Rust tests + 116 frontend
+  tests in CI.
 - **Manifest-driven**: versions, libraries and JVM arguments are all derived from official manifests; no version list is hardcoded.
 
 ## Tech stack
@@ -47,7 +56,8 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 | Frontend | React 19 + TypeScript 7 + Vite 8 + Tailwind CSS 4 |
 | Async & network | tokio + reqwest (rustls) |
 | Frontend quality | vitest + Testing Library; oxlint (not eslint — see below) |
-| Credential storage | OS keychain (planned, see [SECURITY.md](SECURITY.md)) |
+| Update delivery | `tauri-plugin-updater` + Tencent Cloud COS (signature-verified, see [docs/RELEASE.en.md](docs/RELEASE.en.md)) |
+| Credential storage | OS keychain (not implemented; offline accounts only — see [SECURITY.md](SECURITY.md)) |
 
 > **Why oxlint instead of eslint**: `typescript-eslint` declares a peer dependency of
 > `typescript <6.1.0`, while this project uses TS 7 (the native Go compiler).
@@ -61,14 +71,15 @@ crates/          Rust domain layer (all testable without a GUI)
   qcl-net        Download planning, executor, HTTP download with SHA-1 verification
   qcl-install    Install orchestration: version files, assets, natives, Fabric merging
   qcl-java       Java detection and on-demand installation
-  qcl-runtime    Game process launch, log forwarding, termination
+  qcl-runtime    Game process launch, log forwarding, termination, crash-report parsing
   qcl-platform   Host platform probing (OS version determines GC flags)
   qcl-auth       Microsoft device-code login and Xbox auth chain (no token persistence)
+  qcl-mods       Modrinth search/install/remove/update, dependency resolution, Chinese name data
   qcl-cli        Headless entry point (smoke tests and debugging)
 src-tauri/       Tauri app layer (thin adapter: IPC and state only)
 src/             React 19 frontend
-docs/            Development plan and architecture decision records
-assets/          Brand assets (icon sources; platform icons generated by tauri icon)
+docs/            Development plan, release guide and architecture decision records
+assets/          Brand assets (icon sources, mod name database)
 ```
 
 ## Installation
@@ -77,13 +88,30 @@ Download from [Releases](https://github.com/luoqingciya/Qingci-Craft-Launcher/re
 
 | File | Description |
 |---|---|
-| `*-setup.exe` | NSIS installer; installs per-user, no administrator rights required |
-| `*.msi` | MSI package, suited to managed deployment |
-| Portable `.exe` | No install; game directory defaults to `game/` next to the executable |
+| `QingciCraftLauncher_*_x64-setup.exe` | NSIS installer; installs per-user, no administrator rights required |
+
+**Only Windows installers are published today.** macOS and Linux build paths work in CI, but their
+artifacts are not wired into the release yet. MSI and portable builds can be produced locally with
+`pnpm tauri build`.
 
 The default game directory is **`game/` inside the install directory** (portable layout:
 copy the whole folder and your worlds move with it). If that location is not writable,
 the launcher falls back to the app data directory and explains why in the UI.
+
+### Auto-update
+
+An installed build checks for updates at startup and stays silent when there is none. When a newer
+version exists, the About page shows it with its release notes; "Download and install" then:
+
+1. downloads the package from COS,
+2. **verifies a minisign signature against a public key compiled into the binary** — a mismatch
+   aborts the install,
+3. installs silently and relaunches.
+
+Portable builds have no uninstaller, and Windows will not let a running exe replace itself, so they
+are pointed at the download page instead.
+
+Setup and key management: [docs/RELEASE.en.md](docs/RELEASE.en.md).
 
 ## Development
 

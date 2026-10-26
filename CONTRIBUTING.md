@@ -54,7 +54,7 @@ pnpm build
 ```
 
 允许的 `type`：`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
-常用 `scope`：`core` `net` `auth` `java` `app` `ui` `loader` `mods` `ci` `deps`
+常用 `scope`：`core` `net` `auth` `java` `app` `ui` `loader` `mods` `update` `release` `ci` `deps`
 
 PR 标题必须符合该格式，因为合并时使用 **Squash merge**，PR 标题即最终的提交信息。
 
@@ -169,3 +169,16 @@ Modrinth 的搜索索引只有英文（中文关键词返回 0 条），所以�
 
 分类固定 19 个（Modrinth 的标签集），不要增删 id；只调整中文标签。
 别名表加一行即可生效——输入中文时后端先查这张表，查不到就原样搜。
+
+## 11. 发版
+
+发版是维护者的事，但改动可能影响发版链路，所以规则写在这里：
+
+- **版本号有三处**：`package.json`、`src-tauri/tauri.conf.json`、`Cargo.toml` 的
+  `[workspace.package]`。三处必须一致，发版工作流会校验，不一致直接失败。
+- **不要在 PR 里改版本号**，除非那个 PR 本身就是发版准备。日常 PR 改版本号会让并行的
+  分支互相冲突。
+- 改了 `src-tauri/tauri.conf.json`、`src-tauri/capabilities/`、`.github/workflows/release.yml`
+  或 `scripts/` 时，请先读 [docs/RELEASE.md](docs/RELEASE.md)——这些文件出错只会在发版时才暴露。
+
+完整的发版流程、签名密钥管理与排错见 [docs/RELEASE.md](docs/RELEASE.md)（[English](docs/RELEASE.en.md)）。
