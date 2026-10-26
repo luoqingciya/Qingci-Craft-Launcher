@@ -2,7 +2,7 @@
 
 [English](RELEASE.en.md) | 中文
 
-清辞的更新走「GitHub Actions 构建 → 腾讯云 COS 分发」：CI 打出 NSIS 安装包并用
+Qingci Craft Launcher 的更新走「GitHub Actions 构建 → 腾讯云 COS 分发」：CI 打出 NSIS 安装包并用
 私钥签名，连同更新清单 `latest.json` 一起推到 COS；客户端启动后读清单，发现新版本
 就下载安装包，**先用内置公钥校验签名，校验通过才安装**。
 
@@ -71,19 +71,51 @@ Settings → Secrets and variables → Actions：
 
 - 桶：`qcl-1331847184`，地域 `ap-guangzhou`，路径前缀 `releases/`
 - 自定义域名：`qcl.luoqingciya.cn`，**必须启用 HTTPS**——客户端拒绝 http 端点
-- 对象权限：上传脚本对每个对象显式设 `public-read`。
-  如果桶开启了「禁止对象级 ACL」，需要改为给桶开公有读，或给这个前缀单独授权匿名读
 - 桶不能开启「防盗链」白名单，否则客户端拿不到清单
+
+**读权限怎么给**。桶的读写权限与对象的读权限是两件事：
+
+| 方案 | 桶权限 | 靠什么让 `releases/` 可匿名读 |
+| --- | --- | --- |
+| A（当前） | 公有读私有写 | 桶权限本身就放开了读 |
+| B（更收敛，推荐） | **私有读写** | 上传脚本给每个对象显式设 `public-read` |
+
+从 A 换到 B 是安全的，因为 `scripts/publish-cos.mjs` 上传时带了 `ACL: public-read`。
+两点要注意：
+
+1. **换之前上传的对象可能跟着桶一起变私有**。换完之后立刻验证：
+   `curl -I https://qcl.luoqingciya.cn/releases/latest.json` 必须是 200；
+   若变 403，在控制台把那两个对象设为「公有读私有写」即可。
+2. 如果桶开了「禁止对象级 ACL」，方案 B 就不成立——putObject 会报错。此时改用桶策略：
+   资源写 `qcl-1331847184/releases/*`（**注意是复数 `releases`**），授权操作选「读操作」，
+   不要勾「列出对象列表」。策略里的前缀写错一个字母就一条都匹配不上，而桶是公有读时
+   这个错误完全不会暴露——等切到私有读写那天才会以 403 的形式出现。
+
+改完权限用这三条命令验证，它们能区分「桶是否真的私有了」和「前缀是否真的生效」：
+
+```bash
+# 1. 清单本身：200 才算通
+curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/releases/latest.json
+# 2. 前缀内的不存在的键：404 = 这个前缀允许匿名读
+curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/releases/nope.txt
+# 3. 前缀外的不存在的键：403 = 桶确实是私有的
+curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/nope.txt
+```
+
+关键判读：**私有桶对不存在的对象返回 403，允许匿名读的前缀下返回 404**。
+只测第 1 条分不清「权限没配好」和「文件还没上传」；三条一起测才能定位。
 
 ## 发版
 
 ```bash
-# 1. 版本号要改两处（CI 会校验，不一致直接失败）
-#    package.json        "version"
-#    src-tauri/tauri.conf.json  "version"
+# 1. 版本号要改三处（CI 会校验，不一致直接失败）
+#    package.json               "version"
+#    src-tauri/tauri.conf.json  "version"      ← 客户端与清单比对的就是它
+#    Cargo.toml                 [workspace.package] version
+#      └─ 它会经 qcl_core::LAUNCHER_VERSION 进到游戏的 --version 与 HTTP User-Agent
 
 # 2. 提交并打标签
-git commit -am "chore: 发布 0.1.1"
+git commit -am "chore(release): 0.1.1"
 git tag v0.1.1
 git push origin main --tags
 ```
@@ -98,6 +130,18 @@ GitHub Release（附安装包与 `.sig`）。
 
 `workflow_dispatch` 默认 `dry_run = true`：只构建并打印 `latest.json` 与将要上传的
 对象，不碰 COS、不建 Release。第一次配好之后建议先这样跑一遍。
+
+## 平台现状
+
+**目前只发布 Windows 产物。** `latest.json` 里也只有 `windows-x86_64` 一个平台条目。
+
+macOS 与 Linux 的构建链路在 CI 的 `build` job 里能跑通，但还没接进发布流程：
+
+- **Linux**：需要额外产出 AppImage 与 deb。AppImage 的自动更新依赖 updater 的 `zip` 特性
+  之外的路径（裸 AppImage 可以），deb 装的用户则只能手动升级。
+- **macOS**：自动更新需要 updater 的 `zip` 特性来解压 `.app.tar.gz`，而该特性目前因为
+  两个解压漏洞（RUSTSEC-2026-0367 / 0368）被关掉了，见 `src-tauri/Cargo.toml` 的注释。
+  另外未签名的 dmg 会被 Gatekeeper 直接拦下，正常分发需要付费开发者账号与公证。
 
 ## 客户端行为
 

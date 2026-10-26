@@ -11,9 +11,12 @@
 
 用 **Tauri 2 + Rust** 构建的跨平台、轻量级 Minecraft Java 版启动器。
 
-> 当前进度：**能装、能启动、能停止**。原版（26.3，以及 1.7.10 这类含 legacy 资产布局的旧版本）的完整链路已跑通：
+> 当前进度：**能装、能启、能管模组、能自动更新**。
+> 原版（26.3，以及 1.7.10 这类含 legacy 资产布局的旧版本）的完整链路已跑通：
 > 拉清单 → 下载约 598 MB → 选 Java → 组装命令 → 启动 → 实时日志 → 优雅停止。
-> 设置页可用（游戏目录 / 玩家名 / 内存 / Java）。Fabric 加载器的合并逻辑已完成，界面待接入。
+> Fabric 加载器可选；模组页支持搜索、安装（自动补必需依赖）、卸载与更新检查。
+> 异常退出会给崩溃摘要，并读取游戏自己写的 `crash-reports/`。
+> 安装版支持在线更新：查到新版本后下载、校验签名、静默安装并重启。
 > 路线图见 [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)，变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 功能现状
@@ -25,16 +28,20 @@
 | Java 选择 | ✅ | 按版本要求自动挑选；也可手动指定，低于要求会直接拒绝 |
 | 启动与日志 | ✅ | 实时转发 stdout/stderr，「停止」能真正终止进程 |
 | 设置 | ✅ | 游戏目录、离线玩家名、最大内存、Java 运行时 |
-| Fabric 加载器 | 🟡 | profile 解析与合并已完成并测试，**界面未接入** |
+| Fabric 加载器 | ✅ | 选版本 → 选加载器 → 安装 → 启动；合并结果落盘，重启后仍可用 |
+| 模组管理 | ✅ | Modrinth 搜索 / 安装 / 卸载 / 更新检查，安装时自动补必需依赖 |
+| 中文译名与筛选 | ✅ | 本地译名库 + 中文关键词别名 + 19 个分类中文化 |
+| 崩溃摘要 | ✅ | 非 0 退出时给出结论，并读取 `crash-reports/` 里的报告 |
+| 在线更新 | ✅ | 安装版自动检查，签名校验通过才安装 |
 | 微软正版登录 | 🟡 | 设备码 + Xbox 认证链已完成并对着真实端点验证，**界面未接入**，需等 Mojang 审核 |
 | 实例管理 | ⬜ | 多份独立游戏目录 |
-| 模组 / Forge / 自动更新 | ⬜ | 见路线图 |
+| Forge / NeoForge | ⬜ | 见路线图 |
 
 ## 设计取向
 
-- **轻量**：复用系统 WebView。便携版可执行文件 9.5 MB，NSIS 安装包 2.8 MB。
-- **跨平台**：Windows 10+ / macOS 12+ / Linux（glibc 2.31+），三平台 CI 构建与测试。
-- **可验证**：核心逻辑（版本解析、依赖求值、参数组装、认证协议）放在不依赖 GUI 的 Rust crate 中，CI 里 219 个 Rust 测试 + 27 个前端测试全量覆盖。
+- **轻量**：复用系统 WebView。便携版可执行文件 11 MB，NSIS 安装包 3.3 MB。
+- **跨平台**：Windows 10+ / macOS 12+ / Linux（glibc 2.31+），三平台 CI 构建与测试。当前发布产物只有 Windows。
+- **可验证**：核心逻辑（版本解析、依赖求值、参数组装、认证协议、模组解析、崩溃报告解析）放在不依赖 GUI 的 Rust crate 中，CI 里 278 个 Rust 测试 + 116 个前端测试全量覆盖。
 - **清单驱动**：版本、依赖库、JVM 参数全部从官方清单推导，不硬编码任何版本列表。
 
 ## 技术栈
@@ -45,7 +52,8 @@
 | 前端 | React 19 + TypeScript 7 + Vite 8 + Tailwind CSS 4 |
 | 异步与网络 | tokio + reqwest（rustls） |
 | 前端质量 | vitest + Testing Library；oxlint（不用 eslint，见下） |
-| 凭据存储 | 系统凭据库（规划中，见 [SECURITY.md](SECURITY.md)） |
+| 更新分发 | `tauri-plugin-updater` + 腾讯云 COS（签名校验，见 [docs/RELEASE.md](docs/RELEASE.md)） |
+| 凭据存储 | 系统凭据库（尚未实现，当前只有离线账户，见 [SECURITY.md](SECURITY.md)） |
 
 > **为什么 lint 用 oxlint**：`typescript-eslint` 的 peer 依赖是 `typescript <6.1.0`，
 > 而本项目用 TS 7（Go 原生编译器）。oxlint 自带 TS 解析、不依赖 `typescript` 包。
@@ -58,14 +66,15 @@ crates/          Rust 领域层（全部可在无 GUI 环境测试）
   qcl-net        下载计划、执行器、HTTP 下载与 SHA-1 校验
   qcl-install    安装编排：版本文件、资产、natives、Fabric profile 合并
   qcl-java       Java 探测与按需安装
-  qcl-runtime    游戏进程启动、日志转发与停止
+  qcl-runtime    游戏进程启动、日志转发、停止，以及 crash-reports 解析
   qcl-platform   本机平台探测（系统版本决定 GC 参数）
   qcl-auth       微软设备码登录与 Xbox 认证链（协议层，不落盘令牌）
+  qcl-mods       Modrinth 搜索/安装/卸载/更新检查、依赖补全、中文译名库
   qcl-cli        无界面入口（冒烟与排查用）
 src-tauri/       Tauri 应用层（薄适配，只做 IPC 与状态持有）
 src/             React 19 前端
-docs/            开发规划与架构决策记录
-assets/          品牌资产（应用图标源文件，各平台图标由 tauri icon 生成）
+docs/            开发规划、发版说明与架构决策记录
+assets/          品牌资产（应用图标源文件、模组译名库数据）
 ```
 
 ## 安装
@@ -74,12 +83,26 @@ assets/          品牌资产（应用图标源文件，各平台图标由 tauri
 
 | 文件 | 说明 |
 |---|---|
-| `*-setup.exe` | NSIS 安装程序，装到用户目录，不需要管理员权限 |
-| `*.msi` | MSI 安装包，适合批量部署 |
-| 便携版 `.exe` | 免安装，游戏目录默认在同级 `game/` |
+| `QingciCraftLauncher_*_x64-setup.exe` | NSIS 安装程序，装到用户目录，不需要管理员权限 |
+
+**当前只发布 Windows 安装版。** macOS 与 Linux 的构建链路在 CI 里跑通，但发布产物还没接上；
+MSI 与便携版可以用 `pnpm tauri build` 本地产出。
 
 默认游戏目录是**安装目录下的 `game/`**（便携布局：整个目录拷走就能迁移）。
 若安装位置不可写，会自动回退到应用数据目录并在界面提示原因。
+
+### 在线更新
+
+安装版启动后会自动检查更新（查不到就什么也不提示）。查到新版本时「关于」页会给出
+提示与更新说明，点「下载并安装」后：
+
+1. 从 COS 下载安装包
+2. **用内置公钥校验 minisign 签名**，对不上就拒绝安装
+3. 静默安装并自动重启
+
+便携版没有卸载器，Windows 不允许替换正在运行的 exe，因此不做自动更新，只引导到下载页。
+
+配置与密钥管理见 [docs/RELEASE.md](docs/RELEASE.md)。
 
 ## 本地开发
 
