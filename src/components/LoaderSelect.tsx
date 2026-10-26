@@ -24,14 +24,14 @@ export function LoaderSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+    <label className="flex flex-col items-stretch gap-1.5 text-[12px] text-[var(--color-text-secondary)]">
       加载器
       <select
         aria-label="加载器"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled || busy}
-        className="rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2 py-1 font-mono text-xs"
+        className="w-full rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2.5 py-2 font-mono text-[13px]"
       >
         <option value="">无（原版）</option>
         {loaders.map((option) => (

@@ -7,23 +7,28 @@
  * 组件里一律用 `var(--color-*)` 取值，所以切换主题不需要改任何组件。
  */
 @theme {
-  --color-surface: #0b0d12;
-  --color-surface-raised: #12151c;
-  --color-surface-hover: #191d26;
-  --color-border-subtle: #232833;
-  --color-border-strong: #2f3646;
-  --color-text-primary: #e9ecf1;
-  --color-text-secondary: #8b94a6;
-  --color-text-muted: #5f6779;
-  --color-accent: #5b8cff;
-  --color-accent-strong: #3d6fe8;
-  --color-accent-soft: #1b2740;
+  --color-surface: #0b1118;
+  --color-surface-raised: #131b25;
+  --color-surface-hover: #1a2431;
+  --color-border-subtle: #22303f;
+  --color-border-strong: #2e3f52;
+  --color-text-primary: #e8eef4;
+  --color-text-secondary: #94a3b3;
+  --color-text-muted: #66788a;
+  /* 强调色取自应用图标：青绿环 + 深藏青底。 */
+  --color-accent: #0f766e;
+  --color-accent-strong: #115e59;
+  --color-accent-soft: #10312f;
+  /* 深色背景上的强调色文字必须更亮，否则对比度不够。 */
+  --color-accent-text: #5eead4;
   --color-success: #34d399;
   --color-danger: #f87171;
   --color-warning: #fbbf24;
-  --color-log-surface: #07090d;
-  --color-scrollbar: #2a3040;
-  --color-scrollbar-hover: #39415a;
+  --color-log-surface: #070d13;
+  --color-scrollbar: #26333f;
+  --color-scrollbar-hover: #354656;
+  --color-canvas-from: #0d141c;
+  --color-canvas-to: #0b1118;
 }
 
 :root {
@@ -33,23 +38,26 @@
 [data-theme="light"] {
   color-scheme: light;
 
-  --color-surface: #f7f8fa;
+  --color-surface: #f4f7f8;
   --color-surface-raised: #ffffff;
-  --color-surface-hover: #eef1f6;
-  --color-border-subtle: #e2e6ee;
-  --color-border-strong: #cdd4e0;
-  --color-text-primary: #1b2029;
-  --color-text-secondary: #5c6577;
-  --color-text-muted: #8b94a6;
-  --color-accent: #2f6bdd;
-  --color-accent-strong: #2457bd;
-  --color-accent-soft: #e4edff;
-  --color-success: #0f9d6e;
-  --color-danger: #d94848;
-  --color-warning: #b4790b;
-  --color-log-surface: #f2f4f8;
-  --color-scrollbar: #c8cfdb;
-  --color-scrollbar-hover: #adb7c7;
+  --color-surface-hover: #eef3f3;
+  --color-border-subtle: #dde5e6;
+  --color-border-strong: #c3d0d2;
+  --color-text-primary: #12212b;
+  --color-text-secondary: #52656e;
+  --color-text-muted: #8194a0;
+  --color-accent: #0f766e;
+  --color-accent-strong: #115e59;
+  --color-accent-soft: #e0f5f2;
+  --color-accent-text: #0b6b63;
+  --color-success: #0d9488;
+  --color-danger: #cf3b3b;
+  --color-warning: #b45309;
+  --color-log-surface: #f2f6f6;
+  --color-scrollbar: #c6d3d4;
+  --color-scrollbar-hover: #a9bbbd;
+  --color-canvas-from: #eef5f5;
+  --color-canvas-to: #f8fbfb;
 }
 
 html,
@@ -65,7 +73,8 @@ body {
   font-family:
     "Segoe UI", "Microsoft YaHei UI", system-ui, -apple-system, "Helvetica Neue",
     sans-serif;
-  font-size: 13px;
+  /* 14px 是这套界面的基准字号：12px 在高分屏上偏小，读日志尤其累。 */
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
   /* 桌面应用里选中文本通常没有意义，还会破坏拖拽体验。 */
   user-select: none;

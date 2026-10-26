@@ -15,18 +15,18 @@ import iconUrl from "../../src-tauri/icons/128x128.png";
  */
 export function AboutPanel() {
   return (
-    <div className="mx-auto flex w-full max-w-[620px] flex-col gap-4 px-6 py-6">
+    <div className="mx-auto flex w-full max-w-[620px] flex-col gap-4 px-6 py-8">
       <div className="flex items-center gap-4">
         <img src={iconUrl} alt="" className="h-14 w-14 rounded-xl" />
         <div>
-          <div className="text-base font-semibold">清辞</div>
-          <div className="text-[12px] text-[var(--color-text-secondary)]">
+          <div className="text-[16px] font-semibold">清辞</div>
+          <div className="text-[13px] text-[var(--color-text-secondary)]">
             Qingci Craft Launcher · v{version}
           </div>
         </div>
       </div>
 
-      <p className="text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+      <p className="text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
         基于 Tauri 2 与 Rust 的轻量级 Minecraft Java 版启动器。
         版本、依赖库与 JVM 参数全部从官方清单推导，不硬编码任何版本列表。
       </p>
@@ -41,7 +41,7 @@ export function AboutPanel() {
       </Section>
 
       <Section title="许可证">
-        <p className="text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+        <p className="text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
           GPL-3.0，并附有 <strong className="text-[var(--color-text-primary)]">GPLv3 第 7 条附加条款</strong>：
           分发时须保留版权与许可声明；分发修改版须更换名称。
           原样分发未经修改的副本可以保留原名。
@@ -49,7 +49,7 @@ export function AboutPanel() {
       </Section>
 
       <Section title="免责声明">
-        <p className="text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+        <p className="text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
           本项目为非官方启动器，与 Mojang Studios、Microsoft 无任何隶属关系。
           "Minecraft" 是 Mojang Studios 的商标。本项目不分发任何游戏本体、库文件或资源文件，
           全部内容在运行时从官方公开端点获取。
@@ -62,7 +62,7 @@ export function AboutPanel() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-xl bg-[var(--color-surface-raised)] p-4 ring-1 ring-inset ring-[var(--color-border-subtle)]">
-      <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+      <h3 className="mb-2 text-[12px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
         {title}
       </h3>
       <div className="flex flex-col gap-1.5">{children}</div>
@@ -87,7 +87,7 @@ function LinkRow({ href, children }: { href: string; children: React.ReactNode }
     <a
       href={href}
       onClick={(event) => void open(event)}
-      className="w-fit text-[12px] text-[var(--color-accent)] hover:underline"
+      className="w-fit text-[13px] text-[var(--color-accent-text)] hover:underline"
     >
       {children}
     </a>

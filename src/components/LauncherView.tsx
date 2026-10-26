@@ -4,7 +4,6 @@
 
 import { useState } from "react";
 
-// 用已生成好的 128px 图标而不是 929 KB 的源文件：界面里最大也只显示 56px。
 import iconUrl from "../../src-tauri/icons/128x128.png";
 import type {
   GameStatus,
@@ -18,9 +17,9 @@ import type {
 import type { LogEntry } from "../lib/logs";
 import { applyTheme, loadTheme, type Theme } from "../lib/theme";
 import { AboutPanel } from "./AboutPanel";
-import { LoaderSelect } from "./LoaderSelect";
+import { LaunchPanel } from "./LaunchPanel";
 import { LogPanel } from "./LogPanel";
-import { InstallProgressBar, SettingsPanel } from "./SettingsPanel";
+import { SettingsPanel } from "./SettingsPanel";
 import { VersionList } from "./VersionList";
 
 /** 版本清单的加载状态。 */
@@ -30,10 +29,11 @@ export type VersionsState =
   | { status: "failed"; message: string };
 
 /** 顶部分页。 */
-type Tab = "home" | "settings" | "about";
+type Tab = "home" | "versions" | "settings" | "about";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "home", label: "启动" },
+  { id: "versions", label: "版本" },
   { id: "settings", label: "设置" },
   { id: "about", label: "关于" },
 ];
@@ -102,6 +102,7 @@ export function LauncherView({
   const ready = versions.status === "ready";
   const canAct = ready && selected !== null && !busy;
   const running = status.running;
+  const playerName = settings?.playerName ?? "Player";
 
   function toggleTheme() {
     const next: Theme = theme === "dark" ? "light" : "dark";
@@ -111,11 +112,11 @@ export function LauncherView({
 
   return (
     <div className="flex h-full flex-col bg-[var(--color-surface)]">
-      <header className="flex h-12 shrink-0 items-center gap-1 border-b border-[var(--color-border-subtle)] px-3">
-        {/* 品牌区只留图标：窗口标题栏已经写着产品名，这里再重复一遍是浪费一行高度。 */}
-        <img src={iconUrl} alt="清辞" className="mr-1 h-7 w-7 rounded-md" />
+      {/* 顶栏用强调色渐变：整窗的主色块，避免界面看起来只有一片灰。 */}
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] px-4">
+        <img src={iconUrl} alt="" className="h-8 w-8 rounded-lg" />
 
-        <nav role="tablist" aria-label="主导航" className="flex items-center gap-0.5">
+        <nav role="tablist" aria-label="主导航" className="ml-4 flex items-center gap-1">
           {TABS.map((item) => {
             const active = tab === item.id;
             return (
@@ -125,16 +126,13 @@ export function LauncherView({
                 role="tab"
                 aria-selected={active}
                 onClick={() => setTab(item.id)}
-                className={`relative rounded-md px-3 py-1.5 text-[12px] transition-colors ${
+                className={`rounded-lg px-3.5 py-1.5 text-[14px] transition-colors ${
                   active
-                    ? "text-[var(--color-text-primary)]"
+                    ? "bg-[var(--color-accent-soft)] font-medium text-[var(--color-accent-text)]"
                     : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
                 }`}
               >
                 {item.label}
-                {active && (
-                  <span className="absolute inset-x-2 -bottom-[9px] h-[2px] rounded-full bg-[var(--color-accent)]" />
-                )}
               </button>
             );
           })}
@@ -147,7 +145,7 @@ export function LauncherView({
             onClick={toggleTheme}
             aria-label={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
             title={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
           >
             {theme === "dark" ? <SunIcon /> : <MoonIcon />}
           </button>
@@ -156,25 +154,54 @@ export function LauncherView({
 
       {tab === "home" && (
         <div className="flex min-h-0 flex-1">
-          <aside className="flex w-[300px] shrink-0 flex-col border-r border-[var(--color-border-subtle)]">
-            <div className="flex h-9 shrink-0 items-center justify-between px-4">
-              <h2 className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
-                版本
+          <div className="w-[360px] shrink-0 border-r border-[var(--color-border-subtle)] p-4">
+            <LaunchPanel
+              playerName={playerName}
+              selected={selected}
+              loaders={loaders}
+              loader={loader}
+              loaderBusy={loaderBusy}
+              busy={busy}
+              status={status}
+              progress={progress}
+              message={message}
+              error={error}
+              canAct={canAct}
+              onLoaderChange={onLoaderChange}
+              onLaunch={onLaunch}
+              onInstall={onInstall}
+              onStop={onStop}
+              onBrowseVersions={() => setTab("versions")}
+            />
+          </div>
+
+          <div className="flex min-w-0 flex-1 flex-col bg-gradient-to-br from-[var(--color-canvas-from)] to-[var(--color-canvas-to)] p-4">
+            <LogPanel logs={logs} onClear={onClearLogs} />
+          </div>
+        </div>
+      )}
+
+      {tab === "versions" && (
+        <div className="flex min-h-0 flex-1">
+          <aside className="flex w-[380px] shrink-0 flex-col border-r border-[var(--color-border-subtle)]">
+            <div className="flex h-11 shrink-0 items-center justify-between px-4">
+              <h2 className="text-[12px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
+                版本列表
               </h2>
               {ready && (
-                <span className="text-[10px] tabular-nums text-[var(--color-text-muted)]">
+                <span className="text-[12px] tabular-nums text-[var(--color-text-muted)]">
                   {versions.versions.length} 个
                 </span>
               )}
             </div>
 
             {versions.status === "loading" && (
-              <p className="px-4 py-6 text-xs text-[var(--color-text-secondary)]">
+              <p className="px-4 py-6 text-[13px] text-[var(--color-text-secondary)]">
                 正在获取版本清单…
               </p>
             )}
             {versions.status === "failed" && (
-              <p className="px-4 py-6 text-xs text-[var(--color-danger)]">
+              <p className="px-4 py-6 text-[13px] text-[var(--color-danger)]">
                 获取版本清单失败：{versions.message}
               </p>
             )}
@@ -188,89 +215,22 @@ export function LauncherView({
             )}
           </aside>
 
-          <div className="flex min-w-0 flex-1 flex-col">
-            <section className="shrink-0 px-4 pb-1 pt-4">
-              <div className="rounded-xl bg-[var(--color-surface-raised)] p-4 ring-1 ring-inset ring-[var(--color-border-subtle)]">
-                <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-[11px] uppercase tracking-wider text-[var(--color-text-muted)]">
-                      当前版本
-                    </div>
-                    <div className="mt-1 flex items-center gap-2">
-                      <span
-                        className={`truncate font-mono text-lg ${
-                          selected
-                            ? "text-[var(--color-text-primary)]"
-                            : "text-[var(--color-text-muted)]"
-                        }`}
-                      >
-                        {selected ?? "未选择"}
-                      </span>
-                      {loader && (
-                        <span className="rounded bg-[var(--color-accent-soft)] px-1.5 py-0.5 text-[10px] text-[var(--color-accent)]">
-                          Fabric {loader}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {selected && (
-                    <LoaderSelect
-                      loaders={loaders}
-                      value={loader}
-                      busy={loaderBusy}
-                      disabled={!canAct || running}
-                      onChange={onLoaderChange}
-                    />
-                  )}
-                </div>
-
-                <div className="mt-4 flex items-stretch gap-2">
-                  <button
-                    type="button"
-                    onClick={onLaunch}
-                    disabled={!canAct || running}
-                    className="h-10 flex-1 rounded-lg bg-[var(--color-accent)] text-[13px] font-medium text-white shadow-[0_6px_16px_-6px_rgba(91,140,255,0.8)] transition-all hover:bg-[var(--color-accent-strong)] active:translate-y-px disabled:bg-[var(--color-surface-hover)] disabled:text-[var(--color-text-muted)] disabled:shadow-none"
-                  >
-                    {running ? "游戏运行中" : "启动游戏"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onInstall}
-                    disabled={!canAct || running}
-                    className="h-10 rounded-lg px-4 text-[12px] text-[var(--color-text-secondary)] ring-1 ring-inset ring-[var(--color-border-strong)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-40"
-                  >
-                    {busy ? "处理中…" : "安装 / 检查文件"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onStop}
-                    disabled={!running}
-                    className="h-10 rounded-lg px-4 text-[12px] text-[var(--color-danger)] ring-1 ring-inset ring-[var(--color-danger)]/40 transition-colors hover:bg-[var(--color-danger)]/10 disabled:opacity-30"
-                  >
-                    停止
-                  </button>
-                </div>
-
-                {progress && <InstallProgressBar progress={progress} />}
-
-                {message && (
-                  <p className="mt-3 text-[11px] text-[var(--color-success)]">{message}</p>
-                )}
-                {error && <p className="mt-3 text-[11px] text-[var(--color-danger)]">{error}</p>}
-              </div>
-            </section>
-
-            <LogPanel logs={logs} onClear={onClearLogs} />
+          <div className="min-w-0 flex-1 bg-gradient-to-br from-[var(--color-canvas-from)] to-[var(--color-canvas-to)] p-6">
+            <VersionDetail
+              version={ready ? versions.versions.find((item) => item.id === selected) : undefined}
+              selected={selected}
+              loader={loader}
+              onGoHome={() => setTab("home")}
+            />
           </div>
         </div>
       )}
 
       {tab === "settings" && (
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[640px] px-6 py-6">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-br from-[var(--color-canvas-from)] to-[var(--color-canvas-to)]">
+          <div className="mx-auto w-full max-w-[680px] px-6 py-6">
             {settings ? (
-              <div className="rounded-xl bg-[var(--color-surface-raised)] p-5 ring-1 ring-inset ring-[var(--color-border-subtle)]">
+              <div className="rounded-2xl bg-[var(--color-surface-raised)] p-5 ring-1 ring-inset ring-[var(--color-border-subtle)]">
                 <SettingsPanel
                   settings={settings}
                   javaOptions={javaOptions}
@@ -282,7 +242,7 @@ export function LauncherView({
                 />
               </div>
             ) : (
-              <p className="text-xs text-[var(--color-text-secondary)]">
+              <p className="text-[13px] text-[var(--color-text-secondary)]">
                 {settingsError ? `读取设置失败：${settingsError}` : "正在读取设置…"}
               </p>
             )}
@@ -291,7 +251,7 @@ export function LauncherView({
       )}
 
       {tab === "about" && (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-br from-[var(--color-canvas-from)] to-[var(--color-canvas-to)]">
           <AboutPanel />
         </div>
       )}
@@ -299,12 +259,80 @@ export function LauncherView({
   );
 }
 
-/** 运行状态。用圆点颜色传达状态，比纯文字更快被扫到。 */
+/** 选中版本的详情。让「版本」页右侧不至于空着，也给一个回到启动的入口。 */
+function VersionDetail({
+  version,
+  selected,
+  loader,
+  onGoHome,
+}: {
+  version: VersionSummary | undefined;
+  selected: string | null;
+  loader: string;
+  onGoHome: () => void;
+}) {
+  if (!selected) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-[13px] text-[var(--color-text-muted)]">从左侧选择一个版本</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-[560px]">
+      <div className="text-[12px] uppercase tracking-wider text-[var(--color-text-muted)]">
+        已选版本
+      </div>
+      <div className="mt-1 font-mono text-[26px] leading-tight text-[var(--color-text-primary)]">
+        {selected}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2 text-[12px]">
+        {version && (
+          <>
+            <Tag>{version.type === "release" ? "正式版" : "快照"}</Tag>
+            <Tag>{version.releaseTime.slice(0, 10)}</Tag>
+          </>
+        )}
+        {loader && <Tag accent>Fabric {loader}</Tag>}
+      </div>
+
+      <p className="mt-6 text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
+        安装与启动都在「启动」页进行。切换版本后回到启动页即可。
+      </p>
+
+      <button
+        type="button"
+        onClick={onGoHome}
+        className="mt-4 h-10 rounded-xl bg-[var(--color-accent)] px-5 text-[13px] font-medium text-white transition-colors hover:bg-[var(--color-accent-strong)]"
+      >
+        去启动页
+      </button>
+    </div>
+  );
+}
+
+function Tag({ children, accent = false }: { children: React.ReactNode; accent?: boolean }) {
+  return (
+    <span
+      className={`rounded-lg px-2 py-1 ${
+        accent
+          ? "bg-[var(--color-accent-soft)] text-[var(--color-accent-text)]"
+          : "bg-[var(--color-surface-raised)] text-[var(--color-text-secondary)] ring-1 ring-inset ring-[var(--color-border-subtle)]"
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** 运行状态。顶栏是彩色的，所以这里用半透明白底而不是灰底。 */
 function StatusChip({ running, version }: { running: boolean; version: string | null }) {
   return (
     <span
       role="status"
-      className="flex items-center gap-1.5 rounded-full bg-[var(--color-surface-raised)] px-2.5 py-1 text-[11px] text-[var(--color-text-secondary)] ring-1 ring-inset ring-[var(--color-border-subtle)]"
+      className="flex items-center gap-1.5 rounded-full bg-[var(--color-surface)] px-3 py-1 text-[12px] text-[var(--color-text-secondary)] ring-1 ring-inset ring-[var(--color-border-subtle)]"
     >
       <span
         className={`h-1.5 w-1.5 rounded-full ${
@@ -321,8 +349,8 @@ function StatusChip({ running, version }: { running: boolean; version: string | 
 function SunIcon() {
   return (
     <svg
-      width="15"
-      height="15"
+      width="16"
+      height="16"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -338,8 +366,8 @@ function SunIcon() {
 function MoonIcon() {
   return (
     <svg
-      width="15"
-      height="15"
+      width="16"
+      height="16"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

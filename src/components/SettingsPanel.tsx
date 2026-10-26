@@ -127,13 +127,13 @@ export function SettingsPanel({
     >
       {!embedded && (
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-medium">设置</h2>
+          <h2 className="text-[14px] font-medium">设置</h2>
           <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setDraft(toDraft(settings))}
             disabled={!dirty || saving}
-            className="rounded border border-[var(--color-border-subtle)] px-3 py-1.5 text-xs hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
+            className="rounded border border-[var(--color-border-subtle)] px-3.5 py-2 text-[13px] hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
           >
             撤销
           </button>
@@ -141,7 +141,7 @@ export function SettingsPanel({
             type="button"
             onClick={submit}
             disabled={!dirty || saving}
-            className="rounded bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
+            className="rounded bg-[var(--color-accent)] px-3.5 py-2 text-[13px] font-medium text-white hover:opacity-90 disabled:opacity-40"
           >
             {saving ? "保存中…" : "保存"}
           </button>
@@ -149,13 +149,13 @@ export function SettingsPanel({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 text-xs lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 text-[13px] lg:grid-cols-2">
         {/* 游戏目录 */}
         <div className="lg:col-span-2">
           <label className="flex items-center gap-2 text-[var(--color-text-secondary)]">
             游戏目录
             {settings.isCustom && (
-              <span className="rounded bg-[var(--color-accent-soft)] px-1.5 py-0.5 text-[10px] text-[var(--color-accent)]">
+              <span className="rounded bg-[var(--color-accent-soft)] px-1.5 py-0.5 text-[11px] text-[var(--color-accent-text)]">
                 自定义
               </span>
             )}
@@ -165,7 +165,7 @@ export function SettingsPanel({
               value={draft.gameDir}
               onChange={(event) => setDraft((c) => ({ ...c, gameDir: event.target.value }))}
               spellCheck={false}
-              className="min-w-0 flex-1 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2 py-1.5 font-mono text-xs"
+              className="min-w-0 flex-1 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2.5 py-2 font-mono text-[13px]"
             />
             <button
               type="button"
@@ -196,7 +196,7 @@ export function SettingsPanel({
             id="player-name"
             value={draft.playerName}
             onChange={(event) => setDraft((c) => ({ ...c, playerName: event.target.value }))}
-            className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2 py-1.5 text-xs"
+            className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2.5 py-2 text-[13px]"
           />
         </div>
 
@@ -211,7 +211,7 @@ export function SettingsPanel({
             onChange={(event) => setDraft((c) => ({ ...c, memory: event.target.value }))}
             placeholder="留空 = 官方默认"
             inputMode="numeric"
-            className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2 py-1.5 text-xs"
+            className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2.5 py-2 text-[13px]"
           />
         </div>
 
@@ -225,7 +225,7 @@ export function SettingsPanel({
               id="java"
               value={draft.javaPath}
               onChange={(event) => setDraft((c) => ({ ...c, javaPath: event.target.value }))}
-              className="min-w-0 flex-1 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2 py-1.5 text-xs"
+              className="min-w-0 flex-1 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2.5 py-2 text-[13px]"
             >
               <option value="">自动选择（按版本要求）</option>
               {javaOptions.map((option) => (
@@ -253,9 +253,9 @@ export function SettingsPanel({
       </div>
 
       {settings.fallbackReason && (
-        <p className="mt-2 text-xs text-amber-400">⚠ {settings.fallbackReason}</p>
+        <p className="mt-2 text-[12px] text-amber-400">⚠ {settings.fallbackReason}</p>
       )}
-      {message && <p className="mt-2 text-xs text-red-400">{message}</p>}
+      {message && <p className="mt-2 text-[12px] text-red-400">{message}</p>}
 
       {embedded && (
         <div className="mt-4 flex items-center justify-end gap-2 border-t border-[var(--color-border-subtle)] pt-3">
@@ -263,7 +263,7 @@ export function SettingsPanel({
             type="button"
             onClick={() => setDraft(toDraft(settings))}
             disabled={!dirty || saving}
-            className="rounded border border-[var(--color-border-subtle)] px-3 py-1.5 text-xs hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
+            className="rounded border border-[var(--color-border-subtle)] px-3.5 py-2 text-[13px] hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
           >
             撤销
           </button>
@@ -271,7 +271,7 @@ export function SettingsPanel({
             type="button"
             onClick={submit}
             disabled={!dirty || saving}
-            className="rounded bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
+            className="rounded bg-[var(--color-accent)] px-3.5 py-2 text-[13px] font-medium text-white hover:opacity-90 disabled:opacity-40"
           >
             {saving ? "保存中…" : "保存"}
           </button>
@@ -285,13 +285,13 @@ export function SettingsPanel({
 export function InstallProgressBar({ progress }: { progress: InstallProgressEvent }) {
   return (
     <div className="mt-2">
-      <div className="flex items-center justify-between text-xs text-[var(--color-text-secondary)]">
+      <div className="flex items-center justify-between text-[12px] text-[var(--color-text-secondary)]">
         <span>
           正在下载{phaseLabel(progress.phase)} {progress.completed}/{progress.total}
         </span>
         <span>{progress.percent}%</span>
       </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded bg-[var(--color-border-subtle)]">
+      <div className="mt-1.5 h-2 overflow-hidden rounded bg-[var(--color-border-subtle)]">
         <div
           className="h-full bg-[var(--color-accent)] transition-[width] duration-200"
           style={{ width: `${progress.percent}%` }}
