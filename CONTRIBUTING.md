@@ -1,5 +1,7 @@
 # 贡献指南
 
+**中文** | [English](CONTRIBUTING.en.md)
+
 本项目采用**严格的 PR 流程**：`main` 受保护，任何改动都必须通过分支 + Pull Request 合入。
 
 ## 1. 环境准备
@@ -20,8 +22,15 @@ Windows 需要 MSVC Build Tools；Linux 需要 `libwebkit2gtk-4.1-dev`、`libapp
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-features
-cargo deny check
+cargo deny check licenses bans sources
+
+pnpm lint
+pnpm test
+pnpm build
 ```
+
+`cargo deny` 的 `advisories` 需要拉取 RustSec 库，网络受限时可以只跑
+`licenses bans sources` 三项——CI 上会跑全量。
 
 ## 3. 分支命名
 
@@ -72,6 +81,11 @@ PR 标题必须符合该格式，因为合并时使用 **Squash merge**，PR 标
 - `clippy -D warnings` 视为错误；确有必要的例外需在代码处 `#[allow(...)]` 并写明理由。
 - 错误类型：库层用 `thiserror` 定义可分类错误，应用层用 `anyhow` 附加上下文。
 - 公共 API 必须有文档注释（`missing_docs` 为 warning，CI 会将其提升为错误）。
+- 前端 lint 用 **oxlint**（`pnpm lint`），配置在 `.oxlintrc.json`。不要引入 eslint：
+  `typescript-eslint` 的 peer 依赖不支持本项目使用的 TS 7。
+- 纯逻辑放 `src/lib/`，组件只做渲染：纯函数测试毫秒级且不依赖 DOM。
+- 测试里若涉及平台差异（路径形态、shell 语义、`#[cfg]` 导入），先自问
+  「另一个平台这一行还成立吗」——本机通过不代表 CI 通过。
 
 ## 8. 更新日志
 

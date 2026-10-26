@@ -284,7 +284,7 @@ Qingci-Craft-Launcher/
 ├─ Cargo.toml          # workspace
 ├─ rust-toolchain.toml # 固定工具链，CI 与本机一致
 ├─ clippy.toml / rustfmt.toml / deny.toml
-├─ package.json / vite.config.ts / tsconfig.json / eslint.config.js
+├─ package.json / vite.config.ts / tsconfig.json / .oxlintrc.json
 ├─ CONTRIBUTING.md  SECURITY.md  CHANGELOG.md
 └─ LICENSE (GPL-3.0)
 ```
@@ -295,7 +295,7 @@ Qingci-Craft-Launcher/
 
 原则：**每个 PR 单一职责、可独立回滚、含测试、CI 全绿后由维护者合并**。下表每个 PR 即一个独立分支。
 
-### Phase 0 · 工程基建（先立规矩，再写代码）
+### Phase 0 · 工程基建（先立规矩，再写代码） ✅ 已完成
 
 | PR | 内容 | 验收标准 |
 |---|---|---|
@@ -307,7 +307,7 @@ Qingci-Craft-Launcher/
 >
 > PR #1 之所以包含 workspace 骨架：没有可编译的代码，CI 门禁就是空转。骨架只放最小可编译单元，领域模型仍按 PR #4 起逐步落地。
 
-### Phase 1 · 核心库（无 UI，纯 Rust，CI 全覆盖）
+### Phase 1 · 核心库（无 UI，纯 Rust，CI 全覆盖） ✅ 已完成
 
 | PR | 内容 | 验收标准 |
 |---|---|---|
@@ -318,7 +318,7 @@ Qingci-Craft-Launcher/
 | #8 | `feat(java): JRE 探测 + Mojang runtime 安装` | 目录夹具覆盖 Win/mac/Linux 布局；版本匹配规则单测 |
 | #9 | `feat(cli): headless 启动闭环` | CI 上 `qcl-cli launch 26.3` 下载完成并启动至主菜单（Linux + xvfb），退出码 0 |
 
-### Phase 2 · 桌面 MVP
+### Phase 2 · 桌面 MVP ✅ 已完成（实例管理与崩溃摘要除外）
 
 | PR | 内容 | 验收标准 |
 |---|---|---|
@@ -327,14 +327,14 @@ Qingci-Craft-Launcher/
 | #12 | `feat(ui): 实例管理 + 设置（内存/JVM 参数/Java 路径）` | 配置持久化并在重启后生效 |
 | #13 | `feat(app): 日志控制台 + 崩溃摘要` | 非 0 退出码能生成可导出的日志包 |
 
-### Phase 3 · 账号
+### Phase 3 · 账号 🟡 协议层已完成，界面待接入（等 Mojang 审核）
 
 | PR | 内容 | 验收标准 |
 |---|---|---|
 | #14 | `feat(auth): 设备码登录 + 令牌刷新 + keyring 存储` | 断网/过期场景下静默刷新成功；令牌不出现于任何日志 |
 | #15 | `feat(ui): 登录流程 + 皮肤头像` | 正版账号启动后显示正确用户名与皮肤头部 |
 
-### Phase 4 · 模组加载器
+### Phase 4 · 模组加载器 🟡 Fabric 合并逻辑已完成，界面待接入
 
 | PR | 内容 | 验收标准 |
 |---|---|---|
@@ -342,7 +342,7 @@ Qingci-Craft-Launcher/
 | #17 | `feat(loader): Forge / NeoForge`（安装器流程 + 库合并） | 至少覆盖一个 LTS 版本；失败时有明确错误码 |
 | #18 | `feat(mods): Modrinth 搜索与安装` | 依赖解析不破坏现有实例（安装前快照） |
 
-### Phase 5 · 发布工程
+### Phase 5 · 发布工程 ⬜ 未开始
 
 签名（Windows Authenticode / macOS codesign + notarize）、`tauri-plugin-updater` 自动更新、i18n（zh-CN / en-US）、`v1.0.0` 正式版。
 
@@ -360,12 +360,24 @@ Qingci-Craft-Launcher/
 |---|---|---|
 | `fmt` | ubuntu-latest | `cargo fmt --all --check`（最快失败，先跑） |
 | `clippy` | ubuntu-latest | `cargo clippy --workspace --all-targets -- -D warnings` |
-| `test` | **matrix: ubuntu / windows / macos** | `cargo test --workspace --all-features`；ubuntu 额外跑 `cargo llvm-cov` 并上传 Codecov |
-| `frontend` | ubuntu-latest | `pnpm install --frozen-lockfile` → `tsc --noEmit` → `eslint` → `vitest run` → `vite build` |
+| `test` | **matrix: ubuntu / windows / macos** | `cargo test --workspace --all-features` |
+| `coverage` | ubuntu-latest | `cargo llvm-cov` + 上传 Codecov（不阻断合并，只看趋势） |
+| `frontend` | ubuntu-latest | `pnpm install --frozen-lockfile` → `oxlint` → `vitest run` → `tsc --noEmit` → `vite build` |
 | `deny` | ubuntu-latest | `cargo deny check`（许可证白名单 + 已知漏洞 + 重复依赖） |
-| `build` | **matrix: 三平台** | `pnpm tauri build --no-bundle`（PR 只编译不打包，约 6–8 min） |
+| `build` | **matrix: 三平台** | `pnpm tauri build --no-bundle`（PR 只编译不打包） |
 
-**缓存**：`Swatinem/rust-cache@v2`（按 `Cargo.lock` 哈希 + target 分键）、pnpm store。实测可把三平台总耗时压到 10 min 内。
+> 前端 lint 用 **oxlint** 而非 eslint：`typescript-eslint` 的 peer 依赖是
+> `typescript <6.1.0`，与本项目使用的 TS 7 不兼容。oxlint 自带 TS 解析，不依赖 `typescript` 包。
+
+**缓存**：`Swatinem/rust-cache@v2`（按 `Cargo.lock` 哈希 + target 分键）、pnpm store、
+apt 的 `.deb` 与软件源索引（自定义 composite action，见 `.github/actions/linux-deps/`）。
+
+**实测耗时**（run 40213422671）：`build` 三平台 223 / 194 / 179 秒，`test` 137 / 118 / 69 秒，
+`coverage` 108 秒，`clippy` 76 秒。Linux 的依赖安装步骤约 50 秒——那是解包 196 个包的固定成本，
+缓存只消除下载（实测 apt 下载行数 196 → 0），不减少解包时间。
+
+**`build` job 按路径过滤**：纯文档或纯 CI 改动会跳过三平台编译（实测 596 秒 → 38 秒），
+但 job 本身仍报 `success`，避免卡住必需的状态检查。
 
 **Linux 构建前置依赖**（易漏，必须写进 workflow）：`libwebkit2gtk-4.1-dev`、`libappindicator3-dev`、`librsvg2-dev`、`patchelf`、`libssl-dev`。
 
