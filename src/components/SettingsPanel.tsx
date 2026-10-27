@@ -167,17 +167,12 @@ export function SettingsPanel({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 text-[13px] lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-4 gap-y-3 text-[13px] lg:grid-cols-2">
+        <GroupHeading title="实例" hint="每个实例是一套独立的游戏目录" />
         {/* 实例 */}
         <div className="lg:col-span-2">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-[var(--color-text-secondary)]">实例</span>
-            <span className="text-[12px] text-[var(--color-text-muted)]">
-              每个实例是一套独立的游戏目录，版本选择也各记各的
-            </span>
-          </div>
-
-          <ul className="mt-1.5 divide-y divide-[var(--color-border-subtle)] rounded border border-[var(--color-border-subtle)]">
+          {/* 用发丝环代替 border：外面已经有一层卡片，再套一层粗边框是重复的视觉分隔。 */}
+          <ul className="divide-y divide-[var(--color-border-subtle)] rounded-lg bg-[var(--color-surface)] ring-1 ring-inset ring-[var(--color-border-subtle)]">
             {settings.instances.map((instance) => (
               <li key={instance.name} className="flex items-center gap-2 px-2.5 py-2">
                 {renaming === instance.name ? (
@@ -288,6 +283,7 @@ export function SettingsPanel({
           </p>
         </div>
 
+        <GroupHeading title="存储位置" hint="版本、模组、存档都在这里" />
         {/* 游戏目录 */}
         <div className="lg:col-span-2">
           <label className="flex items-center gap-2 text-[var(--color-text-secondary)]">
@@ -322,6 +318,7 @@ export function SettingsPanel({
           </div>
         </div>
 
+        <GroupHeading title="账户与内存" hint="离线账户名与 JVM 堆上限" />
         {/* 玩家名 */}
         <div>
           <label
@@ -353,6 +350,7 @@ export function SettingsPanel({
           />
         </div>
 
+        <GroupHeading title="下载" hint="游戏文件的来源；内容仍逐个校验官方 SHA-1" />
         {/* 下载源 */}
         <div className="lg:col-span-2">
           <label htmlFor="download-source" className="text-[var(--color-text-secondary)]">
@@ -378,6 +376,7 @@ export function SettingsPanel({
           )}
         </div>
 
+        <GroupHeading title="Java" hint="留空则按版本要求自动挑选" />
         {/* Java */}
         <div className="lg:col-span-2">
           <label htmlFor="java" className="text-[var(--color-text-secondary)]">
@@ -480,6 +479,21 @@ export function InstallProgressBar({
           镜像
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * 设置页的分组标题。
+ *
+ * 用「一条发丝线 + 小字标签」分隔，而不是给每一组套一个带边框的盒子——
+ * 整页本来就有一层卡片，再叠几层框，视觉上全是横线，反而看不出分组。
+ */
+function GroupHeading({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <div className="mt-3 flex items-baseline gap-2 border-t border-[var(--color-border-subtle)] pt-3 first:mt-0 first:border-0 first:pt-0 lg:col-span-2">
+      <h3 className="text-[12px] font-medium text-[var(--color-text-secondary)]">{title}</h3>
+      {hint && <span className="text-[11px] text-[var(--color-text-muted)]">{hint}</span>}
     </div>
   );
 }
