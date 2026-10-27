@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import iconUrl from "../../src-tauri/icons/128x128.png";
 import type {
@@ -93,6 +93,9 @@ export function LauncherView({
   onSaveSettings,
   onRefreshJava,
   onSwitchInstance,
+  modCount,
+  onOpenGameDir,
+  onRefreshModCount,
   onCreateInstance,
   onRenameInstance,
   onDeleteInstance,
@@ -143,11 +146,24 @@ export function LauncherView({
   onSaveSettings: (input: SettingsInput) => void;
   onRefreshJava: () => void;
   onSwitchInstance: (name: string) => void;
+  /** 已装模组数量，显示在启动页信息区。 */
+  modCount: number | null;
+  /** 用系统文件管理器打开当前实例的游戏目录。 */
+  onOpenGameDir: () => void;
+  /** 回到启动页时刷新模组数量（在模组页装完就该变）。 */
+  onRefreshModCount: () => void;
   onCreateInstance: (name: string) => void;
   onRenameInstance: (from: string, to: string) => void;
   onDeleteInstance: (name: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("home");
+
+  // 回到启动页时刷新模组数量：在模组页装完/删完，这里应该立刻反映出来。
+  useEffect(() => {
+    if (tab === "home") {
+      onRefreshModCount();
+    }
+  }, [tab, onRefreshModCount]);
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const [picker, setPicker] = useState<"version" | "loader" | null>(null);
 
@@ -256,6 +272,9 @@ export function LauncherView({
               instances={settings?.instances ?? []}
               activeInstance={settings?.activeInstance ?? ""}
               onSwitchInstance={onSwitchInstance}
+              gameDir={settings?.gameDir ?? ""}
+              modCount={modCount}
+              onOpenGameDir={onOpenGameDir}
               selected={selected}
               selectedVersion={selectedVersion}
               loaderLabel={loaderLabel}

@@ -203,6 +203,9 @@ function Preview() {
       onCreateInstance={() => {}}
       onRenameInstance={() => {}}
       onDeleteInstance={() => {}}
+      modCount={63}
+      onOpenGameDir={() => {}}
+      onRefreshModCount={() => {}}
     />
   );
 }
