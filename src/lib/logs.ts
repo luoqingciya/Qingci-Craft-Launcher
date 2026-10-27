@@ -35,3 +35,53 @@ export function appendLog(
   }
   return next.length > max ? next.slice(next.length - max) : next;
 }
+
+/** 日志级别。由文本推导，不额外存字段——存了就要在每条追加路径上维护它。 */
+export type LogLevel = "info" | "warn" | "error";
+
+/**
+ * 判断一条日志的级别。
+ *
+ * 依据是 Minecraft 自己的格式 `[12:04:34] [Render thread/WARN]: ...`，
+ * 以及 stderr 这个兜底信号。刻意不追求穷尽：判错的代价只是筛选时多一行少一行，
+ * 而过度匹配（比如把包含 "error" 的普通句子当错误）会让筛选变得不可信。
+ */
+export function levelOf(entry: LogEntry): LogLevel {
+  // 先认 Minecraft / log4j 的 `[线程/级别]` 标记。这是最强的信号——有些 WARN
+  // 走的是 stderr，若先按流判断就会把它误判成错误（预览页那条 Realms 警告
+  // 就是这么被吃掉、点「警告」一行都筛不出来的）。
+  const tagged = entry.text.match(/\/(WARN|ERROR|FATAL|SEVERE)\]/);
+  if (tagged) {
+    return tagged[1] === "WARN" ? "warn" : "error";
+  }
+
+  // 没有标记时退回关键词。用词边界避免 "terror" 误命中；大小写不敏感，
+  // 因为模组自己写的 "Warning:" 也是小写开头。
+  if (/\b(FATAL|SEVERE|ERROR)\b/i.test(entry.text)) {
+    return "error";
+  }
+  if (/\bWARN(ING)?\b/i.test(entry.text)) {
+    return "warn";
+  }
+
+  // 最后才看流：stderr 是「没写级别、但走了错误流」的兜底。
+  if (entry.stream === "stderr") {
+    return "error";
+  }
+  return "info";
+}
+
+/** 按级别与关键词筛选日志。关键词为空表示不按内容过滤。 */
+export function filterLogs(
+  lines: readonly LogEntry[],
+  level: LogLevel | "all",
+  query: string,
+): LogEntry[] {
+  const needle = query.trim().toLowerCase();
+  return lines.filter((line) => {
+    if (level !== "all" && levelOf(line) !== level) {
+      return false;
+    }
+    return needle === "" || line.text.toLowerCase().includes(needle);
+  });
+}

@@ -4,7 +4,18 @@
 
 import { describe, expect, it } from "vitest";
 
-import { MAX_LINES, appendLog, type LogEntry } from "./logs";
+import {
+  MAX_LINES,
+  appendLog,
+  filterLogs,
+  levelOf,
+  type LogEntry,
+  type LogStreamKind,
+} from "./logs";
+
+function rawLine(text: string, stream: LogStreamKind = "stdout"): LogEntry {
+  return { id: 1, stream, text };
+}
 
 function line(id: number): LogEntry {
   return { id, stream: "stdout", text: `第 ${id} 行` };
@@ -43,5 +54,51 @@ describe("appendLog", () => {
 
     const lines = Array.from({ length: 10 }, (_, index) => line(index));
     expect(appendLog(lines, line(99))).toHaveLength(11);
+  });
+});
+
+describe("日志级别与筛选", () => {
+  it("认得出 Minecraft 的级别标记", () => {
+    expect(levelOf(rawLine("[12:04:34] [Render thread/WARN]: 慢"))).toBe("warn");
+    expect(levelOf(rawLine("[12:04:34] [Render thread/ERROR]: 炸了"))).toBe("error");
+    expect(levelOf(rawLine("[12:04:34] [main/INFO]: 正常"))).toBe("info");
+  });
+
+  it("没有标记时按关键词判断", () => {
+    expect(levelOf(rawLine("java.lang.NullPointerException: ERROR while loading"))).toBe("error");
+    expect(levelOf(rawLine("Warning: 这个模组有点旧"))).toBe("warn");
+    // 词边界：不能把含 error 的普通单词当错误
+    expect(levelOf(rawLine("terror of the deep"))).toBe("info");
+  });
+
+  it("stderr 没写级别时算错误，system 一律算信息", () => {
+    expect(levelOf(rawLine("随便什么", "stderr"))).toBe("error");
+    expect(levelOf(rawLine("随便什么", "system"))).toBe("info");
+  });
+
+  it("带级别标记的 stderr 行按标记走", () => {
+    // 有些 WARN 走 stderr。先按流判断会把它误判成错误，点「警告」就一行都筛不出来。
+    expect(levelOf(rawLine("[1] [Render thread/WARN]: 慢", "stderr"))).toBe("warn");
+  });
+
+  it("按级别筛选", () => {
+    const lines = [
+      rawLine("[1] [main/INFO]: a"),
+      rawLine("[2] [main/WARN]: b"),
+      rawLine("[3] [main/ERROR]: c"),
+    ];
+    expect(filterLogs(lines, "warn", "").map((l) => l.text)).toEqual(["[2] [main/WARN]: b"]);
+    expect(filterLogs(lines, "all", "").length).toBe(3);
+  });
+
+  it("按关键词筛选，忽略大小写与首尾空白", () => {
+    const lines = [rawLine("Loading 63 mods"), rawLine("Sound engine started")];
+    expect(filterLogs(lines, "all", "  MODS ").map((l) => l.text)).toEqual(["Loading 63 mods"]);
+  });
+
+  it("级别与关键词同时生效", () => {
+    const lines = [rawLine("[1] [main/WARN]: mods 有问题"), rawLine("[2] [main/INFO]: mods 正常")];
+    expect(filterLogs(lines, "warn", "mods").length).toBe(1);
+    expect(filterLogs(lines, "error", "mods").length).toBe(0);
   });
 });

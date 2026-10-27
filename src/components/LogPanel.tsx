@@ -2,15 +2,30 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { MAX_LINES, type LogEntry, type LogStreamKind } from "../lib/logs";
+import {
+  MAX_LINES,
+  filterLogs,
+  levelOf,
+  type LogEntry,
+  type LogLevel,
+  type LogStreamKind,
+} from "../lib/logs";
 
 const STREAM_STYLES: Record<LogStreamKind, string> = {
   stdout: "text-[var(--color-text-primary)]",
   stderr: "text-[var(--color-danger)]",
   system: "text-[var(--color-accent-text)]",
 };
+
+/** 级别筛选的选项。`all` 不是 `LogLevel`，所以单独列出来。 */
+const FILTERS: { id: LogLevel | "all"; label: string }[] = [
+  { id: "all", label: "全部" },
+  { id: "info", label: "信息" },
+  { id: "warn", label: "警告" },
+  { id: "error", label: "错误" },
+];
 
 /** 判定「贴着底部」的容差（像素）。留一点余量，避免舍入误差让跟随意外断开。 */
 const STICK_THRESHOLD = 40;
@@ -23,6 +38,13 @@ const STICK_THRESHOLD = 40;
  */
 export function LogPanel({ logs, onClear }: { logs: LogEntry[]; onClear: () => void }) {
   const container = useRef<HTMLDivElement>(null);
+
+  const [level, setLevel] = useState<LogLevel | "all">("all");
+  const [query, setQuery] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const visible = useMemo(() => filterLogs(logs, level, query), [logs, level, query]);
+  const filtered = visible.length !== logs.length;
 
   /**
    * 是否跟随到底部。
@@ -46,10 +68,11 @@ export function LogPanel({ logs, onClear }: { logs: LogEntry[]; onClear: () => v
       return;
     }
 
-    if (stick.current) {
+    // 一行都没筛出来时不滚动——那会把滚动条按到底，解除筛选后位置就丢了。
+    if (stick.current && visible.length > 0) {
       element.scrollTop = element.scrollHeight;
     }
-  }, [logs]);
+  }, [logs, visible]);
 
   function handleScroll() {
     const element = container.current;
@@ -60,26 +83,71 @@ export function LogPanel({ logs, onClear }: { logs: LogEntry[]; onClear: () => v
       element.scrollHeight - element.scrollTop - element.clientHeight < STICK_THRESHOLD;
   }
 
+  async function copyVisible() {
+    // 只复制**看得见的**行：筛出错误再复制，是排查时最常见的用法。
+    const ok = await copyText(visible.map((log) => log.text).join("\n"));
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    }
+  }
+
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      <div className="flex h-9 shrink-0 items-center justify-between px-4">
+      <div className="flex h-9 shrink-0 items-center justify-between gap-2 px-4">
         <h2 className="text-[12px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
           日志
         </h2>
-        <div className="flex items-center gap-3">
-          <span className="text-[12px] tabular-nums text-[var(--color-text-muted)]">
-            {logs.length >= MAX_LINES ? `最近 ${MAX_LINES} 行` : `${logs.length} 行`}
+        <div className="flex items-center gap-1">
+          <span className="mr-1 text-[12px] tabular-nums text-[var(--color-text-muted)]">
+            {filtered
+              ? `${visible.length} / ${logs.length} 行`
+              : logs.length >= MAX_LINES
+                ? `最近 ${MAX_LINES} 行`
+                : `${logs.length} 行`}
           </span>
-          <button
-            type="button"
-            onClick={onClear}
-            disabled={logs.length === 0}
-            className="rounded px-1.5 py-0.5 text-[12px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-30"
-          >
+          <ToolButton onClick={() => void copyVisible()} disabled={visible.length === 0}>
+            {copied ? "已复制" : "复制"}
+          </ToolButton>
+          <ToolButton onClick={onClear} disabled={logs.length === 0}>
             清空
-          </button>
+          </ToolButton>
         </div>
       </div>
+
+      {/* 筛选条只在有日志时出现：空面板上摆一排点不动的按钮只是噪音。 */}
+      {logs.length > 0 && (
+        <div className="flex shrink-0 items-center gap-2 px-4 pb-2">
+          <div role="group" aria-label="按级别筛选" className="flex items-center gap-0.5">
+            {FILTERS.map((item) => {
+              const active = level === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setLevel(item.id)}
+                  className={`rounded-md px-2 py-0.5 text-[12px] transition-colors ${
+                    active
+                      ? "bg-[var(--color-accent-soft)] font-medium text-[var(--color-accent-text)]"
+                      : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-secondary)]"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="筛选日志…"
+            spellCheck={false}
+            aria-label="筛选日志"
+            className="min-w-0 flex-1 rounded-md bg-[var(--color-surface-raised)] px-2 py-1 text-[12px] ring-1 ring-inset ring-[var(--color-border-subtle)] outline-none placeholder:text-[var(--color-text-muted)] focus:ring-[var(--color-accent)]"
+          />
+        </div>
+      )}
 
       <div
         ref={container}
@@ -93,10 +161,21 @@ export function LogPanel({ logs, onClear }: { logs: LogEntry[]; onClear: () => v
           <p className="text-[12px] text-[var(--color-text-muted)]">
             启动游戏后，输出会实时显示在这里。
           </p>
+        ) : visible.length === 0 ? (
+          <p className="text-[12px] text-[var(--color-text-muted)]">没有符合条件的日志。</p>
         ) : (
           <pre className="whitespace-pre-wrap break-all font-mono text-[12px] leading-[1.6]">
-            {logs.map((log) => (
-              <div key={log.id} className={STREAM_STYLES[log.stream]}>
+            {visible.map((log) => (
+              <div
+                key={log.id}
+                className={STREAM_STYLES[log.stream]}
+                // 警告行左侧加一道竖线，扫一眼就能定位，不必逐行读级别。
+                style={
+                  levelOf(log) === "warn"
+                    ? { boxShadow: "inset 2px 0 0 var(--color-warning)" , paddingLeft: 6 }
+                    : undefined
+                }
+              >
                 {log.text}
               </div>
             ))}
@@ -105,4 +184,54 @@ export function LogPanel({ logs, onClear }: { logs: LogEntry[]; onClear: () => v
       </div>
     </section>
   );
+}
+
+/** 标题栏上的小按钮。 */
+function ToolButton({
+  onClick,
+  disabled,
+  children,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded px-1.5 py-0.5 text-[12px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] disabled:opacity-30"
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * 复制到剪贴板。
+ *
+ * 先试 `navigator.clipboard`，失败再退回 `execCommand`：Tauri 的 WebView 在部分
+ * 平台上不把 `tauri://` 视作安全上下文，clipboard API 会直接抛错。
+ */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch {
+      ok = false;
+    }
+    document.body.removeChild(area);
+    return ok;
+  }
 }
