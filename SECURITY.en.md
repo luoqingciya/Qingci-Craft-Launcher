@@ -69,6 +69,36 @@ root of trust: **the public key compiled into the program**. Two consequences wo
   signature verification. A forged version number is stopped by the consistency check described
   above.
 
+### Trust boundary of the login flow
+
+Sign-in uses the OAuth 2.0 **device authorization grant** (RFC 8628), not the authorization code
+flow: the user opens a Microsoft page in their own browser and types a short code, so the launcher
+never sees the password.
+
+**Why there is no PKCE and no `state`** — both belong to the authorization code flow and do not exist
+in the device flow:
+
+| Parameter | Problem it solves | Why the device flow does not need it |
+| --- | --- | --- |
+| PKCE (`code_challenge` / `code_verifier`) | authorization code intercepted during the redirect | there is no redirect and no authorization code |
+| `state` | CSRF: proving the request came from us by echoing the value back on redirect | there is no redirect to echo it on |
+
+So "no PKCE/state" is not an omission — neither is defined by RFC 8628.
+
+**The risk this flow does have is device code phishing**: an attacker starts a device flow with their
+own app and tricks a victim into entering the code, which authorises the victim's account to the
+attacker's app. That happens outside the launcher and no client can prevent it; the only thing a user
+can check is the app name shown on Microsoft's page. The UI therefore must:
+
+- show the URL the user should visit and **never fold the code into a link**
+  (`verification_uri_complete` would destroy the user's ability to tell who they are talking to)
+- validate the URL with `qcl_auth::is_trusted_verification_uri` before opening it (https only, host
+  must be a Microsoft domain) rather than trusting the address in the response
+- respect the code's lifetime and stop polling when it expires
+
+**No tokens are persisted today** (a deliberate constraint of `qcl-auth`). Persistence will use the OS
+keychain (Windows Credential Manager / macOS Keychain / Secret Service), never a config file.
+
 ### What this project will not do
 
 - Provide any way to bypass authentication

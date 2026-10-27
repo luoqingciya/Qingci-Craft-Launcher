@@ -249,3 +249,46 @@ impl From<DownloadError> for AuthError {
         Self::Network(error.to_string())
     }
 }
+
+/// 判断服务端返回的验证地址是否可以展示给用户、并交给系统浏览器打开。
+///
+/// 这个地址来自网络响应。虽然整条链路是 HTTPS 直连微软，但界面会把它**显示出来**
+/// 再交给浏览器，所以不该盲信：只接受 https，且主机必须属于微软的登录域名。
+///
+/// 它拦的是这几类伪装：
+///
+/// - `https://microsoft.com.evil.com`（后缀伪装，主机其实是 evil.com）
+/// - `https://evil.com/?next=https://microsoft.com`（域名只出现在路径里）
+/// - `https://microsoft.com@evil.com`（userinfo 伪装，真正的主机在 @ 之后）
+/// - `https://evil.com\@microsoft.com`（浏览器把 `\` 当 `/`，主机是 evil.com）
+/// - `http://...`（明文会被中间人替换页面）
+pub fn is_trusted_verification_uri(uri: &str) -> bool {
+    const ALLOWED: [&str; 3] = ["microsoft.com", "microsoftonline.com", "live.com"];
+
+    // 带空白或控制字符的地址一律拒绝：浏览器可能把它规范化成别的东西，
+    // 而我们的解析与浏览器的解析一旦不一致，校验就形同虚设。
+    if uri.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return false;
+    }
+
+    let lower = uri.to_ascii_lowercase();
+    let Some(rest) = lower.strip_prefix("https://") else {
+        return false;
+    };
+
+    // authority 到第一个 / \ ? # 为止；反斜杠也要算，否则 `evil.com\@microsoft.com`
+    // 会被我们解析成 microsoft.com，而浏览器认为是 evil.com。
+    let authority = rest.split(['/', '\\', '?', '#']).next().unwrap_or("");
+    // 去掉 userinfo（`a@b` 里的 a），主机在最后一个 @ 之后。
+    let authority = authority.rsplit('@').next().unwrap_or(authority);
+    // 去掉端口。
+    let host = authority.split(':').next().unwrap_or("");
+
+    if host.is_empty() {
+        return false;
+    }
+
+    ALLOWED
+        .iter()
+        .any(|allowed| host == *allowed || host.ends_with(&format!(".{allowed}")))
+}
