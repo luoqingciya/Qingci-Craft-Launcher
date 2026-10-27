@@ -26,6 +26,19 @@ import {
  * 依赖解析刻意没做——Modrinth 的依赖关系不保证完整，猜错了会让人装上一个
  * 启动即崩的组合；缺依赖时游戏自己的日志说得更清楚。
  */
+
+/** 按下载量降序。 */
+const byDownloads = (a: ModHit, b: ModHit): number => b.downloads - a.downloads;
+
+/** 排序方式。相关度是 Modrinth 的原始顺序，下载量是按热度重排。 */
+const SORTS: { id: "relevance" | "downloads"; label: string }[] = [
+  { id: "relevance", label: "相关度" },
+  { id: "downloads", label: "下载量" },
+];
+
+/** 空的「本次已装」集合：作用域不匹配时复用它，避免每次渲染都 new 一个。 */
+const EMPTY_IDS: ReadonlySet<string> = new Set();
+
 export function ModsTab({
   version,
   loader,
@@ -56,8 +69,22 @@ export function ModsTab({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
+  const [sort, setSort] = useState<"relevance" | "downloads">("relevance");
+  // 本次会话装过哪些项目。真正的「已安装」需要后端把 jar 文件名映射回项目 id，
+  // 现在做不到；先只记本会话，至少避免同一个模组被连点两次。
+  const [installedHere, setInstalledHere] = useState<{ scope: string; ids: string[] }>({
+    scope: "",
+    ids: [],
+  });
 
   const modLoader = loader ? "fabric" : "";
+  // 版本或加载器一换，之前记下的「装过」就不再适用了。
+  const scope = `${version ?? ""}|${loader}`;
+  const installedIds = installedHere.scope === scope ? new Set(installedHere.ids) : EMPTY_IDS;
+  // 用副本 + sort 而不是 `toSorted`：后者是 ES2023，macOS 12 上的 Safari 15 没有，
+  // 而项目支持 macOS 12+。tsconfig 的 target 也是 ES2022。
+  // oxlint-disable-next-line unicorn/no-array-sort
+  const sortedResults = sort === "downloads" ? [...results].sort(byDownloads) : results;
 
   const refreshInstalled = useCallback(async () => {
     try {
@@ -190,6 +217,9 @@ export function ModsTab({
           : `已安装到 ${paths[0] ?? "mods/"}`,
       );
       await refreshInstalled();
+      // 记下「这次装过」，让按钮变成不可重复点的「已安装」。
+      const known = installedHere.scope === scope ? installedHere.ids : [];
+      setInstalledHere({ scope, ids: [...known, hit.projectId] });
     } catch (cause: unknown) {
       setError(String(cause));
     } finally {
@@ -329,8 +359,38 @@ export function ModsTab({
           </p>
         )}
 
+        {searched && results.length > 0 && (
+          <div className="flex items-center justify-between gap-2 pb-1">
+            <span className="text-[11px] text-[var(--color-text-muted)]">
+              <span className="tabular-nums">{results.length}</span> 个结果 · 适配{" "}
+              <span className="font-mono">{version}</span> ·{" "}
+              {loader ? `Fabric ${loader}` : "原版"}
+            </span>
+            <div role="group" aria-label="排序" className="flex items-center gap-0.5">
+              {SORTS.map((item) => {
+                const active = sort === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setSort(item.id)}
+                    className={`rounded-md px-2 py-0.5 text-[11px] transition-colors ${
+                      active
+                        ? "bg-[var(--color-accent-soft)] font-medium text-[var(--color-accent-text)]"
+                        : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-secondary)]"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <ul className="flex flex-col gap-2">
-          {results.map((hit) => (
+          {sortedResults.map((hit) => (
             <li
               key={hit.projectId}
               className="flex items-start gap-3 rounded-xl bg-[var(--color-surface-raised)] p-3.5 ring-1 ring-inset ring-[var(--color-border-subtle)]"
@@ -369,10 +429,14 @@ export function ModsTab({
               <button
                 type="button"
                 onClick={() => void install(hit)}
-                disabled={installingId !== null}
+                disabled={installingId !== null || installedIds.has(hit.projectId)}
                 className="h-9 shrink-0 rounded-lg px-3.5 text-[12px] text-[var(--color-text-primary)] ring-1 ring-inset ring-[var(--color-border-strong)] transition-colors hover:bg-[var(--color-surface-hover)] disabled:opacity-40"
               >
-                {installingId === hit.projectId ? "安装中…" : "安装"}
+                {installingId === hit.projectId
+                  ? "安装中…"
+                  : installedIds.has(hit.projectId)
+                    ? "已安装"
+                    : "安装"}
               </button>
             </li>
           ))}
