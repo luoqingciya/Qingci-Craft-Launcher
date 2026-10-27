@@ -20,6 +20,87 @@ import type { LogEntry } from "./lib/logs";
 import { applyInitialTheme } from "./lib/theme";
 import "./styles.css";
 
+/**
+ * 最小 IPC 桩。
+ *
+ * 模组页会真的发 IPC 请求。预览页跑在浏览器里、没有 Tauri，不塞这层的话
+ * 切到「模组」只会看到一片错误态——调样式时毫无参考价值。
+ *
+ * 只覆盖模组页用到的几个命令；其余返回 `null`，调用方自己会落到错误分支。
+ */
+const MOCK_CATEGORIES = [
+  { id: "optimization", label: "性能优化" },
+  { id: "decoration", label: "装饰" },
+  { id: "library", label: "前置库" },
+  { id: "adventure", label: "冒险" },
+  { id: "equipment", label: "装备" },
+  { id: "technology", label: "科技" },
+];
+
+const MOCK_HITS = [
+  {
+    projectId: "sodium",
+    title: "Sodium",
+    description: "现代化的渲染优化模组，大幅提升帧率并减少卡顿。",
+    downloads: 41_820_553,
+    author: "jellysquid3",
+    iconUrl: null,
+    slug: "sodium",
+    zhName: "钠",
+  },
+  {
+    projectId: "iris",
+    title: "Iris Shaders",
+    description: "兼容 OptiFine 光影包的高性能光影加载器。",
+    downloads: 18_204_991,
+    author: "coderbot",
+    iconUrl: null,
+    slug: "iris",
+    zhName: "鸢尾花光影",
+  },
+  {
+    projectId: "lithium",
+    title: "Lithium",
+    description: "不改变原版行为的前提下优化游戏逻辑与服务端性能。",
+    downloads: 12_663_410,
+    author: "jellysquid3",
+    iconUrl: null,
+    slug: "lithium",
+    zhName: "锂",
+  },
+  {
+    projectId: "fabric-api",
+    title: "Fabric API",
+    description: "绝大多数 Fabric 模组依赖的前置库。",
+    downloads: 63_114_882,
+    author: "modmuss50",
+    iconUrl: null,
+    slug: "fabric-api",
+    zhName: "Fabric API",
+  },
+];
+
+if (!("__TAURI_INTERNALS__" in window)) {
+  Object.defineProperty(window, "__TAURI_INTERNALS__", {
+    value: {
+      invoke: async (command: string) => {
+        switch (command) {
+          case "list_mods":
+            return ["fabric-api-0.140.2+26.3.jar", "sodium-fabric-0.6.13.jar"];
+          case "list_mod_categories":
+            return MOCK_CATEGORIES;
+          case "search_mods":
+            return { query: "优化", hits: MOCK_HITS };
+          case "check_mod_updates":
+            return [];
+          default:
+            return null;
+        }
+      },
+    },
+  });
+}
+
 applyInitialTheme();
 
 const VERSIONS: VersionSummary[] = [

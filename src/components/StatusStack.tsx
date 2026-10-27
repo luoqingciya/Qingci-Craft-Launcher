@@ -43,7 +43,7 @@ export function StatusStack({
       aria-live="polite"
     >
       {progress && (
-        <div className="status-enter pointer-events-auto rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-3 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.45)]">
+        <div className="status-enter pointer-events-none rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-3 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.45)]">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-[12px] text-[var(--color-text-secondary)]">
               正在下载{phaseLabel(progress.phase)} {progress.completed}/{progress.total}
@@ -95,7 +95,7 @@ function StatusCard({
   const color = tone === "success" ? "var(--color-success)" : "var(--color-danger)";
   return (
     <div
-      className="status-enter pointer-events-auto flex items-start gap-2.5 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-3 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.45)]"
+      className="status-enter pointer-events-none flex items-start gap-2.5 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-3 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.45)]"
       role={tone === "danger" ? "alert" : "status"}
     >
       <span
@@ -118,7 +118,7 @@ function StatusCard({
         type="button"
         onClick={onDismiss}
         aria-label="关闭提示"
-        className="-mr-1 -mt-1 shrink-0 rounded p-1 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+        className="pointer-events-auto -mr-1 -mt-1 shrink-0 rounded p-1 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
       >
         <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.6">
           <path d="M3 3l6 6M9 3l-6 6" strokeLinecap="round" />
