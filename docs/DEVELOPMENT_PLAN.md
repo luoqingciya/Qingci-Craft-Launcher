@@ -401,7 +401,7 @@ apt 的 `.deb` 与软件源索引（自定义 composite action，见 `.github/ac
 触发：推送 `v*` tag（或 `workflow_dispatch`，默认 dry run）。
 
 ```
-tag v0.1.1
+tag v0.1.2
   └─ publish (windows-latest)
        ├─ 校验 tag / package.json / tauri.conf.json / Cargo.toml 四处版本一致
        ├─ pnpm tauri build --bundles nsis --config tauri.release.json

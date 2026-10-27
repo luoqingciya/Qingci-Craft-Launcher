@@ -121,6 +121,14 @@ It is generated **before a release**, not per PR. The unreleased section is "eve
 last tag", so regenerating it in each PR guarantees conflicts between parallel PRs and constant
 reordering.
 
+**Concretely**: the release PR (`chore(release): x.y.z`) must include the regenerated `CHANGELOG.md`.
+This rule was added after the fact — both v0.1.1 and v0.1.2 shipped without regenerating it, so the
+changelog was stuck on the first five PRs until it was fixed after v0.1.2. A rule that is not tied to
+a specific step is not a rule.
+
+You do not need `git-cliff` installed: grab a prebuilt binary from its
+[releases](https://github.com/orhun/git-cliff/releases), or `cargo install git-cliff`.
+
 Corollary: **PR titles appear verbatim in the changelog**. That is the practical reason Section 4
 insists on Conventional Commits — it decides whether users read
 "feat(core): domain model for version manifest and metadata" or "update stuff".

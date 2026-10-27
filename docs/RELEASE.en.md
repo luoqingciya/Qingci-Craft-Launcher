@@ -9,17 +9,21 @@ a newer version exists it downloads the installer and **verifies the signature a
 the bundled public key before installing**.
 
 ```
-tag v0.1.1
+tag v0.1.2
    │
    ▼
-GitHub Actions (windows-latest)
-   ├─ pnpm tauri build --bundles nsis
-   ├─ artifacts: QingciCraftLauncher_0.1.1_x64-setup.exe + .sig
-   ├─ scripts/make-latest-json.mjs → latest.json
-   └─ scripts/publish-cos.mjs → cos://qcl-1331847184/releases/
-                                   ├─ QingciCraftLauncher_0.1.1_x64-setup.exe
-                                   ├─ ...exe.sig
-                                   └─ latest.json
+GitHub Actions
+   ├─ prepare   verify the three version strings + the signing key
+   ├─ build     matrix: Windows → NSIS / Linux → AppImage + deb (both signed)
+   └─ publish   merge artifacts → write latest.json → upload to COS → create the Release
+                   │
+                   ├─ COS (only what auto-update needs)
+                   │    ├─ QingciCraftLauncher_0.1.2_x64-setup.exe
+                   │    ├─ ...exe.sig
+                   │    └─ latest.json            ← uploaded last
+                   │
+                   └─ GitHub Release (everything)
+                        └─ the three above + AppImage + AppImage.sig + deb
    │
    ▼
 client startup → GET https://qcl.luoqingciya.cn/releases/latest.json
@@ -27,6 +31,10 @@ client startup → GET https://qcl.luoqingciya.cn/releases/latest.json
    └─ newer → badge on the About tab → "Download and install"
               → signature check → silent install → relaunch
 ```
+
+The manifest only carries `windows-x86_64`: the Linux AppImage is 83 MB and does not participate in
+auto-update, so putting it on COS would cost bandwidth for nothing — it stays on GitHub Releases
+together with the deb.
 
 ## One-time setup
 
@@ -124,11 +132,18 @@ yet".
 #    Cargo.toml                 [workspace.package] version
 #      └─ reaches the game's --version and the HTTP User-Agent via qcl_core::LAUNCHER_VERSION
 
-# 2. commit and tag
-git commit -am "chore(release): 0.1.1"
-git tag v0.1.1
+# 2. regenerate the changelog (include it in the same PR, do not fix it afterwards)
+git cliff --config cliff.toml -o CHANGELOG.md
+
+# 3. commit and tag (replace the version with the one you are shipping)
+git commit -am "chore(release): 0.1.3"
+git tag v0.1.3
 git push origin main --tags
 ```
+
+Step 2 is easy to forget — both v0.1.1 and v0.1.2 skipped it, leaving the changelog stuck on the
+project's first five PRs until it was repaired afterwards. The reason is mundane: the rule lived in
+CONTRIBUTING as "generate before a release" without being tied to any concrete step.
 
 The `Release` workflow then builds, signs, generates the manifest, uploads to COS and
 creates a GitHub Release with the installer and `.sig` attached.
@@ -152,13 +167,13 @@ Two distribution channels, deliberately kept apart:
 | GitHub Releases | all of the above, plus Linux AppImage and deb | manual downloads |
 
 `latest.json` therefore carries **only** a `windows-x86_64` entry. The Linux artifacts stay on GitHub
-Releases: the AppImage is 80 MB and does not participate in auto-update, so putting it on COS would
+Releases: the AppImage is 83 MB and does not participate in auto-update, so putting it on COS would
 cost bandwidth for nothing.
 
-- **Windows**: NSIS, 3.3 MB, reuses the system WebView2; auto-update installs silently and relaunches.
-- **Linux AppImage**: 80 MB. Self-contained — it carries the whole WebKitGTK + JavaScriptCore + GTK3
+- **Windows**: NSIS, 3.5 MB, reuses the system WebView2; auto-update installs silently and relaunches.
+- **Linux AppImage**: 83 MB. Self-contained — it carries the whole WebKitGTK + JavaScriptCore + GTK3
   stack (530 files once extracted), which is why it is over ten times the size of the deb.
-- **Linux deb**: 4.8 MB, depends on the distribution's `libwebkit2gtk-4.1`.
+- **Linux deb**: 4.9 MB, depends on the distribution's `libwebkit2gtk-4.1`.
 - **Linux in general**: no auto-update. The About page detects Linux and points at the download page
   instead of showing a button that would only fail.
 - **macOS**: not published. Auto-update needs the updater's `zip` feature to unpack `.app.tar.gz`,

@@ -34,7 +34,8 @@ body = """\
 - {% if commit.scope %}**{{ commit.scope }}**：{% endif %}{{ commit.message | split(pat="\\n") | first | trim }}
 {% endfor -%}
 {% endif -%}
-{% endfor -%}
+{% endfor %}
+
 """
 trim = true
 
@@ -45,6 +46,7 @@ split_commits = false
 # 未匹配任何规则的非规范提交会被丢弃（例如仓库初始化时的 "Initial commit"）。
 filter_commits = true
 commit_parsers = [
+  { message = "^Initial commit", skip = true },
   { message = "^feat", group = "新增" },
   { message = "^fix", group = "修复" },
   { message = "^perf", group = "性能" },

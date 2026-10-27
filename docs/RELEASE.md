@@ -7,23 +7,30 @@ Qingci Craft Launcher 的更新走「GitHub Actions 构建 → 腾讯云 COS 分
 就下载安装包，**先用内置公钥校验签名，校验通过才安装**。
 
 ```
-tag v0.1.1
+tag v0.1.2
    │
    ▼
-GitHub Actions (windows-latest)
-   ├─ pnpm tauri build --bundles nsis
-   ├─ 产物：QingciCraftLauncher_0.1.1_x64-setup.exe + .sig
-   ├─ scripts/make-latest-json.mjs → latest.json
-   └─ scripts/publish-cos.mjs → cos://qcl-1331847184/releases/
-                                   ├─ QingciCraftLauncher_0.1.1_x64-setup.exe
-                                   ├─ ...exe.sig
-                                   └─ latest.json
+GitHub Actions
+   ├─ prepare   校验三处版本号 + 签名密钥（不一致就不让两台机器白编译）
+   ├─ build     matrix：Windows 出 NSIS / Linux 出 AppImage + deb（都签名）
+   └─ publish   合并产物 → 生成 latest.json → 推 COS → 建 GitHub Release
+                   │
+                   ├─ COS（只放自动更新需要的）
+                   │    ├─ QingciCraftLauncher_0.1.2_x64-setup.exe
+                   │    ├─ ...exe.sig
+                   │    └─ latest.json            ← 最后传
+                   │
+                   └─ GitHub Release（全部产物）
+                        └─ 上面三个 + AppImage + AppImage.sig + deb
    │
    ▼
 客户端启动 → GET https://qcl.luoqingciya.cn/releases/latest.json
    ├─ 版本不新 → 什么都不做（不打扰）
    └─ 有新版本 → 「关于」页提示 → 用户点「下载并安装」→ 校验签名 → 静默安装 → 自动重启
 ```
+
+清单里只有 `windows-x86_64` 一条：Linux 的 AppImage 有 83 MB，又不参与自动更新，
+放 COS 上只是白占带宽，所以它和 deb 一起只留在 GitHub Release。
 
 ## 一次性配置
 
@@ -114,11 +121,17 @@ curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/nope.txt
 #    Cargo.toml                 [workspace.package] version
 #      └─ 它会经 qcl_core::LAUNCHER_VERSION 进到游戏的 --version 与 HTTP User-Agent
 
-# 2. 提交并打标签
-git commit -am "chore(release): 0.1.1"
-git tag v0.1.1
+# 2. 重新生成更新日志（同一个 PR 里带上，不要等发完再补）
+git cliff --config cliff.toml -o CHANGELOG.md
+
+# 3. 提交并打标签（下面的版本号换成实际要发的）
+git commit -am "chore(release): 0.1.3"
+git tag v0.1.3
 git push origin main --tags
 ```
+
+第 2 步容易漏——v0.1.1 和 v0.1.2 都漏了，日志停在项目最初 5 个 PR 上，事后才补回来。
+原因很朴素：规则只写在 CONTRIBUTING 里说「发布前生成」，没落到具体某一步，就一定会忘。
 
 标签推上去后 `Release` workflow 自动跑：构建 → 签名 → 生成清单 → 推 COS → 建
 GitHub Release（附安装包与 `.sig`）。
@@ -141,12 +154,12 @@ GitHub Release（附安装包与 `.sig`）。
 | GitHub Releases | 上面那些，外加 Linux 的 AppImage 与 deb | 人工下载 |
 
 所以 `latest.json` 里**只有** `windows-x86_64` 一条。Linux 产物留在 GitHub Releases：
-AppImage 有 80 MB，又不参与自动更新，放 COS 上只是白占带宽。
+AppImage 有 83 MB，又不参与自动更新，放 COS 上只是白占带宽。
 
-- **Windows**：NSIS 3.3 MB，复用系统 WebView2，自动更新走静默安装 + 重启。
-- **Linux AppImage**：80 MB。自包含，把 WebKitGTK + JavaScriptCore + GTK3 整套塞进去了
+- **Windows**：NSIS 3.5 MB，复用系统 WebView2，自动更新走静默安装 + 重启。
+- **Linux AppImage**：83 MB。自包含，把 WebKitGTK + JavaScriptCore + GTK3 整套塞进去了
   （解出来 530 个文件），所以体积是 deb 的十几倍。
-- **Linux deb**：4.8 MB，依赖发行版的 `libwebkit2gtk-4.1`。
+- **Linux deb**：4.9 MB，依赖发行版的 `libwebkit2gtk-4.1`。
 - **Linux 整体不提供自动更新**。「关于」页会识别出 Linux，直接引导到下载页，
   而不是给一个点了就报错的按钮。
 - **macOS**：不发布。自动更新需要 updater 的 `zip` 特性来解压 `.app.tar.gz`，而该特性
