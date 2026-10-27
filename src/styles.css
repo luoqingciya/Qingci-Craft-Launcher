@@ -104,3 +104,27 @@ body {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* 浮层提示的入场：从下方轻轻滑入。位移只有 6px——
+   大位移在频繁出现的进度卡上会显得毛躁。 */
+@keyframes status-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.status-enter {
+  animation: status-enter 160ms ease-out;
+}
+
+/* 系统设置里关了动画的用户，连这 160ms 也不要。 */
+@media (prefers-reduced-motion: reduce) {
+  .status-enter {
+    animation: none;
+  }
+}

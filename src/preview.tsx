@@ -91,6 +91,8 @@ function Preview() {
       // 想看崩溃卡片时，把这里换成 { exitCode: 1, headline: "…", lines: ["…"] }
       crash={null}
       onDismissCrash={() => {}}
+      onDismissMessage={() => {}}
+      onDismissError={() => {}}
       // 想看更新卡片时，把这里换成 { kind: "available", info: { version: "0.1.1", notes: "…" } }
       account={null}
       msaLogin

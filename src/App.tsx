@@ -58,6 +58,23 @@ export default function App() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // 成功提示几秒后自动收起。
+  //
+  // 定时器放在状态的所有者这里，而不是展示组件里：展示组件用 effect 改自己的
+  // state 会被 react-hooks 拦下（也确实容易写出竞态），而「一条提示活多久」
+  // 本来就是业务决定，不是渲染细节。
+  const messageTimer = useRef<number | null>(null);
+  const showMessage = useCallback((text: string | null) => {
+    if (messageTimer.current !== null) {
+      window.clearTimeout(messageTimer.current);
+      messageTimer.current = null;
+    }
+    setMessage(text);
+    if (text !== null) {
+      messageTimer.current = window.setTimeout(() => setMessage(null), 5000);
+    }
+  }, []);
+
   const [status, setStatus] = useState<GameStatus>({ running: false, version: null });
   const [logs, setLogs] = useState<LogEntry[]>([]);
   // 上次退出码：null 表示被用户终止，0 表示正常退出。
@@ -263,13 +280,13 @@ export default function App() {
     setSettingsError(null);
     try {
       setSettings(await saveSettings(input));
-      setMessage("设置已保存");
+      showMessage("设置已保存");
     } catch (cause: unknown) {
       setSettingsError(String(cause));
     } finally {
       setSavingSettings(false);
     }
-  }, []);
+  }, [showMessage]);
 
   /**
    * 切换/新建/删除实例后的统一收尾。
@@ -346,11 +363,11 @@ export default function App() {
     }
     setBusy(true);
     setError(null);
-    setMessage(null);
+    showMessage(null);
     setProgress(null);
     try {
       const summary = await installGameVersion(selected, loader === "" ? null : loader);
-      setMessage(
+      showMessage(
         `${summary.version} 已就绪：版本文件 ${summary.downloaded} 个下载 / ${summary.skipped} 个跳过，` +
           `资产 ${summary.assets} 个，natives ${summary.natives} 个`,
       );
@@ -360,7 +377,7 @@ export default function App() {
       setBusy(false);
       setProgress(null);
     }
-  }, [selected, loader]);
+  }, [selected, loader, showMessage]);
 
   const launch = useCallback(async () => {
     if (!selected) {
@@ -370,7 +387,7 @@ export default function App() {
     // 之前用「安装后记住的 id」，没点过安装就直接启动会静默启动原版。
     setBusy(true);
     setError(null);
-    setMessage(null);
+    showMessage(null);
     setExitCode(undefined);
     setCrashReport(null);
     setCrashDismissed(false);
@@ -382,7 +399,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [selected, loader]);
+  }, [selected, loader, showMessage]);
 
   const stop = useCallback(async () => {
     setError(null);
@@ -406,6 +423,8 @@ export default function App() {
       logs={logs}
       crash={crash}
       onDismissCrash={() => setCrashDismissed(true)}
+      onDismissMessage={() => showMessage(null)}
+      onDismissError={() => setError(null)}
       update={update.state}
       portable={portable}
       account={account.account}
