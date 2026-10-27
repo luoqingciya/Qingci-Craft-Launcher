@@ -101,7 +101,7 @@ PR 标题必须符合该格式，因为合并时使用 **Squash merge**，PR 标
 **不手工编辑**。
 
 ```bash
-git cliff --config cliff.toml -o CHANGELOG.md    # 重新生成全量
+git cliff --config cliff.toml --tag v0.1.3 -o CHANGELOG.md   # 重新生成全量，并按这次要发的版本命名
 git cliff --config cliff.toml --unreleased       # 仅预览未发布部分
 ```
 

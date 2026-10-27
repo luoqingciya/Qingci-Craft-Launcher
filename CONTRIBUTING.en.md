@@ -113,7 +113,7 @@ Check visual changes there first, and keep the mock data in `src/preview.tsx` up
 Commits and is **never edited by hand**.
 
 ```bash
-git cliff --config cliff.toml -o CHANGELOG.md    # regenerate everything
+git cliff --config cliff.toml --tag v0.1.3 -o CHANGELOG.md   # regenerate everything, labelled with the version being shipped
 git cliff --config cliff.toml --unreleased       # preview the unreleased section
 ```
 

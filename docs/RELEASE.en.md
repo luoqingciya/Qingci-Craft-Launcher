@@ -149,7 +149,10 @@ yet".
 #      └─ reaches the game's --version and the HTTP User-Agent via qcl_core::LAUNCHER_VERSION
 
 # 2. regenerate the changelog (include it in the same PR, do not fix it afterwards)
-git cliff --config cliff.toml -o CHANGELOG.md
+#    --tag labels the unreleased section with the version being shipped. Without it
+#    the tag does not exist yet, so git-cliff can only write "unreleased", and fixing
+#    that afterwards costs another PR.
+git cliff --config cliff.toml --tag v0.1.3 -o CHANGELOG.md
 
 # 3. commit and tag (replace the version with the one you are shipping)
 git commit -am "chore(release): 0.1.3"

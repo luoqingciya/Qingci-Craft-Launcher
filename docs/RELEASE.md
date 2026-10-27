@@ -135,7 +135,9 @@ curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/nope.txt
 #      └─ 它会经 qcl_core::LAUNCHER_VERSION 进到游戏的 --version 与 HTTP User-Agent
 
 # 2. 重新生成更新日志（同一个 PR 里带上，不要等发完再补）
-git cliff --config cliff.toml -o CHANGELOG.md
+#    --tag 把「未发布」段直接标成这次要发的版本。不加它，因为标签还没建，
+#    git-cliff 只能写「未发布」，发完再补就又多一个 PR。
+git cliff --config cliff.toml --tag v0.1.3 -o CHANGELOG.md
 
 # 3. 提交并打标签（下面的版本号换成实际要发的）
 git commit -am "chore(release): 0.1.3"
