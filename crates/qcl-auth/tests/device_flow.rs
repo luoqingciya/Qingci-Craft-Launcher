@@ -238,3 +238,88 @@ async fn polling_stops_when_the_user_declines() {
 
     assert!(matches!(error, AuthError::Declined), "实际：{error:?}");
 }
+
+/// 验证地址的校验。
+///
+/// 这个函数的存在理由：地址来自响应，界面会把它显示出来并交给浏览器。我们不解析 URL，
+/// 只做「够用且不易绕过」的检查——所以每一条绕过手法都要有对应的用例，否则改坏了
+/// 也没人发现。
+mod verification_uri {
+    use qcl_auth::is_trusted_verification_uri;
+
+    #[test]
+    fn 微软域名放行() {
+        assert!(is_trusted_verification_uri("https://microsoft.com/link"));
+        assert!(is_trusted_verification_uri(
+            "https://www.microsoft.com/link"
+        ));
+        assert!(is_trusted_verification_uri(
+            "https://login.microsoftonline.com/consumers/oauth2/v2.0/deviceauth"
+        ));
+        // 带端口是合法的
+        assert!(is_trusted_verification_uri(
+            "https://microsoft.com:443/link"
+        ));
+    }
+
+    #[test]
+    fn 明文拒绝() {
+        assert!(!is_trusted_verification_uri("http://microsoft.com/link"));
+        assert!(!is_trusted_verification_uri("javascript:alert(1)"));
+        assert!(!is_trusted_verification_uri("microsoft.com/link"));
+    }
+
+    #[test]
+    fn 后缀伪装拒绝() {
+        // 主机其实是 evil.com，只是名字以 microsoft.com 结尾
+        assert!(!is_trusted_verification_uri(
+            "https://microsoft.com.evil.com/link"
+        ));
+        assert!(!is_trusted_verification_uri(
+            "https://notmicrosoft.com/link"
+        ));
+    }
+
+    #[test]
+    fn 域名只出现在路径或查询串里也拒绝() {
+        assert!(!is_trusted_verification_uri(
+            "https://evil.com/?next=https://microsoft.com"
+        ));
+        assert!(!is_trusted_verification_uri(
+            "https://evil.com/microsoft.com"
+        ));
+    }
+
+    #[test]
+    fn userinfo_伪装拒绝() {
+        // 浏览器认为主机是 evil.com
+        assert!(!is_trusted_verification_uri(
+            "https://microsoft.com@evil.com/"
+        ));
+        assert!(!is_trusted_verification_uri("https://user@evil.com/"));
+    }
+
+    #[test]
+    fn 反斜杠伪装拒绝() {
+        // 浏览器把 \ 当 /，所以主机是 evil.com；我们若只按 / 切分就会误判成
+        // microsoft.com——这类解析差异是校验最容易失效的地方。
+        assert!(!is_trusted_verification_uri(
+            "https://evil.com\\@microsoft.com/"
+        ));
+    }
+
+    #[test]
+    fn 空白与控制字符拒绝() {
+        assert!(!is_trusted_verification_uri(
+            "https://microsoft.com\n.evil.com/"
+        ));
+        assert!(!is_trusted_verification_uri("https://micro soft.com/"));
+    }
+
+    #[test]
+    fn 空与畸形拒绝() {
+        assert!(!is_trusted_verification_uri(""));
+        assert!(!is_trusted_verification_uri("https://"));
+        assert!(!is_trusted_verification_uri("https:///path"));
+    }
+}
