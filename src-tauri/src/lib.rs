@@ -344,6 +344,31 @@ pub struct RuntimeInfo {
     /// 判据是安装目录里有没有 NSIS 写的 `uninstall.exe`。用它而不是「路径在
     /// %LOCALAPPDATA% 下」，是因为安装时允许自选路径，而卸载器在哪个目录都会写。
     pub installed: bool,
+    /// 本次构建是否内置了微软登录所需的客户端 ID。
+    ///
+    /// 为 false 时界面要说明「此构建未启用微软登录」，而不是给一个点了必然失败的按钮。
+    pub msa_login: bool,
+}
+
+/// 去掉首尾空白，空串视为「没有」。
+///
+/// 单独拆出来是因为它是这段逻辑里唯一值得测的部分：`option_env!` 本身没法在测试里改，
+/// 但「空白算不算有效 ID」是可以断言的。
+fn normalize_client_id(raw: Option<&str>) -> Option<&str> {
+    raw.map(str::trim).filter(|id| !id.is_empty())
+}
+
+/// 内置的微软应用（公共客户端）ID。
+///
+/// 编译期由 `QCL_MS_CLIENT_ID` 注入，仓库里没有这个值——它是发布者自己的 Azure
+/// 应用注册，不该出现在源码里。
+///
+/// 需要说清楚的一点：**它不是机密**。OAuth 2.0 的公共客户端（设备码流程）没有
+/// client secret，ID 在每次请求的表单里明文出现，抓包就能看到。所以这里防的不是
+/// 「别人拿去用」，而是「把发布者的应用注册固化进仓库与每一份源码副本」。
+/// 真要防止别人复用，只能靠 Azure 那边的配置，代码层面做不到。
+pub fn ms_client_id() -> Option<&'static str> {
+    normalize_client_id(option_env!("QCL_MS_CLIENT_ID"))
 }
 
 /// 判断当前是否为安装版。
@@ -358,7 +383,10 @@ fn runtime_info() -> Result<RuntimeInfo, String> {
         .map(|directory| directory.join("uninstall.exe").is_file())
         .unwrap_or(false);
 
-    Ok(RuntimeInfo { installed })
+    Ok(RuntimeInfo {
+        installed,
+        msa_login: ms_client_id().is_some(),
+    })
 }
 
 /// 启动应用。
@@ -428,4 +456,22 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_client_id;
+
+    #[test]
+    fn 客户端_id_去掉首尾空白() {
+        assert_eq!(normalize_client_id(Some("  abc-123 \n")), Some("abc-123"));
+    }
+
+    #[test]
+    fn 空白与空串都算没有() {
+        // 环境变量被设成空串是常见情况（CI 里 secret 没配），不能当成有效 ID。
+        assert_eq!(normalize_client_id(Some("")), None);
+        assert_eq!(normalize_client_id(Some("   ")), None);
+        assert_eq!(normalize_client_id(None), None);
+    }
 }

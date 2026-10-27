@@ -187,6 +187,8 @@ export function gameStatus(): Promise<GameStatus> {
 export interface RuntimeInfo {
   /** 是否由安装程序装入。便携版没有卸载器，因此无法自更新。 */
   installed: boolean;
+  /** 本次构建是否内置了微软登录所需的客户端 ID。 */
+  msaLogin: boolean;
 }
 
 /** 查询运行环境。 */

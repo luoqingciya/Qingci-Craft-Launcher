@@ -70,6 +70,22 @@ Settings → Secrets and variables → Actions:
 | `TENCENT_SECRET_ID` | Tencent Cloud API secret id |
 | `TENCENT_SECRET_KEY` | Tencent Cloud API secret key |
 | `TAURI_SIGNING_PRIVATE_KEY` | **the whole private key file**: a single base64 line, no line breaks |
+| `QCL_MS_CLIENT_ID` | the "Application (client) ID" from the Azure app registration |
+
+`QCL_MS_CLIENT_ID` is injected **at compile time** by `src-tauri/build.rs` (`cargo:rustc-env`), so
+it never appears in the repository. Missing it does not break the build, but the resulting binary
+silently ships without Microsoft login — which is why the release workflow treats it as a
+precondition and fails early.
+
+**It is not a secret, so do not treat it as one.** Public OAuth clients (device code flow) have no
+client secret, and the ID appears in plaintext in every request. Compile-time injection only keeps
+the maintainer's app registration out of the repository; **it is always present in the binary** —
+`grep -a <id> <binary>` finds it in a second. Actually preventing others from reusing the ID has to
+happen on the Azure side, not in code.
+
+Contributors can build and run everything without it; only login is unavailable (the UI says so).
+To test login locally, register your own Azure app and run
+`QCL_MS_CLIENT_ID=xxx pnpm tauri dev`.
 
 The key file is a base64-encoded minisign key with **exactly one line** (the
 `untrusted comment:` markers live inside the base64 payload, so you will not see them).
