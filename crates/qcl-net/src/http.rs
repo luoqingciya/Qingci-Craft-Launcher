@@ -22,6 +22,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use crate::executor::{DownloadError, DownloadOps};
 use crate::plan::DownloadTask;
 use crate::retry::is_retryable_status;
+use crate::source::DownloadSource;
 use crate::verify::Sha1Hasher;
 
 /// 建立连接的超时。不设整体超时：大文件传输耗时本就不可预估。
@@ -35,17 +36,42 @@ const VERIFY_BUFFER: usize = 64 * 1024;
 pub struct HttpDownloader {
     client: reqwest::Client,
     game_dir: PathBuf,
+    source: DownloadSource,
 }
 
 impl HttpDownloader {
-    /// 以默认客户端配置创建下载器。
+    /// 以默认客户端配置创建下载器（官方源）。
     pub fn new(game_dir: impl Into<PathBuf>) -> Result<Self, DownloadError> {
+        Self::with_source(game_dir, DownloadSource::Official)
+    }
+
+    /// 以指定下载源创建下载器。
+    pub fn with_source(
+        game_dir: impl Into<PathBuf>,
+        source: DownloadSource,
+    ) -> Result<Self, DownloadError> {
         let client = reqwest::Client::builder()
             .connect_timeout(CONNECT_TIMEOUT)
             .user_agent(concat!("QingciCraftLauncher/", env!("CARGO_PKG_VERSION")))
             .build()
             .map_err(|error| DownloadError::Network(error.to_string()))?;
-        Ok(Self::with_client(client, game_dir))
+        Ok(Self::with_client(client, game_dir).using(source))
+    }
+
+    /// 换一个下载源。
+    ///
+    /// 下载器是克隆出去的（安装任务各自持有一份），所以用「生成新的」而不是
+    /// 改字段——避免改到别的任务手里那份。
+    #[must_use]
+    pub fn using(mut self, source: DownloadSource) -> Self {
+        self.source = source;
+        self
+    }
+
+    /// 当前下载源。
+    #[must_use]
+    pub fn source(&self) -> DownloadSource {
+        self.source
     }
 
     /// 使用外部提供的客户端创建下载器（便于复用连接池或注入测试配置）。
@@ -54,6 +80,7 @@ impl HttpDownloader {
         Self {
             client,
             game_dir: game_dir.into(),
+            source: DownloadSource::Official,
         }
     }
 
@@ -92,9 +119,10 @@ impl HttpDownloader {
     /// 与 [`DownloadOps::fetch_once`] 的区别：不落盘、不做 SHA-1 校验。
     /// 需要校验时由调用方拿返回值自行比对——清单文件很小，留在内存里更直接。
     pub async fn fetch_text(&self, url: &str) -> Result<String, DownloadError> {
+        let url = self.source.rewrite(url);
         let response = self
             .client
-            .get(url)
+            .get(url.as_ref())
             .send()
             .await
             .map_err(|error| DownloadError::Network(error.to_string()))?;
@@ -134,9 +162,10 @@ impl HttpDownloader {
 
     /// 用 HEAD 请求取 `Content-Length`。
     async fn head_size(&self, url: &str) -> Result<u64, DownloadError> {
+        let url = self.source.rewrite(url);
         let response = self
             .client
-            .head(url)
+            .head(url.as_ref())
             .send()
             .await
             .map_err(|error| DownloadError::Network(error.to_string()))?;
@@ -153,9 +182,10 @@ impl HttpDownloader {
 
     /// 用单字节范围请求读总长度。
     async fn ranged_size(&self, url: &str) -> Result<u64, DownloadError> {
+        let url = self.source.rewrite(url);
         let response = self
             .client
-            .get(url)
+            .get(url.as_ref())
             .header(reqwest::header::RANGE, "bytes=0-0")
             .send()
             .await
@@ -191,9 +221,10 @@ impl HttpDownloader {
         url: &str,
         user_agent: &str,
     ) -> Result<String, DownloadError> {
+        let url = self.source.rewrite(url);
         let response = self
             .client
-            .get(url)
+            .get(url.as_ref())
             .header(reqwest::header::USER_AGENT, user_agent)
             .send()
             .await
@@ -234,9 +265,10 @@ impl HttpDownloader {
         task: &DownloadTask,
         part: &Path,
     ) -> Result<(), DownloadError> {
+        let url = self.source.rewrite(&task.url);
         let response = self
             .client
-            .get(&task.url)
+            .get(url.as_ref())
             .send()
             .await
             .map_err(|error| DownloadError::Network(error.to_string()))?;
@@ -422,9 +454,10 @@ impl HttpDownloader {
         bearer: Option<&str>,
         body: RequestBody<'_>,
     ) -> Result<HttpResponse, DownloadError> {
+        let url = self.source.rewrite(url);
         let mut request = match method {
-            HttpMethod::Get => self.client.get(url),
-            HttpMethod::Post => self.client.post(url),
+            HttpMethod::Get => self.client.get(url.as_ref()),
+            HttpMethod::Post => self.client.post(url.as_ref()),
         };
 
         if let Some(token) = bearer {

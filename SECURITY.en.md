@@ -47,6 +47,22 @@ risk, not as an empty promise on a wishlist.
    keychain is available the launcher degrades to no persistence — login still works, it just has to
    be repeated next launch.
 
+### Trust boundary of the download source
+
+Downloads come from Mojang's official endpoints by default. Settings can switch to the
+[BMCLAPI](https://bmclapidoc.bangbang93.com/) mirror — a third-party service, so **switching means
+handing that trust to it**:
+
+- The mirror only rewrites addresses; verification is unchanged: every file is still checked against
+  the SHA-1 in the manifest.
+- But **the manifest itself may also come from the mirror**. An attacker in control of the mirror
+  could change a file and its digest together, in which case the SHA-1 check proves the download was
+  not corrupted, not that it came from Mojang.
+- So this trades **authenticity for availability**: the mirror only makes sense when the official
+  endpoints are unreachable, and official stays the default.
+
+The UI credits the mirror when it is selected, which BMCLAPI's terms of use also require.
+
 ### Not yet implemented (current risk)
 
 1. **No protection beyond the OS keychain.** The refresh token is protected by the operating system;

@@ -28,7 +28,7 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 | Install & verify | ✅ | Version files, libraries, assets, natives; SHA-1 verified per file |
 | Java selection | ✅ | Picks by version requirement; manual override is validated, not trusted blindly |
 | Launch & logs | ✅ | Streams stdout/stderr live; "Stop" really terminates the process |
-| Settings | ✅ | Game directory, offline player name, max heap, Java runtime |
+| Settings | ✅ | Game directory, offline player name, max heap, Java runtime, download source |
 | Fabric loader | ✅ | Version → loader → install → launch; the merged profile is persisted |
 | Mod management | ✅ | Modrinth search / install / remove / update check; required dependencies installed automatically |
 | Chinese names & filters | ✅ | Local name database, Chinese keyword aliases, 19 localised categories |

@@ -42,6 +42,12 @@ pub struct Settings {
     /// 上次选择的加载器版本（如 `0.20.1`）。`None` 表示原版。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub loader_version: Option<String>,
+    /// 下载源：`None` 表示官方，`Some("bmclapi")` 表示国内镜像。
+    ///
+    /// 存字符串而不是枚举：配置文件是用户能改的，认不出的值要能回落，
+    /// 而不是让启动器起不来。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub download_source: Option<String>,
 }
 
 /// 未设置玩家名时使用的默认值。
@@ -102,6 +108,15 @@ impl Settings {
         next.selected_version = version.filter(|value| !value.trim().is_empty());
         next.loader_version = loader.filter(|value| !value.trim().is_empty());
         next
+    }
+
+    /// 下载源（无法识别的值回落官方）。
+    #[must_use]
+    pub fn download_source(&self) -> qcl_net::DownloadSource {
+        self.download_source
+            .as_deref()
+            .map(qcl_net::DownloadSource::parse)
+            .unwrap_or_default()
     }
 
     /// 实际使用的玩家名（去空白后回退到默认值）。
@@ -202,6 +217,8 @@ pub fn migrate_preferences(from: &Path, to: &Path) {
         java_path: legacy.java_path,
         selected_version: None,
         loader_version: None,
+        // 下载源是网络环境决定的偏好，跟机器走，带过来。
+        download_source: legacy.download_source,
     };
 
     // 没有值得带的东西就别写文件，免得凭空造出一个「用户配置过」的假象。
@@ -254,6 +271,7 @@ mod tests {
             java_path: None,
             selected_version: Some("26.3".to_owned()),
             loader_version: Some("0.20.1".to_owned()),
+            download_source: Some("bmclapi".to_owned()),
         };
 
         save(&path, &settings).expect("应能保存");
@@ -399,6 +417,7 @@ mod selection_tests {
             java_path: Some(PathBuf::from("/usr/bin/java")),
             selected_version: None,
             loader_version: None,
+            download_source: None,
         }
     }
 
@@ -457,6 +476,7 @@ mod migration_tests {
                 java_path: Some(dir.path().join("java.exe")),
                 selected_version: Some("26.3".to_owned()),
                 loader_version: Some("0.20.1".to_owned()),
+                download_source: Some("bmclapi".to_owned()),
             },
         )
         .expect("写旧配置");

@@ -25,6 +25,7 @@ const SETTINGS: SettingsView = {
   memoryRange: [512, 65536],
   selectedVersion: null,
   loaderVersion: null,
+  downloadSource: "official",
 };
 
 function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {}) {

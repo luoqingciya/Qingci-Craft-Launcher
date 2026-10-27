@@ -101,6 +101,8 @@ struct SettingsView {
     selected_version: Option<String>,
     /// 上次选择的加载器版本。
     loader_version: Option<String>,
+    /// 下载源：`official` / `bmclapi`。
+    download_source: String,
 }
 
 /// 前端提交的设置。
@@ -118,6 +120,8 @@ struct SettingsInput {
     memory_mb: Option<u32>,
     /// `None` 表示自动选择 Java。
     java_path: Option<String>,
+    /// 下载源：`official` / `bmclapi`，空或缺失表示官方。
+    download_source: Option<String>,
 }
 
 /// 一个可用的 Java 安装，供设置页下拉选择。
@@ -195,6 +199,7 @@ impl AppState {
             memory_range: [settings::MIN_MEMORY_MB, settings::MAX_MEMORY_MB],
             selected_version: inner.settings.selected_version.clone(),
             loader_version: inner.settings.loader_version.clone(),
+            download_source: inner.settings.download_source().as_str().to_owned(),
         }
     }
 }
@@ -264,6 +269,7 @@ async fn save_settings(
         java_path: normalize(input.java_path).map(PathBuf::from),
         selected_version: previous.selected_version,
         loader_version: previous.loader_version,
+        download_source: normalize(input.download_source),
     };
 
     // 校验放在写盘之前：任何一项不合法都不该留下半套配置。
@@ -272,7 +278,8 @@ async fn save_settings(
     let (game_dir, fallback_reason) =
         resolve_game_dir(&saved, &state.install_dir, &state.fallback_dir);
 
-    let downloader = HttpDownloader::new(&game_dir)
+    // 下载源变了也要重建：地址改写发生在请求时，旧下载器仍带着旧源。
+    let downloader = HttpDownloader::with_source(&game_dir, saved.download_source())
         .map_err(|error| format!("无法在 {} 初始化下载器：{error}", game_dir.display()))?;
 
     settings::save(&state.config_path, &saved).map_err(|error| format!("保存设置失败：{error}"))?;
@@ -487,7 +494,7 @@ pub fn run() {
 
             // 连回退目录都不可写时无路可走，明确失败好过后续每一步都报错。
             let game_dir = settings::ensure_writable(&game_dir)?;
-            let downloader = HttpDownloader::new(&game_dir)?;
+            let downloader = HttpDownloader::with_source(&game_dir, saved.download_source())?;
 
             app.manage(AppState {
                 config_path,

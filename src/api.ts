@@ -43,6 +43,8 @@ export interface SettingsView {
   selectedVersion: string | null;
   /** 上次选择的加载器版本。 */
   loaderVersion: string | null;
+  /** 下载源：`official` 或 `bmclapi`。 */
+  downloadSource: string;
 }
 
 /** 提交给 Rust 的设置。空字符串表示「用默认值」。 */
@@ -51,6 +53,8 @@ export interface SettingsInput {
   playerName: string | null;
   memoryMb: number | null;
   javaPath: string | null;
+  /** 下载源：`official` / `bmclapi`；`null` 表示官方。 */
+  downloadSource: string | null;
 }
 
 /** 一个可用的 Java 安装。 */

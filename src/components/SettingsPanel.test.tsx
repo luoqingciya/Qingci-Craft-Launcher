@@ -19,8 +19,9 @@ function settings(overrides: Partial<SettingsView> = {}): SettingsView {
     memoryMb: null,
     javaPath: null,
     memoryRange: [512, 65536],
-  selectedVersion: null,
-  loaderVersion: null,
+    selectedVersion: null,
+    loaderVersion: null,
+    downloadSource: "official",
     ...overrides,
   };
 }
@@ -76,6 +77,7 @@ describe("SettingsPanel", () => {
       playerName: "清辞",
       memoryMb: null,
       javaPath: null,
+      downloadSource: null,
     });
   });
 
@@ -156,6 +158,37 @@ describe("SettingsPanel", () => {
 
     expect(screen.getByText(/已回退到 D:\\data/)).toBeInTheDocument();
     expect(screen.getByText(/磁盘只读/)).toBeInTheDocument();
+  });
+
+  it("下载源默认是官方，选中镜像后提交 bmclapi", async () => {
+    const onSave = renderPanel();
+
+    const select = screen.getByLabelText("下载源");
+    expect(select).toHaveValue("official");
+
+    await userEvent.selectOptions(select, "bmclapi");
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    // 只有非默认值才进配置：默认值写进文件会让「改回默认」变得看不出来。
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ downloadSource: "bmclapi" }));
+  });
+
+  it("选官方时提交 null 而不是字符串", async () => {
+    const onSave = renderPanel({ downloadSource: "bmclapi" });
+
+    await userEvent.selectOptions(screen.getByLabelText("下载源"), "official");
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ downloadSource: null }));
+  });
+
+  it("只在选中镜像时才标注 BMCLAPI 来源", async () => {
+    // BMCLAPI 的使用条款要求在使用处标注来源。
+    renderPanel();
+    expect(screen.queryByRole("link", { name: "BMCLAPI" })).toBeNull();
+
+    await userEvent.selectOptions(screen.getByLabelText("下载源"), "bmclapi");
+    expect(screen.getByRole("link", { name: "BMCLAPI" })).toBeInTheDocument();
   });
 });
 

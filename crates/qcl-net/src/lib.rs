@@ -12,6 +12,7 @@ pub mod executor;
 pub mod http;
 pub mod plan;
 pub mod retry;
+pub mod source;
 pub mod verify;
 
 pub use executor::{
@@ -24,4 +25,5 @@ pub use plan::{
     plan_version_files,
 };
 pub use retry::{RetryPolicy, is_retryable_status};
+pub use source::DownloadSource;
 pub use verify::{Sha1Hasher, hex_sha1, verify_sha1};
