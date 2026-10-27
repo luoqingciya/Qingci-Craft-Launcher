@@ -6,7 +6,7 @@
 
 [中文](README.md) | **English**
 
-[![CI](https://github.com/luoqingciya/Qingci-Craft-Launcher/actions/workflows/ci.yml/badge.svg)](https://github.com/luoqingciya/Qingci-Craft-Launcher/actions/workflows/ci.yml)
+[![CI](https://github.com/luoqingciya/Qingci-Craft-Launcher/actions/workflows/ci-main.yml/badge.svg)](https://github.com/luoqingciya/Qingci-Craft-Launcher/actions/workflows/ci-main.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
 A cross-platform, lightweight Minecraft: Java Edition launcher built with **Tauri 2 + Rust**.

@@ -1,0 +1,106 @@
+name: CI (main)
+
+# 合并到 main 之后的冒烟验证。
+#
+# 为什么不跑全套：分支保护开了 strict（PR 分支必须与 main 同步），所以合并出来的树
+# 与 PR head **完全一致**，全套 CI 在 PR 上已经跑过同一份内容。
+#
+# 这个工作流存在的理由只有两条，都不是「重复验证」：
+#   1. 给 main 一个明确的状态（README 的 CI 徽章指向这里）
+#   2. 万一有人绕过 PR 直接推 main，能立刻发现
+#
+# 三平台构建不在这里——它们只在 PR 上跑（见 ci.yml）。构建产物在 CI 里没有下游
+# 消费者，发版由 release.yml 自己构建。
+#
+# 这里的 job 名与 ci.yml 保持一致（`test (ubuntu-latest)` 等），这样两边的状态在
+# 界面上读起来是一回事。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-main-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          # 与 rust-toolchain.toml 保持一致，升级时两处同改
+          toolchain: "1.99.1"
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99.1"
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: 安装 Linux 构建依赖
+        uses: ./.github/actions/linux-deps
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  # 只跑 ubuntu。另外两个平台在 PR 上已经跑过同一棵树；这里要的是「main 没坏」，
+  # 不是重新做一遍跨平台验证。
+  test:
+    name: test (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99.1"
+      - uses: Swatinem/rust-cache@v2
+      - name: 安装 Linux 构建依赖
+        uses: ./.github/actions/linux-deps
+      - run: cargo test --workspace --all-features
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        if: hashFiles('package.json') != ''
+      - uses: actions/setup-node@v7
+        if: hashFiles('package.json') != ''
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: 安装依赖
+        if: hashFiles('package.json') != ''
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        if: hashFiles('package.json') != ''
+        run: pnpm lint
+      - name: 单元测试
+        if: hashFiles('package.json') != ''
+        run: pnpm test
+      - name: 类型检查与生产构建
+        if: hashFiles('package.json') != ''
+        run: pnpm build
+
+  deny:
+    name: deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2

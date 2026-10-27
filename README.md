@@ -6,7 +6,7 @@
 
 **中文** | [English](README.en.md)
 
-[![CI](https://github.com/luoqingciya/Qingci-Craft-Launcher/actions/workflows/ci.yml/badge.svg)](https://github.com/luoqingciya/Qingci-Craft-Launcher/actions/workflows/ci.yml)
+[![CI](https://github.com/luoqingciya/Qingci-Craft-Launcher/actions/workflows/ci-main.yml/badge.svg)](https://github.com/luoqingciya/Qingci-Craft-Launcher/actions/workflows/ci-main.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
 用 **Tauri 2 + Rust** 构建的跨平台、轻量级 Minecraft Java 版启动器。

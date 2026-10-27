@@ -276,7 +276,7 @@ pub enum LaunchEvent {
 ```
 Qingci-Craft-Launcher/
 ├─ .github/
-│  ├─ workflows/{ci.yml, release.yml}
+│  ├─ workflows/{ci.yml, ci-main.yml, release.yml}
 │  ├─ ISSUE_TEMPLATE/{bug.yml, feature.yml}
 │  ├─ PULL_REQUEST_TEMPLATE.md
 │  ├─ CODEOWNERS
@@ -424,7 +424,13 @@ GitHub Release 自动创建、Windows 便携版产物、两条分发通道按文
 
 ### 8.1 PR 门禁（`.github/workflows/ci.yml`）
 
-触发：`pull_request`（含 draft 转 ready）与 `push` 到 `main`。
+触发：**只有 `pull_request`**（含 draft 转 ready）与手动 `workflow_dispatch`。
+
+合并到 `main` 之后由 `.github/workflows/ci-main.yml` 跑一个子集（`fmt` / `clippy` /
+`test (ubuntu)` / `frontend` / `deny`）。两套分开的理由：分支保护开了 strict，
+合并出来的树与 PR head 完全一致，全套再跑一遍是重复的；而三平台构建在 CI 里没有
+下游消费者，发版由 `release.yml` 自己构建。`ci-main.yml` 留着是为了给 main 一个状态
+（README 徽章指向它），以及万一有人绕过 PR 直接推 main 时能立刻发现。
 
 | Job | 运行环境 | 内容 |
 |---|---|---|
