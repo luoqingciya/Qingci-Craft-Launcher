@@ -352,6 +352,38 @@ Qingci-Craft-Launcher/
 Fabric 的界面（选版本 → 选加载器 → 安装 → 启动）已在后续 PR 中接入；#18 也已落地，
 并额外做了卸载、更新检查、依赖补全与中文译名库。Quilt 与 Forge 仍未开始。
 
+#### Forge / NeoForge 可行性调研（2026-10-27）
+
+结论：**技术上可行，且不必自己重写 processors**——但国内网络下有三个必须处理的坑。
+
+现代 Forge 安装器的命令行契约（源码 `MinecraftForge/Installer` 分支 2.0，
+`SimpleInstaller.java`）：
+
+```
+--installClient <dir>   装到指定目录（源码里显式 headless = true，不需要界面）
+--installServer <dir>
+--offline               不做任何网络调用
+--mirror <URL>          自定义镜像
+```
+
+`ClientInstall.run()` 自己会做完这些：解出 Forge 的 version json → 下 vanilla client jar →
+下 libraries → **跑 processors**。最后一步正是自己实现时最贵的地方。
+
+三个坑：
+
+1. **目标目录必须有 `launcher_profiles.json`**（或 `launcher_profiles_microsoft_store.json`），
+   否则直接报「你还没有运行过启动器」。我们的游戏目录没有这个文件，要写一个 stub。
+2. **MC 本体永远从 `launchermeta.mojang.com` 取**，`--mirror` 管不到
+   （`DownloadUtils.MANIFEST_URL` 是硬编码的）。这与「BMCLAPI 提供不了 MC 本体」是同一件事。
+3. **安装前会探测若干 Mojang/Forge 主机并校验证书**，任一失败即中止
+   （"Failed to validate certificates"）。国内 `launchermeta` 不可达时**即使给了 `--mirror`
+   也会直接退出**。绕法是 `--offline`，但那要求先用我们自己的下载器（含镜像兜底）
+   把 vanilla jar 与 libraries 备齐。
+
+未完成：端到端实测。本机到 `maven.minecraftforge.net` 约 500 B/s 且频繁超时
+（200 KB 的 maven-metadata 五分钟没下完），下载不到 installer jar。要真正验证，
+需要一台能稳定访问 Forge maven 的机器。
+
 ### Phase 5 · 发布工程 🟡 在线更新已完成，其余未开始
 
 已完成：`tauri-plugin-updater` 自动更新（签名校验 + 静默安装 + 重启）、COS 分发、
