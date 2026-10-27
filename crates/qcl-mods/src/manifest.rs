@@ -155,7 +155,9 @@ pub fn list_installed(mods_dir: &Path) -> Vec<InstalledEntry> {
 
 #[cfg(test)]
 mod tests {
-    use super::{InstalledEntry, InstalledMod, forget, list_installed, load, prune, remember, save};
+    use super::{
+        InstalledEntry, InstalledMod, forget, list_installed, load, prune, remember, save,
+    };
     use tempfile::TempDir;
 
     #[test]
@@ -311,5 +313,4 @@ mod tests {
         let dir = TempDir::new().expect("临时目录");
         assert!(list_installed(&dir.path().join("nope")).is_empty());
     }
-
 }
