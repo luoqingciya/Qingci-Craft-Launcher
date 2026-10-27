@@ -6,6 +6,7 @@ import { version } from "../../package.json";
 // 用已生成好的 128px 图标而不是 929 KB 的源文件：界面里最大也只显示 56px。
 import iconUrl from "../../src-tauri/icons/128x128.png";
 import type { UpdateState } from "../lib/useUpdate";
+import { ExternalLink } from "./ExternalLink";
 
 /**
  * 下载页地址：便携版用户要自己去换 exe。
@@ -224,26 +225,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+/**
+ * 行内链接。
+ *
+ * 打开逻辑抽到了 [`ExternalLink`]——登录对话框也要用它，两处各写一份
+ * opener 插件调用迟早会漂移。
+ */
 function LinkRow({ href, children }: { href: string; children: React.ReactNode }) {
-  async function open(event: React.MouseEvent<HTMLAnchorElement>) {
-    event.preventDefault();
-    // Tauri 默认拦截外部导航，必须走 opener 插件才能在系统浏览器里打开。
-    // 浏览器预览页里没有这个插件，退回 window.open。
-    try {
-      const { openUrl } = await import("@tauri-apps/plugin-opener");
-      await openUrl(href);
-    } catch {
-      window.open(href, "_blank", "noreferrer");
-    }
-  }
-
-  return (
-    <a
-      href={href}
-      onClick={(event) => void open(event)}
-      className="w-fit text-[13px] text-[var(--color-accent-text)] hover:underline"
-    >
-      {children}
-    </a>
-  );
+  return <ExternalLink href={href}>{children}</ExternalLink>;
 }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
 
-import type { GameStatus, InstallProgressEvent, VersionSummary } from "../api";
+import type { Account, GameStatus, InstallProgressEvent, VersionSummary } from "../api";
 import { InstallProgressBar } from "./SettingsPanel";
 
 /**
@@ -15,6 +15,8 @@ import { InstallProgressBar } from "./SettingsPanel";
  */
 export function LaunchPanel({
   playerName,
+  account,
+  msaLogin,
   selected,
   selectedVersion,
   loaderLabel,
@@ -29,8 +31,15 @@ export function LaunchPanel({
   onLaunch,
   onInstall,
   onStop,
+  onLogin,
+  onSignOut,
 }: {
+  /** 离线玩家名。已登录时界面显示的是账号名，这里只是回落值。 */
   playerName: string;
+  /** 已登录的账号，未登录为 `null`。 */
+  account: Account | null;
+  /** 本次构建是否内置了微软登录能力。 */
+  msaLogin: boolean;
   selected: string | null;
   selectedVersion: VersionSummary | undefined;
   /** 当前加载器的显示文案，如「无（原版）」或「Fabric 0.20.1」。 */
@@ -46,25 +55,53 @@ export function LaunchPanel({
   onLaunch: () => void;
   onInstall: () => void;
   onStop: () => void;
+  onLogin: () => void;
+  onSignOut: () => void;
 }) {
   const running = status.running;
-  const initial = playerName.trim().charAt(0) || "?";
+  const displayName = account?.name ?? playerName;
+  const initial = displayName.trim().charAt(0) || "?";
 
   return (
     <div className="flex h-full flex-col gap-4">
       {/* 账户 */}
       <section className="rounded-2xl bg-[var(--color-surface-raised)] p-4 ring-1 ring-inset ring-[var(--color-border-subtle)]">
         <div className="flex items-center gap-3">
-          <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-[#22a7c4] to-[var(--color-accent)] text-[22px] font-semibold text-white shadow-[0_8px_20px_-8px_var(--color-accent-shadow)]">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#22a7c4] to-[var(--color-accent)] text-[22px] font-semibold text-white shadow-[0_8px_20px_-8px_var(--color-accent-shadow)]">
             {initial}
           </span>
-          <div className="min-w-0">
-            <div className="truncate text-[15px] font-medium">{playerName}</div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[15px] font-medium">{displayName}</div>
             <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-[var(--color-text-secondary)]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-warning)]" />
-              离线账户
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  account ? "bg-[var(--color-success)]" : "bg-[var(--color-warning)]"
+                }`}
+              />
+              {account ? "正版账户" : "离线账户"}
             </div>
           </div>
+          {account ? (
+            <button
+              type="button"
+              onClick={onSignOut}
+              disabled={running}
+              className="shrink-0 rounded-lg px-2.5 py-1 text-[12px] text-[var(--color-text-secondary)] ring-1 ring-inset ring-[var(--color-border-strong)] transition-colors hover:bg-[var(--color-surface-hover)] disabled:opacity-50"
+            >
+              退出
+            </button>
+          ) : (
+            msaLogin && (
+              <button
+                type="button"
+                onClick={onLogin}
+                disabled={running}
+                className="shrink-0 rounded-lg px-2.5 py-1 text-[12px] text-[var(--color-accent-text)] ring-1 ring-inset ring-[var(--color-border-strong)] transition-colors hover:bg-[var(--color-surface-hover)] disabled:opacity-50"
+              >
+                登录
+              </button>
+            )
+          )}
         </div>
       </section>
 

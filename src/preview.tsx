@@ -89,6 +89,12 @@ function Preview() {
       crash={null}
       onDismissCrash={() => {}}
       // 想看更新卡片时，把这里换成 { kind: "available", info: { version: "0.1.1", notes: "…" } }
+      account={null}
+      msaLogin
+      loginPhase={{ kind: "idle" }}
+      onLogin={() => {}}
+      onCancelLogin={() => {}}
+      onSignOut={() => {}}
       update={{ kind: "idle" }}
       portable={false}
       onCheckUpdate={() => {}}

@@ -33,6 +33,7 @@ import {
 import { LauncherView, type VersionsState } from "./components/LauncherView";
 import { summarizeCrash } from "./lib/crash";
 import { appendLog, type LogEntry, type LogStreamKind } from "./lib/logs";
+import { useAccount } from "./lib/useAccount";
 import { useUpdate } from "./lib/useUpdate";
 
 export default function App() {
@@ -64,17 +65,22 @@ export default function App() {
 
   // 更新：挂载时静默查一次，结果同时驱动「关于」标签上的提示点。
   const update = useUpdate();
+  const account = useAccount();
   // 便携版没有卸载器，装不了更新。默认按便携版处理——宁可少给一个按钮，
   // 也不要让用户点了「下载并安装」之后被装出一份新的副本。
   const [portable, setPortable] = useState(true);
+  // 本次构建有没有内置微软登录所需的客户端 ID。默认 false：没确认之前不给登录入口，
+  // 免得点了才发现用不了。
+  const [msaLogin, setMsaLogin] = useState(false);
 
   useEffect(() => {
     void runtimeInfo()
       .then((info) => {
         setPortable(!info.installed);
+        setMsaLogin(info.msaLogin);
       })
       .catch(() => {
-        // 查不到就维持「便携版」这个保守判断。
+        // 查不到就维持保守判断：按便携版、不给登录入口处理。
       });
   }, []);
 
@@ -338,6 +344,12 @@ export default function App() {
       onDismissCrash={() => setCrashDismissed(true)}
       update={update.state}
       portable={portable}
+      account={account.account}
+      msaLogin={msaLogin}
+      loginPhase={account.phase}
+      onLogin={account.start}
+      onCancelLogin={account.cancel}
+      onSignOut={account.signOut}
       onCheckUpdate={update.check}
       onInstallUpdate={update.install}
       settings={settings}

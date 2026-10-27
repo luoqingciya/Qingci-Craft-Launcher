@@ -42,6 +42,9 @@ function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {})
     status: { running: false, version: null },
     logs: [],
     crash: null,
+    account: null,
+    msaLogin: false,
+    loginPhase: { kind: "idle" as const },
     update: { kind: "idle" as const },
     portable: false,
     settings: SETTINGS,
@@ -57,6 +60,9 @@ function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {})
     onStop: vi.fn(),
     onClearLogs: vi.fn(),
     onDismissCrash: vi.fn(),
+    onLogin: vi.fn(),
+    onCancelLogin: vi.fn(),
+    onSignOut: vi.fn(),
     onCheckUpdate: vi.fn(),
     onInstallUpdate: vi.fn(),
     onSaveSettings: vi.fn(),
@@ -74,6 +80,34 @@ describe("LauncherView", () => {
     expect(screen.getByText("清辞")).toBeInTheDocument();
     expect(screen.getByText("离线账户")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("未运行");
+  });
+
+  it("构建支持登录时，离线状态下给「登录」入口", () => {
+    renderView({ msaLogin: true });
+
+    expect(screen.getByRole("button", { name: "登录" })).toBeInTheDocument();
+  });
+
+  it("构建没内置客户端 ID 时不给登录入口", () => {
+    // 给一个点了必然失败的按钮，比不给更糟。
+    renderView({ msaLogin: false });
+
+    expect(screen.queryByRole("button", { name: "登录" })).toBeNull();
+  });
+
+  it("已登录时显示账号名与正版标记，并能退出", async () => {
+    const { onSignOut } = renderView({
+      account: { name: "Notch", uuid: "069a79f444e94726a5befca90e38aaf5" },
+      msaLogin: true,
+    });
+
+    expect(screen.getByText("Notch")).toBeInTheDocument();
+    expect(screen.getByText("正版账户")).toBeInTheDocument();
+    // 已登录时不该再出现登录入口
+    expect(screen.queryByRole("button", { name: "登录" })).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "退出" }));
+    expect(onSignOut).toHaveBeenCalled();
   });
 
   it("未选版本时主按钮是「选择版本」入口，点击打开选择器", async () => {
