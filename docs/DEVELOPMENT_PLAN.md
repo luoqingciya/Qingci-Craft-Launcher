@@ -334,14 +334,17 @@ Qingci-Craft-Launcher/
 | #12 | `feat(ui): 实例管理 + 设置（内存/JVM 参数/Java 路径）` | 配置持久化并在重启后生效 |
 | #13 | `feat(app): 日志控制台 + 崩溃摘要` | 非 0 退出码能生成可导出的日志包 |
 
-### Phase 3 · 账号 🟡 协议层已完成，界面待接入（等 Mojang 审核）
+### Phase 3 · 账号 ✅ 已完成
 
 | PR | 内容 | 验收标准 |
 |---|---|---|
-| #14 | `feat(auth): 设备码登录 + 令牌刷新 + keyring 存储` | 断网/过期场景下静默刷新成功；令牌不出现于任何日志 |
-| #15 | `feat(ui): 登录流程 + 皮肤头像` | 正版账号启动后显示正确用户名与皮肤头部 |
+| #14 | `feat(auth): 设备码登录 + 令牌刷新 + keyring 存储` ✅ | 断网/过期场景下静默刷新成功；令牌不出现于任何日志 |
+| #15 | `feat(ui): 登录流程 + 皮肤头像` ✅（头像用首字母色块，未取皮肤贴图） | 正版账号启动后显示正确用户名 |
 
-### Phase 4 · 模组加载器 🟡 Fabric 已接入；Forge / NeoForge 未开始
+Mojang 审核通过后一次性落地（#71 客户端 ID 注入 → #73 后端 → #74 界面 → #75 令牌持久化），
+随 0.1.3 发布。
+
+### Phase 4 · 模组加载器 🟡 Fabric 已接入；Forge / NeoForge 未开始（可行性已调研，见下）
 
 | PR | 内容 | 验收标准 |
 |---|---|---|
@@ -408,7 +411,8 @@ CLI 契约与下载链路已实测，安装流程本身还没跑过。
 ### Phase 5 · 发布工程 🟡 在线更新已完成，其余未开始
 
 已完成：`tauri-plugin-updater` 自动更新（签名校验 + 静默安装 + 重启）、COS 分发、
-GitHub Release 自动创建。
+GitHub Release 自动创建、Windows 便携版产物、两条分发通道按文件名隔离（COS 只放自动更新
+需要的三个文件）。
 
 未完成：Windows Authenticode 签名、macOS codesign + 公证、i18n（zh-CN / en-US）、`v1.0.0`。
 
@@ -454,7 +458,7 @@ apt 的 `.deb` 与软件源索引（自定义 composite action，见 `.github/ac
 触发：推送 `v*` tag（或 `workflow_dispatch`，默认 dry run）。
 
 ```
-tag v0.1.2
+tag v0.1.4
   └─ publish (windows-latest)
        ├─ 校验 tag / package.json / tauri.conf.json / Cargo.toml 四处版本一致
        ├─ pnpm tauri build --bundles nsis --config tauri.release.json
@@ -481,7 +485,7 @@ macOS 的 codesign + 公证、Windows 的 Authenticode 目前都**没有**——
 
 **发布产物覆盖 Windows 与 Linux，但两条通道分开。** COS 只放自动更新需要的东西
 （Windows NSIS 安装包 + `.sig` + `latest.json`），所以清单里只有 `windows-x86_64`；
-Linux 的 AppImage 与 deb 只进 GitHub Releases。AppImage 有 80 MB，又不参与自动更新，
+Linux 的 AppImage 与 deb 只进 GitHub Releases。AppImage 有 83.5 MB，又不参与自动更新，
 放 COS 上只是白占带宽。
 
 macOS 的 dmg 尚未接入，因为它的更新路径需要重新启用 `tauri-plugin-updater` 的 `zip` 特性
@@ -570,14 +574,15 @@ Gatekeeper 拦下。
 
 ## 13. 下一步
 
-Phase 0–2 已完成，Fabric 与模组管理已接入，在线更新已上线。接下来按优先级：
+Phase 0–3 已完成（含正版登录），Fabric 与模组管理已接入，在线更新与两条分发通道已上线。
+接下来按优先级：
 
 1. **实例管理**（Phase 2 剩余项）：多份独立游戏目录，切换实例不互相污染。
-2. **Forge / NeoForge**（Phase 4 剩余项，风险 R5）。
-3. **正版登录界面**（Phase 3）：协议层已完成，卡在 Mojang 审核。
-4. **跨平台发布产物**：Linux 的 AppImage/deb 与 macOS 的 dmg 尚未接进发布流程；
-   macOS 还需要 Apple 开发者账号（R3）与重新评估 updater 的 `zip` 特性。
-5. **代码签名**（R2）：Windows Authenticode / macOS 公证，缓解 SmartScreen 拦截。
+2. **Forge / NeoForge**（Phase 4 剩余项，风险 R5）：可行性已调研，路径是调用官方 installer
+   而非自研 processors；但仍受「安装器会探测 Mojang 主机并校验证书」的限制。
+3. **macOS 产物**（R3）：需要 Apple 开发者账号与公证；updater 的 `zip` 特性还要重新评估。
+4. **代码签名**（R2）：Windows Authenticode / macOS 公证，缓解 SmartScreen 拦截。
+5. **i18n**（Phase 5）：zh-CN / en-US。
 
 ---
 

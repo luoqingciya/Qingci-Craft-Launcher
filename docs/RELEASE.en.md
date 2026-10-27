@@ -9,7 +9,7 @@ a newer version exists it downloads the installer and **verifies the signature a
 the bundled public key before installing**.
 
 ```
-tag v0.1.2
+tag v0.1.4            ← 0.1.4 as the worked example
    │
    ▼
 GitHub Actions
@@ -18,7 +18,7 @@ GitHub Actions
    └─ publish   merge artifacts → write latest.json → upload to COS → create the Release
                    │
                    ├─ COS (only what auto-update needs)
-                   │    ├─ QingciCraftLauncher_0.1.2_x64-setup.exe
+                   │    ├─ QingciCraftLauncher_0.1.4_x64-setup.exe
                    │    ├─ ...exe.sig
                    │    └─ latest.json            ← uploaded last
                    │
@@ -32,7 +32,7 @@ client startup → GET https://qcl.luoqingciya.cn/releases/latest.json
               → signature check → silent install → relaunch
 ```
 
-The manifest only carries `windows-x86_64`: the Linux AppImage is 83 MB and does not participate in
+The manifest only carries `windows-x86_64`: the Linux AppImage is 83.5 MB and does not participate in
 auto-update, so putting it on COS would cost bandwidth for nothing — it stays on GitHub Releases
 together with the deb.
 
@@ -152,11 +152,11 @@ yet".
 #    --tag labels the unreleased section with the version being shipped. Without it
 #    the tag does not exist yet, so git-cliff can only write "unreleased", and fixing
 #    that afterwards costs another PR.
-git cliff --config cliff.toml --tag v0.1.3 -o CHANGELOG.md
+git cliff --config cliff.toml --tag v0.1.4 -o CHANGELOG.md
 
-# 3. commit and tag (replace the version with the one you are shipping)
-git commit -am "chore(release): 0.1.3"
-git tag v0.1.3
+# 3. commit and tag (0.1.4 is the worked example; use the version you are shipping)
+git commit -am "chore(release): 0.1.4"
+git tag v0.1.4
 git push origin main --tags
 ```
 
@@ -186,15 +186,15 @@ Two distribution channels, deliberately kept apart:
 | GitHub Releases | all of the above, plus the Windows portable build and Linux AppImage/deb | manual downloads |
 
 `latest.json` therefore carries **only** a `windows-x86_64` entry. The Linux artifacts stay on GitHub
-Releases: the AppImage is 83 MB and does not participate in auto-update, so putting it on COS would
+Releases: the AppImage is 83.5 MB and does not participate in auto-update, so putting it on COS would
 cost bandwidth for nothing.
 
-- **Windows installer**: NSIS, 3.5 MB, reuses the system WebView2; auto-update installs silently and relaunches.
-- **Windows portable**: 11 MB, the very exe that lives inside the installer — double-click to run, game
+- **Windows installer**: NSIS, 3.8 MB, reuses the system WebView2; auto-update installs silently and relaunches.
+- **Windows portable**: 12.7 MB, the very exe that lives inside the installer — double-click to run, game
   directory next to the exe. No auto-update: replacing a running exe is not allowed on Windows.
-- **Linux AppImage**: 83 MB. Self-contained — it carries the whole WebKitGTK + JavaScriptCore + GTK3
+- **Linux AppImage**: 83.5 MB. Self-contained — it carries the whole WebKitGTK + JavaScriptCore + GTK3
   stack (530 files once extracted), which is why it is over ten times the size of the deb.
-- **Linux deb**: 4.9 MB, depends on the distribution's `libwebkit2gtk-4.1`.
+- **Linux deb**: 5.2 MB, depends on the distribution's `libwebkit2gtk-4.1`.
 - **Linux in general**: no auto-update. The About page detects Linux and points at the download page
   instead of showing a button that would only fail.
 - **macOS**: not published. Auto-update needs the updater's `zip` feature to unpack `.app.tar.gz`,
@@ -221,3 +221,4 @@ cost bandwidth for nothing.
 | Check fails | domain certificate, bucket permissions, manifest actually under `releases/` |
 | Reaches 100% then fails | signature mismatch: private key and `pubkey` are not a pair, or `signature` is not the raw `.sig` content |
 | Version unchanged after install | installed into a different directory (portable build treated as installed), or an older MSI install is also present |
+| Switching to BMCLAPI did not help, or still fails | a failing mirror **falls back to official automatically**. BMCLAPI's metadata endpoints 302 to its own CDN (`bmclapi*.sakura.sld.tw`), which some networks cannot reach; the Forge maven path goes through CERNET/USTC and usually works |
