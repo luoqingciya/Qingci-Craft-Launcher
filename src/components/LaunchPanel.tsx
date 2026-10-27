@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
 
-import type { Account, GameStatus, InstallProgressEvent, VersionSummary } from "../api";
+import type { Account, GameStatus, VersionSummary } from "../api";
 import type { InstanceView } from "../api";
-import { InstallProgressBar } from "./SettingsPanel";
 
 /**
  * 「启动」页的左栏：账户 + 当前版本 + 启动按钮。
@@ -18,7 +17,6 @@ export function LaunchPanel({
   playerName,
   account,
   msaLogin,
-  downloadSource,
   instances,
   activeInstance,
   selected,
@@ -26,9 +24,6 @@ export function LaunchPanel({
   loaderLabel,
   busy,
   status,
-  progress,
-  message,
-  error,
   canAct,
   onPickVersion,
   onPickLoader,
@@ -44,8 +39,6 @@ export function LaunchPanel({
   account: Account | null;
   /** 本次构建是否内置了微软登录能力。 */
   msaLogin: boolean;
-  /** 下载源，下载界面要据此标注 BMCLAPI 来源（使用协议要求）。 */
-  downloadSource: string;
   /** 已知实例，用于切换器。 */
   instances: InstanceView[];
   /** 当前实例名。 */
@@ -56,9 +49,6 @@ export function LaunchPanel({
   loaderLabel: string;
   busy: boolean;
   status: GameStatus;
-  progress: InstallProgressEvent | null;
-  message: string | null;
-  error: string | null;
   canAct: boolean;
   onPickVersion: () => void;
   onPickLoader: () => void;
@@ -76,9 +66,14 @@ export function LaunchPanel({
 
   return (
     <div className="flex h-full flex-col gap-4">
-      {/* 账户 */}
-      <section className="rounded-2xl bg-[var(--color-surface-raised)] p-4 ring-1 ring-inset ring-[var(--color-border-subtle)]">
-        <div className="flex items-center gap-3">
+      {/*
+        一张卡装下「账户 → 实例 → 版本 → 加载器」四行，用发丝线分隔。
+        原来是两张带间隙的卡片，视觉上是「一摞盒子」；合成一张之后层级更清楚，
+        而且四行都属于「这台机器上玩什么」这件事，本来就不该分开。
+      */}
+      <section className="overflow-hidden rounded-2xl bg-[var(--color-surface-raised)] ring-1 ring-inset ring-[var(--color-border-subtle)]">
+        {/* 账户 */}
+        <div className="flex items-center gap-3 p-4">
           <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#22a7c4] to-[var(--color-accent)] text-[22px] font-semibold text-white shadow-[0_8px_20px_-8px_var(--color-accent-shadow)]">
             {initial}
           </span>
@@ -115,10 +110,10 @@ export function LaunchPanel({
             )
           )}
         </div>
-      </section>
 
-      {/* 当前版本 + 加载器：两行都是「可点击的选择入口」 */}
-      <section className="overflow-hidden rounded-2xl bg-[var(--color-surface-raised)] ring-1 ring-inset ring-[var(--color-border-subtle)]">
+        <div className="h-px bg-[var(--color-border-subtle)]" />
+
+        {/* 当前版本 + 加载器：两行都是「可点击的选择入口」 */}
         {/* 只有一个实例时不显示切换器：多一行没得选的东西只是噪音。 */}
         {instances.length > 1 && (
           <>
@@ -126,19 +121,24 @@ export function LaunchPanel({
               <span className="min-w-0 flex-1 text-[12px] text-[var(--color-text-muted)]">
                 实例
               </span>
-              <select
-                value={activeInstance}
-                onChange={(event) => onSwitchInstance(event.target.value)}
-                disabled={running}
-                aria-label="切换实例"
-                className="max-w-[180px] rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2 py-1 text-[13px] text-[var(--color-text-primary)] disabled:opacity-60"
-              >
-                {instances.map((instance) => (
-                  <option key={instance.name} value={instance.name}>
-                    {instance.name}
-                  </option>
-                ))}
-              </select>
+              {/* 原生 select 的下拉箭头在各平台长得都不一样，且与这套圆角对不上，
+                  所以关掉原生外观自己画一个。 */}
+              <span className="relative">
+                <select
+                  value={activeInstance}
+                  onChange={(event) => onSwitchInstance(event.target.value)}
+                  disabled={running}
+                  aria-label="切换实例"
+                  className="max-w-[180px] appearance-none rounded-lg bg-[var(--color-surface)] py-1.5 pl-2.5 pr-7 text-[13px] text-[var(--color-text-primary)] ring-1 ring-inset ring-[var(--color-border-subtle)] transition-colors hover:ring-[var(--color-border-strong)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] disabled:opacity-60"
+                >
+                  {instances.map((instance) => (
+                    <option key={instance.name} value={instance.name}>
+                      {instance.name}
+                    </option>
+                  ))}
+                </select>
+                <Chevron className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
+              </span>
             </label>
             <div className="h-px bg-[var(--color-border-subtle)]" />
           </>
@@ -148,7 +148,7 @@ export function LaunchPanel({
           onClick={onPickVersion}
           disabled={running}
           aria-label="更换版本"
-          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--color-surface-hover)] disabled:opacity-60"
+          className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--color-surface-hover)] disabled:opacity-60"
         >
           <div className="min-w-0 flex-1">
             <div className="text-[12px] text-[var(--color-text-muted)]">版本</div>
@@ -162,7 +162,7 @@ export function LaunchPanel({
               </div>
             )}
           </div>
-          <span className="shrink-0 text-[12px] text-[var(--color-accent-text)]">更换</span>
+          <Chevron className="shrink-0 text-[var(--color-text-muted)] transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[var(--color-accent-text)]" />
         </button>
 
         <div className="h-px bg-[var(--color-border-subtle)]" />
@@ -172,7 +172,7 @@ export function LaunchPanel({
           onClick={onPickLoader}
           disabled={running || !selected}
           aria-label="更换加载器"
-          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--color-surface-hover)] disabled:opacity-60"
+          className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--color-surface-hover)] disabled:opacity-60"
         >
           <div className="min-w-0 flex-1">
             <div className="text-[12px] text-[var(--color-text-muted)]">加载器</div>
@@ -180,7 +180,7 @@ export function LaunchPanel({
               {selected ? loaderLabel : "先选择版本"}
             </div>
           </div>
-          <span className="shrink-0 text-[12px] text-[var(--color-accent-text)]">更换</span>
+          <Chevron className="shrink-0 text-[var(--color-text-muted)] transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[var(--color-accent-text)]" />
         </button>
       </section>
 
@@ -190,7 +190,10 @@ export function LaunchPanel({
           type="button"
           onClick={selected ? onLaunch : onPickVersion}
           disabled={selected ? !canAct || running : false}
-          className="flex h-16 flex-col items-center justify-center gap-0.5 rounded-xl bg-[var(--color-accent)] text-white shadow-[0_10px_24px_-10px_var(--color-accent-shadow)] transition-all hover:bg-[var(--color-accent-strong)] active:translate-y-px disabled:bg-[var(--color-surface-raised)] disabled:text-[var(--color-text-muted)] disabled:shadow-none disabled:ring-1 disabled:ring-inset disabled:ring-[var(--color-border-subtle)]"
+          title={
+            running ? "游戏正在运行" : busy ? "正在处理，请稍候" : selected ? undefined : "先选择一个版本"
+          }
+          className="flex h-16 flex-col items-center justify-center gap-0.5 rounded-xl bg-[var(--color-accent)] text-white shadow-[0_10px_24px_-10px_var(--color-accent-shadow)] transition-all hover:bg-[var(--color-accent-strong)] hover:shadow-[0_14px_28px_-12px_var(--color-accent-shadow)] active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface)] disabled:bg-[var(--color-surface-raised)] disabled:text-[var(--color-text-muted)] disabled:shadow-none disabled:ring-1 disabled:ring-inset disabled:ring-[var(--color-border-subtle)]"
         >
           <span className="text-[16px] font-semibold">
             {selected ? (running ? "游戏运行中" : "启动游戏") : "选择版本"}
@@ -209,7 +212,7 @@ export function LaunchPanel({
             type="button"
             onClick={onInstall}
             disabled={!canAct || running}
-            className="h-10 flex-1 rounded-xl text-[13px] text-[var(--color-text-secondary)] ring-1 ring-inset ring-[var(--color-border-strong)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-40"
+            className="h-10 flex-1 rounded-xl text-[13px] text-[var(--color-text-secondary)] ring-1 ring-inset ring-[var(--color-border-strong)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] disabled:opacity-40"
           >
             {busy ? "处理中…" : "安装 / 检查文件"}
           </button>
@@ -217,26 +220,33 @@ export function LaunchPanel({
             type="button"
             onClick={onStop}
             disabled={!running}
-            className="h-10 rounded-xl px-4 text-[13px] text-[var(--color-danger)] ring-1 ring-inset ring-[var(--color-danger)]/40 transition-colors hover:bg-[var(--color-danger)]/10 disabled:opacity-30"
+            className="h-10 rounded-xl px-4 text-[13px] text-[var(--color-danger)] ring-1 ring-inset ring-[var(--color-danger)]/40 transition-colors hover:bg-[var(--color-danger)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-danger)] disabled:opacity-30"
           >
             停止
           </button>
         </div>
-
-        {(progress || message || error) && (
-          <div className="flex flex-col gap-2 rounded-xl bg-[var(--color-surface-raised)] p-3 ring-1 ring-inset ring-[var(--color-border-subtle)]">
-            {progress && (
-              <InstallProgressBar progress={progress} mirrored={downloadSource === "bmclapi"} />
-            )}
-            {message && (
-              <p className="text-[12px] leading-relaxed text-[var(--color-success)]">{message}</p>
-            )}
-            {error && (
-              <p className="text-[12px] leading-relaxed text-[var(--color-danger)]">{error}</p>
-            )}
-          </div>
-        )}
       </div>
     </div>
+  );
+}
+
+/**
+ * 右向箭头：可点击行的通用暗示。
+ *
+ * 用它替代原来那两个字「更换」——整行本来就可点，文字显得啰嗦，
+ * 而箭头在悬停时轻微右移，比静态文字更能说明「点这里会展开」。
+ */
+function Chevron({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden
+      className={`h-3.5 w-3.5 ${className}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="M6 3.5 10.5 8 6 12.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

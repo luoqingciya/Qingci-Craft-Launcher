@@ -74,6 +74,8 @@ function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {})
     onCreateInstance: vi.fn(),
     onRenameInstance: vi.fn(),
     onDeleteInstance: vi.fn(),
+    onDismissMessage: vi.fn(),
+    onDismissError: vi.fn(),
     ...overrides,
   };
   render(<LauncherView {...props} />);

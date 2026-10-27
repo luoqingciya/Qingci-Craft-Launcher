@@ -25,6 +25,7 @@ import { CrashCard } from "./CrashCard";
 import { LaunchPanel } from "./LaunchPanel";
 import { LoginDialog } from "./LoginDialog";
 import { LogPanel } from "./LogPanel";
+import { StatusStack } from "./StatusStack";
 import { ModsTab } from "./ModsTab";
 import { PickerDialog, type PickerItem } from "./PickerDialog";
 import { SettingsPanel } from "./SettingsPanel";
@@ -82,6 +83,8 @@ export function LauncherView({
   onStop,
   onClearLogs,
   onDismissCrash,
+  onDismissMessage,
+  onDismissError,
   onCheckUpdate,
   onInstallUpdate,
   onLogin,
@@ -128,6 +131,10 @@ export function LauncherView({
   onStop: () => void;
   onClearLogs: () => void;
   onDismissCrash: () => void;
+  /** 关掉浮层里的成功提示。 */
+  onDismissMessage: () => void;
+  /** 关掉浮层里的错误提示。 */
+  onDismissError: () => void;
   onCheckUpdate: () => void;
   onInstallUpdate: () => void;
   onLogin: () => void;
@@ -246,7 +253,6 @@ export function LauncherView({
               playerName={playerName}
               account={account}
               msaLogin={msaLogin}
-              downloadSource={settings?.downloadSource ?? "official"}
               instances={settings?.instances ?? []}
               activeInstance={settings?.activeInstance ?? ""}
               onSwitchInstance={onSwitchInstance}
@@ -255,9 +261,6 @@ export function LauncherView({
               loaderLabel={loaderLabel}
               busy={busy}
               status={status}
-              progress={progress}
-              message={message}
-              error={error}
               canAct={canAct}
               onPickVersion={() => setPicker("version")}
               onPickLoader={() => setPicker("loader")}
@@ -352,6 +355,16 @@ export function LauncherView({
       )}
 
       <LoginDialog phase={loginPhase} onCancel={onCancelLogin} />
+
+      {/* 下载进度与提示浮在页面上：进出都不改变任何组件的位置。 */}
+      <StatusStack
+        progress={progress}
+        message={message}
+        error={error}
+        mirrored={settings?.downloadSource === "bmclapi"}
+        onDismissMessage={onDismissMessage}
+        onDismissError={onDismissError}
+      />
     </div>
   );
 }
