@@ -17,6 +17,7 @@ export function LaunchPanel({
   playerName,
   account,
   msaLogin,
+  downloadSource,
   selected,
   selectedVersion,
   loaderLabel,
@@ -40,6 +41,8 @@ export function LaunchPanel({
   account: Account | null;
   /** 本次构建是否内置了微软登录能力。 */
   msaLogin: boolean;
+  /** 下载源，下载界面要据此标注 BMCLAPI 来源（使用协议要求）。 */
+  downloadSource: string;
   selected: string | null;
   selectedVersion: VersionSummary | undefined;
   /** 当前加载器的显示文案，如「无（原版）」或「Fabric 0.20.1」。 */
@@ -189,7 +192,9 @@ export function LaunchPanel({
 
         {(progress || message || error) && (
           <div className="flex flex-col gap-2 rounded-xl bg-[var(--color-surface-raised)] p-3 ring-1 ring-inset ring-[var(--color-border-subtle)]">
-            {progress && <InstallProgressBar progress={progress} />}
+            {progress && (
+              <InstallProgressBar progress={progress} mirrored={downloadSource === "bmclapi"} />
+            )}
             {message && (
               <p className="text-[12px] leading-relaxed text-[var(--color-success)]">{message}</p>
             )}

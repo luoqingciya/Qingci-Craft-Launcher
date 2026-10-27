@@ -238,6 +238,7 @@ export function LauncherView({
               playerName={playerName}
               account={account}
               msaLogin={msaLogin}
+              downloadSource={settings?.downloadSource ?? "official"}
               selected={selected}
               selectedVersion={selectedVersion}
               loaderLabel={loaderLabel}

@@ -75,6 +75,27 @@ function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {})
 }
 
 describe("LauncherView", () => {
+  it("下载界面标注 BMCLAPI 来源（走镜像时）", () => {
+    renderView({
+      settings: {
+        gameDir: "C:\\games\\qcl",
+        defaultGameDir: "C:\\games\\qcl",
+        isCustom: false,
+        fallbackReason: null,
+        playerName: "Player",
+        memoryMb: null,
+        javaPath: null,
+        memoryRange: [512, 65536],
+        selectedVersion: null,
+        loaderVersion: null,
+        downloadSource: "bmclapi",
+      },
+      progress: { phase: "assets", completed: 1, total: 10, percent: 10 },
+    });
+
+    expect(screen.getByRole("link", { name: "BMCLAPI" })).toBeInTheDocument();
+  });
+
   it("左栏显示账户名与离线标记，顶栏显示未运行", () => {
     renderView();
 
