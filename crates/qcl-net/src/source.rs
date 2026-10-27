@@ -85,6 +85,15 @@ impl DownloadSource {
             return Cow::Borrowed(url);
         }
 
+        // maven 的 `.sha1` 纯文本镜像不提供（实测 `maven.fabricmc.net` 有、`/maven` 下 404）。
+        // 改写过去只会多一次必然失败的请求，所以这类地址始终走官方。
+        //
+        // 影响面很小：只有 Fabric 的 `fabric-loader` 条目缺 sha1 时会取它，
+        // 其余库条目自带摘要。
+        if url.ends_with(".sha1") {
+            return Cow::Borrowed(url);
+        }
+
         for (official, mirror) in RULES {
             if let Some(rest) = url.strip_prefix(official) {
                 return Cow::Owned(format!("{mirror}{rest}"));
