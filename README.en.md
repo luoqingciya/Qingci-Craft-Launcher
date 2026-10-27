@@ -40,11 +40,11 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 
 ## Design principles
 
-- **Lightweight**: uses the system WebView. Portable executable is 11 MB, NSIS installer 3.5 MB.
+- **Lightweight**: uses the system WebView. Portable executable is 12.7 MB, NSIS installer 3.8 MB.
 - **Cross-platform**: Windows 10+ / macOS 12+ / Linux (glibc 2.31+); CI builds and tests on all three.
   Published artifacts cover Windows and Linux.
 - **Testable**: core logic (version parsing, rule evaluation, argument assembly, auth protocols, mod
-  resolution, crash report parsing) lives in GUI-free Rust crates — 278 Rust tests + 118 frontend
+  resolution, crash report parsing) lives in GUI-free Rust crates — 312 Rust tests + 132 frontend
   tests in CI.
 - **Manifest-driven**: versions, libraries and JVM arguments are all derived from official manifests; no version list is hardcoded.
 
@@ -88,10 +88,10 @@ Download from [Releases](https://github.com/luoqingciya/Qingci-Craft-Launcher/re
 
 | Platform | File | Size | Notes |
 |---|---|---|---|
-| Windows | `QingciCraftLauncher_*_x64-setup.exe` | 3.5 MB | NSIS installer; installs per-user, no admin rights; supports auto-update |
-| Windows | `QingciCraftLauncher_*_x64-portable.exe` | 11 MB | No install, double-click to run; game directory sits next to the exe; **no auto-update** |
-| Linux | `QingciCraftLauncher_*_amd64.deb` | 4.9 MB | Debian / Ubuntu package; depends on the system webkit2gtk |
-| Linux | `QingciCraftLauncher_*_x86_64.AppImage` | 83 MB | No install; self-contained runtime |
+| Windows | `QingciCraftLauncher_*_x64-setup.exe` | 3.8 MB | NSIS installer; installs per-user, no admin rights; supports auto-update |
+| Windows | `QingciCraftLauncher_*_x64-portable.exe` | 12.7 MB | No install, double-click to run; game directory sits next to the exe; **no auto-update** |
+| Linux | `QingciCraftLauncher_*_amd64.deb` | 5.2 MB | Debian / Ubuntu package; depends on the system webkit2gtk |
+| Linux | `QingciCraftLauncher_*_x86_64.AppImage` | 83.5 MB | No install; self-contained runtime |
 
 The Linux artifacts and the Windows portable build are **GitHub Releases only** and take no part in
 auto-update — the update server carries just the Windows installer.
@@ -103,6 +103,11 @@ The size gap comes from **how much of the WebView is reused**: Windows uses the 
 runtime, the deb relies on `libwebkit2gtk-4.1` from the distribution, while an AppImage has to carry
 the entire WebKitGTK + JavaScriptCore + GTK3 stack to run on any distribution — that stack alone is
 over 70 MB. Pick the deb if size matters, the AppImage if you want "download and double-click".
+
+**The download source is switchable**: Settings offers Mojang's official endpoints (default) or the
+[BMCLAPI](https://bmclapidoc.bangbang93.com/) mirror. A failing mirror **falls back to official
+automatically** — it is a faster path, not a single point of failure. When the mirror is in use the UI
+credits it, which BMCLAPI's terms also require.
 
 The default game directory is **`game/` inside the install directory** (portable layout:
 copy the whole folder and your worlds move with it). If that location is not writable,

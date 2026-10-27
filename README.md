@@ -39,9 +39,9 @@
 
 ## 设计取向
 
-- **轻量**：复用系统 WebView。便携版可执行文件 11 MB，NSIS 安装包 3.5 MB。
+- **轻量**：复用系统 WebView。便携版可执行文件 12.7 MB，NSIS 安装包 3.8 MB。
 - **跨平台**：Windows 10+ / macOS 12+ / Linux（glibc 2.31+），三平台 CI 构建与测试。发布产物覆盖 Windows 与 Linux。
-- **可验证**：核心逻辑（版本解析、依赖求值、参数组装、认证协议、模组解析、崩溃报告解析）放在不依赖 GUI 的 Rust crate 中，CI 里 278 个 Rust 测试 + 118 个前端测试全量覆盖。
+- **可验证**：核心逻辑（版本解析、依赖求值、参数组装、认证协议、模组解析、崩溃报告解析）放在不依赖 GUI 的 Rust crate 中，CI 里 312 个 Rust 测试 + 132 个前端测试全量覆盖。
 - **清单驱动**：版本、依赖库、JVM 参数全部从官方清单推导，不硬编码任何版本列表。
 
 ## 技术栈
@@ -83,10 +83,10 @@ assets/          品牌资产（应用图标源文件、模组译名库数据）
 
 | 平台 | 文件 | 大小 | 说明 |
 |---|---|---|---|
-| Windows | `QingciCraftLauncher_*_x64-setup.exe` | 3.5 MB | NSIS 安装程序，装到用户目录，不需要管理员权限；支持自动更新 |
-| Windows | `QingciCraftLauncher_*_x64-portable.exe` | 11 MB | 免安装，双击即用；游戏目录在 exe 旁边；**不支持自动更新** |
-| Linux | `QingciCraftLauncher_*_amd64.deb` | 4.9 MB | Debian / Ubuntu 安装包，依赖系统已有的 webkit2gtk |
-| Linux | `QingciCraftLauncher_*_x86_64.AppImage` | 83 MB | 免安装，自包含运行时 |
+| Windows | `QingciCraftLauncher_*_x64-setup.exe` | 3.8 MB | NSIS 安装程序，装到用户目录，不需要管理员权限；支持自动更新 |
+| Windows | `QingciCraftLauncher_*_x64-portable.exe` | 12.7 MB | 免安装，双击即用；游戏目录在 exe 旁边；**不支持自动更新** |
+| Linux | `QingciCraftLauncher_*_amd64.deb` | 5.2 MB | Debian / Ubuntu 安装包，依赖系统已有的 webkit2gtk |
+| Linux | `QingciCraftLauncher_*_x86_64.AppImage` | 83.5 MB | 免安装，自包含运行时 |
 
 Linux 产物与 Windows 便携版**只在 GitHub Releases 提供**，不走自动更新（AppImage 与便携版都不参与，
 更新服务器上只放 Windows 安装包）。
@@ -97,6 +97,10 @@ Linux 产物与 Windows 便携版**只在 GitHub Releases 提供**，不走自�
 deb 依赖发行版仓库里的 `libwebkit2gtk-4.1`，而 AppImage 必须自带一整套 WebKitGTK +
 JavaScriptCore + GTK3 才能在任意发行版上直接跑——那套东西本身就占 70 MB 以上。
 只要体积就选 deb，要「下载就能双击运行」就选 AppImage。
+
+**下载源可切换**：设置里能选 Mojang 官方（默认）或 [BMCLAPI](https://bmclapidoc.bangbang93.com/)
+镜像。镜像失败会**自动回落到官方**——它只是「更快的一条路」，不是唯一依赖。
+走镜像时界面会标注来源，这也是 BMCLAPI 使用条款的要求。
 
 默认游戏目录是**安装目录下的 `game/`**（便携布局：整个目录拷走就能迁移）。
 若安装位置不可写，会自动回退到应用数据目录并在界面提示原因。

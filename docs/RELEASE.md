@@ -7,7 +7,7 @@ Qingci Craft Launcher 的更新走「GitHub Actions 构建 → 腾讯云 COS 分
 就下载安装包，**先用内置公钥校验签名，校验通过才安装**。
 
 ```
-tag v0.1.2
+tag v0.1.4            ← 以 0.1.4 为例
    │
    ▼
 GitHub Actions
@@ -16,7 +16,7 @@ GitHub Actions
    └─ publish   合并产物 → 生成 latest.json → 推 COS → 建 GitHub Release
                    │
                    ├─ COS（只放自动更新需要的）
-                   │    ├─ QingciCraftLauncher_0.1.2_x64-setup.exe
+                   │    ├─ QingciCraftLauncher_0.1.4_x64-setup.exe
                    │    ├─ ...exe.sig
                    │    └─ latest.json            ← 最后传
                    │
@@ -29,7 +29,7 @@ GitHub Actions
    └─ 有新版本 → 「关于」页提示 → 用户点「下载并安装」→ 校验签名 → 静默安装 → 自动重启
 ```
 
-清单里只有 `windows-x86_64` 一条：Linux 的 AppImage 有 83 MB，又不参与自动更新，
+清单里只有 `windows-x86_64` 一条：Linux 的 AppImage 有 83.5 MB，又不参与自动更新，
 放 COS 上只是白占带宽，所以它和 deb 一起只留在 GitHub Release。
 
 ## 一次性配置
@@ -137,11 +137,11 @@ curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/nope.txt
 # 2. 重新生成更新日志（同一个 PR 里带上，不要等发完再补）
 #    --tag 把「未发布」段直接标成这次要发的版本。不加它，因为标签还没建，
 #    git-cliff 只能写「未发布」，发完再补就又多一个 PR。
-git cliff --config cliff.toml --tag v0.1.3 -o CHANGELOG.md
+git cliff --config cliff.toml --tag v0.1.4 -o CHANGELOG.md
 
-# 3. 提交并打标签（下面的版本号换成实际要发的）
-git commit -am "chore(release): 0.1.3"
-git tag v0.1.3
+# 3. 提交并打标签（下面以 0.1.4 为例，换成实际要发的版本）
+git commit -am "chore(release): 0.1.4"
+git tag v0.1.4
 git push origin main --tags
 ```
 
@@ -171,12 +171,12 @@ GitHub Release（附安装包与 `.sig`）。
 所以 `latest.json` 里**只有** `windows-x86_64` 一条。Linux 产物留在 GitHub Releases：
 AppImage 有 83 MB，又不参与自动更新，放 COS 上只是白占带宽。
 
-- **Windows 安装版**：NSIS 3.5 MB，复用系统 WebView2，自动更新走静默安装 + 重启。
-- **Windows 便携版**：11 MB，就是安装包里那个 exe，双击即用，游戏目录落在 exe 旁边。
+- **Windows 安装版**：NSIS 3.8 MB，复用系统 WebView2，自动更新走静默安装 + 重启。
+- **Windows 便携版**：12.7 MB，就是安装包里那个 exe，双击即用，游戏目录落在 exe 旁边。
   不参与自动更新——自更新要替换正在运行的 exe，Windows 不允许。
-- **Linux AppImage**：83 MB。自包含，把 WebKitGTK + JavaScriptCore + GTK3 整套塞进去了
+- **Linux AppImage**：83.5 MB。自包含，把 WebKitGTK + JavaScriptCore + GTK3 整套塞进去了
   （解出来 530 个文件），所以体积是 deb 的十几倍。
-- **Linux deb**：4.9 MB，依赖发行版的 `libwebkit2gtk-4.1`。
+- **Linux deb**：5.2 MB，依赖发行版的 `libwebkit2gtk-4.1`。
 - **Linux 整体不提供自动更新**。「关于」页会识别出 Linux，直接引导到下载页，
   而不是给一个点了就报错的按钮。
 - **macOS**：不发布。自动更新需要 updater 的 `zip` 特性来解压 `.app.tar.gz`，而该特性
@@ -201,3 +201,4 @@ AppImage 有 83 MB，又不参与自动更新，放 COS 上只是白占带宽。
 | 提示检查失败 | 域名证书、桶权限、`latest.json` 是否真的在 `releases/` 下 |
 | 下载到 100% 后失败 | 签名不匹配：私钥与 `pubkey` 不是一对，或清单里的 `signature` 不是 `.sig` 原文 |
 | 安装后版本没变 | 装到了另一个目录（便携版被当成了安装版），或同时存在 MSI 装的旧版本 |
+| 切到 BMCLAPI 后没变快，甚至仍报网络错误 | 镜像失败会**自动回落官方**。BMCLAPI 的元数据端点会 302 到它自己的 CDN（`bmclapi*.sakura.sld.tw`），部分网络不通；Forge maven 那条线则走 CERNET/USTC，通常可用 |

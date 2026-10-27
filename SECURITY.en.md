@@ -110,6 +110,12 @@ in the device flow:
 
 So "no PKCE/state" is not an omission — neither is defined by RFC 8628.
 
+**The client ID is not a secret.** Public clients have no client secret, and the ID appears in
+plaintext in every request. Injecting it at compile time (`QCL_MS_CLIENT_ID`) only keeps the
+maintainer's app registration out of the repository; **it is always extractable from the binary**
+(`grep -a` finds it in a second). Actually preventing others from reusing it has to happen on the
+Azure side, not in code.
+
 **The risk this flow does have is device code phishing**: an attacker starts a device flow with their
 own app and tricks a victim into entering the code, which authorises the victim's account to the
 attacker's app. That happens outside the launcher and no client can prevent it; the only thing a user
