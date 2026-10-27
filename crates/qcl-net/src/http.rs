@@ -286,14 +286,48 @@ impl HttpDownloader {
     }
 
     /// 下载到 `.part` 临时文件并校验，不负责重命名。
+    ///
+    /// 按下载源顺序逐个尝试，**校验失败也会换下一个源**。
+    ///
+    /// 这一点和元数据请求不同：那边 `send_first_ok` 只看连接与状态码就够了，
+    /// 而这里「下到了但摘要不对」只有读完才知道。镜像返回 200 却给错内容时，
+    /// 重试同一个镜像永远得到同一份错文件——换官方重下一遍才是能自愈的路径。
     async fn download_to_part(
         &self,
         task: &DownloadTask,
         part: &Path,
     ) -> Result<(), DownloadError> {
+        let mut last_error: Option<DownloadError> = None;
+
+        for candidate in self.source.candidates(&task.url) {
+            match self.download_one(&candidate, task, part).await {
+                Ok(()) => return Ok(()),
+                // 本地问题换源也解决不了，立刻放弃。
+                Err(error @ (DownloadError::Io(_) | DownloadError::UnsafePath(_))) => {
+                    return Err(error);
+                }
+                // 连接失败、失败状态码、摘要不符——都可能是这个源的问题，换下一个。
+                Err(error) => last_error = Some(error),
+            }
+        }
+
+        // 返回最后一个源（也就是官方）的错误：那才是用户该看到的结论。
+        Err(last_error.unwrap_or_else(|| DownloadError::Other("没有可用的下载地址".to_owned())))
+    }
+
+    /// 从**一个**地址下载并校验；候选顺序由 [`Self::download_to_part`] 负责。
+    async fn download_one(
+        &self,
+        url: &str,
+        task: &DownloadTask,
+        part: &Path,
+    ) -> Result<(), DownloadError> {
         let response = self
-            .send_first_ok(&task.url, |client, url| client.get(url))
-            .await?;
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(|error| DownloadError::Network(error.to_string()))?;
 
         let status = response.status();
         if !status.is_success() {
