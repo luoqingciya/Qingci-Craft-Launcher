@@ -97,3 +97,69 @@ describe("LogPanel", () => {
     expect(screen.getByRole("button", { name: "清空" })).toBeDisabled();
   });
 });
+
+describe("LogPanel 筛选与复制", () => {
+  const MIXED: LogEntry[] = [
+    { id: 1, stream: "stdout", text: "[1] [main/INFO]: Loading 63 mods" },
+    { id: 2, stream: "stdout", text: "[2] [main/WARN]: mod 有点旧" },
+    { id: 3, stream: "stdout", text: "[3] [main/ERROR]: 缺前置" },
+  ];
+
+  it("按级别筛选只留下对应行", () => {
+    render(<LogPanel logs={MIXED} onClear={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "警告" }));
+
+    expect(screen.getByText(/mod 有点旧/)).toBeInTheDocument();
+    expect(screen.queryByText(/Loading 63 mods/)).toBeNull();
+    expect(screen.queryByText(/缺前置/)).toBeNull();
+  });
+
+  it("筛选后显示「可见 / 总数」", () => {
+    render(<LogPanel logs={MIXED} onClear={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "错误" }));
+
+    expect(screen.getByText("1 / 3 行")).toBeInTheDocument();
+  });
+
+  it("关键词筛选忽略大小写", () => {
+    render(<LogPanel logs={MIXED} onClear={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("筛选日志"), { target: { value: "MODS" } });
+
+    expect(screen.getByText(/Loading 63 mods/)).toBeInTheDocument();
+    expect(screen.queryByText(/缺前置/)).toBeNull();
+  });
+
+  it("筛不出东西时给出提示而不是空白", () => {
+    render(<LogPanel logs={MIXED} onClear={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("筛选日志"), { target: { value: "不存在的词" } });
+
+    expect(screen.getByText("没有符合条件的日志。")).toBeInTheDocument();
+  });
+
+  it("复制的是筛选后的内容，不是全部", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    render(<LogPanel logs={MIXED} onClear={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "错误" }));
+    fireEvent.click(screen.getByRole("button", { name: "复制" }));
+
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalled());
+    // 排查时最常见的用法：筛出错误再复制，所以只能复制看得见的行。
+    expect(writeText).toHaveBeenCalledWith("[3] [main/ERROR]: 缺前置");
+  });
+
+  it("没有日志时不显示筛选条", () => {
+    render(<LogPanel logs={[]} onClear={vi.fn()} />);
+
+    expect(screen.queryByLabelText("筛选日志")).toBeNull();
+    expect(screen.queryByRole("button", { name: "警告" })).toBeNull();
+  });
+});
