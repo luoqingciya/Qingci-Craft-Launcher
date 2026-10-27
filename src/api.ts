@@ -45,6 +45,26 @@ export interface SettingsView {
   loaderVersion: string | null;
   /** 下载源：`official` 或 `bmclapi`。 */
   downloadSource: string;
+  /** 已知实例，按添加顺序排列。 */
+  instances: InstanceView[];
+  /** 当前实例名。 */
+  activeInstance: string;
+}
+
+/** 一个实例：一套独立的游戏目录。 */
+export interface InstanceView {
+  /** 显示名，同时是标识。 */
+  name: string;
+  /** 实际生效的游戏目录。 */
+  gameDir: string;
+  /** 是否跟随安装位置（默认目录）。 */
+  isDefaultDir: boolean;
+  /** 是否为当前实例。 */
+  active: boolean;
+  /** 该实例上次选择的版本。 */
+  selectedVersion: string | null;
+  /** 该实例上次选择的加载器版本。 */
+  loaderVersion: string | null;
 }
 
 /** 提交给 Rust 的设置。空字符串表示「用默认值」。 */
@@ -142,6 +162,26 @@ export function getSettings(): Promise<SettingsView> {
 /** 保存设置。整体提交，一次写清。 */
 export function saveSettings(input: SettingsInput): Promise<SettingsView> {
   return invoke<SettingsView>("save_settings", { input });
+}
+
+/** 新建实例并切换过去。目录为空时落在 `<安装目录>/instances/<名字>`。 */
+export function createInstance(name: string, dir: string | null): Promise<SettingsView> {
+  return invoke<SettingsView>("create_instance", { name, dir });
+}
+
+/** 切换到另一个实例。 */
+export function switchInstance(name: string): Promise<SettingsView> {
+  return invoke<SettingsView>("switch_instance", { name });
+}
+
+/** 重命名实例。名字是标识，所以当前实例指针会跟着改。 */
+export function renameInstance(from: string, to: string): Promise<SettingsView> {
+  return invoke<SettingsView>("rename_instance", { from, to });
+}
+
+/** 从列表里移除实例。**不删文件**——游戏目录里可能有存档。 */
+export function deleteInstance(name: string): Promise<SettingsView> {
+  return invoke<SettingsView>("delete_instance", { name });
 }
 
 /** 列出本机可用的 Java。 */

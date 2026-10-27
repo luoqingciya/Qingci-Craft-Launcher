@@ -15,6 +15,29 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+/// 一个实例：一套独立的游戏目录，连同它自己的版本选择。
+///
+/// 名字同时是标识（不允许重名）。这样界面、配置、日志里都是同一个字符串，
+/// 不必再维护一套用户看不见的 id——代价是重命名要当成「换标识」处理。
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Instance {
+    /// 显示名，同时作为标识。
+    pub name: String,
+    /// 游戏目录。`None` 表示默认目录（`<安装目录>/game`）。
+    ///
+    /// 只有从旧版单目录配置迁移来的那个实例可能是 `None`——新建实例一律带显式目录，
+    /// 否则多个实例会指向同一个目录，切换就失去意义。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir: Option<PathBuf>,
+    /// 该实例上次选择的版本。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_version: Option<String>,
+    /// 该实例上次选择的加载器版本（如 `0.20.1`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loader_version: Option<String>,
+}
+
 /// 配置文件内容。
 ///
 /// 只存**用户显式指定**的值。默认值由运行时推导，不写进文件——
@@ -22,9 +45,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
-    /// 自定义游戏目录。`None` 表示使用默认目录。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub game_dir: Option<PathBuf>,
     /// 离线模式玩家名。`None` 表示用 [`DEFAULT_PLAYER_NAME`]。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub player_name: Option<String>,
@@ -34,20 +54,31 @@ pub struct Settings {
     /// 显式指定的 Java 可执行文件。`None` 表示自动选择。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub java_path: Option<PathBuf>,
-    /// 上次选择的版本。
-    ///
-    /// 存在这里而不是只放内存：重启后回到「未选择」等于每次都让用户重选一遍。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub selected_version: Option<String>,
-    /// 上次选择的加载器版本（如 `0.20.1`）。`None` 表示原版。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub loader_version: Option<String>,
     /// 下载源：`None` 表示官方，`Some("bmclapi")` 表示国内镜像。
     ///
     /// 存字符串而不是枚举：配置文件是用户能改的，认不出的值要能回落，
     /// 而不是让启动器起不来。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub download_source: Option<String>,
+    /// 已知实例。至少一个——[`Settings::normalize`] 保证。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub instances: Vec<Instance>,
+    /// 当前实例名。指向不存在的名字时由 [`Settings::normalize`] 修正。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_instance: Option<String>,
+
+    /// **旧版字段**：单目录配置里的游戏目录。
+    ///
+    /// 只为读得懂 0.1.x 的文件而保留，[`Settings::normalize`] 会把它搬进
+    /// `instances` 并清空。留着不清就是两份真相。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game_dir: Option<PathBuf>,
+    /// **旧版字段**：单目录配置里的版本选择。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_version: Option<String>,
+    /// **旧版字段**：单目录配置里的加载器选择。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loader_version: Option<String>,
 }
 
 /// 未设置玩家名时使用的默认值。
@@ -65,7 +96,73 @@ pub const MAX_MEMORY_MB: u32 = 65_536;
 /// 玩家名的最大长度。
 pub const MAX_PLAYER_NAME_LEN: usize = 32;
 
+/// 实例名的最大长度。
+pub const MAX_INSTANCE_NAME_LEN: usize = 32;
+
+/// 从旧版配置迁移出来的实例名。
+pub const DEFAULT_INSTANCE_NAME: &str = "默认";
+
 impl Settings {
+    /// 把旧版「单目录 + 单一选择」的配置搬进实例列表。**幂等**。
+    ///
+    /// 在 [`load`] 里调用，因此下游拿到的设置一定满足「至少一个实例、
+    /// 当前实例指向存在的名字」这两个不变量，不必各自判空。
+    #[must_use]
+    pub fn normalize(mut self) -> Self {
+        if self.instances.is_empty() {
+            self.instances.push(Instance {
+                name: DEFAULT_INSTANCE_NAME.to_owned(),
+                dir: self.game_dir.take(),
+                selected_version: self.selected_version.take(),
+                loader_version: self.loader_version.take(),
+            });
+        }
+
+        // 已经是新格式时旧字段只可能是残留。不清掉，下一次保存就会写出两份真相，
+        // 而且没人知道该信哪一份。
+        self.game_dir = None;
+        self.selected_version = None;
+        self.loader_version = None;
+
+        // 当前实例指向一个不存在的名字（手改配置、或删掉了正在用的实例）时
+        // 回落到第一个，而不是让界面空着。
+        let valid = self
+            .active_instance
+            .as_ref()
+            .is_some_and(|name| self.instances.iter().any(|instance| &instance.name == name));
+        if !valid {
+            self.active_instance = self.instances.first().map(|instance| instance.name.clone());
+        }
+
+        self
+    }
+
+    /// 当前实例。`normalize` 之后必定存在，返回 `Option` 只是为了不 panic。
+    #[must_use]
+    pub fn active(&self) -> Option<&Instance> {
+        let name = self.active_instance.as_ref()?;
+        self.instances
+            .iter()
+            .find(|instance| &instance.name == name)
+    }
+
+    /// 当前实例的可变引用。
+    pub fn active_mut(&mut self) -> Option<&mut Instance> {
+        let name = self.active_instance.clone()?;
+        self.instances
+            .iter_mut()
+            .find(|instance| instance.name == name)
+    }
+
+    /// 实例的实际目录：没指定就用默认目录。
+    #[must_use]
+    pub fn instance_dir(install_dir: &Path, instance: &Instance) -> PathBuf {
+        instance
+            .dir
+            .clone()
+            .unwrap_or_else(|| default_game_dir(install_dir))
+    }
+
     /// 校验设置是否可用。
     ///
     /// 返回给用户看的错误文案：这些值都来自界面输入，报错必须能指导修改。
@@ -94,6 +191,29 @@ impl Settings {
             return Err(format!("指定的 Java 不存在：{}", path.display()));
         }
 
+        let mut seen = std::collections::HashSet::new();
+        let mut using_default_dir = 0;
+        for instance in &self.instances {
+            let name = instance.name.trim();
+            if name.is_empty() {
+                return Err("实例名不能为空".to_owned());
+            }
+            if name.chars().count() > MAX_INSTANCE_NAME_LEN {
+                return Err(format!("实例名不能超过 {MAX_INSTANCE_NAME_LEN} 个字符"));
+            }
+            if !seen.insert(name) {
+                return Err(format!("实例名重复：{name}"));
+            }
+            if instance.dir.is_none() {
+                using_default_dir += 1;
+            }
+        }
+
+        // 两个实例都用默认目录 = 两个实例其实是同一个，切换看起来毫无反应。
+        if using_default_dir > 1 {
+            return Err("最多只能有一个实例使用默认目录".to_owned());
+        }
+
         Ok(())
     }
 
@@ -102,11 +222,15 @@ impl Settings {
     /// 选择是高频、低风险的写入（点一下就存），而保存设置是表单提交。
     /// 两者分开写，避免「保存设置」把上次的选择清空、或「切换版本」把
     /// 表单里还没提交的改动一起写进去。
+    ///
+    /// 选择记在**当前实例**上：两个实例可以各玩各的版本，切换过去不会互相覆盖。
     #[must_use]
     pub fn with_selection(&self, version: Option<String>, loader: Option<String>) -> Self {
         let mut next = self.clone();
-        next.selected_version = version.filter(|value| !value.trim().is_empty());
-        next.loader_version = loader.filter(|value| !value.trim().is_empty());
+        if let Some(active) = next.active_mut() {
+            active.selected_version = version.filter(|value| !value.trim().is_empty());
+            active.loader_version = loader.filter(|value| !value.trim().is_empty());
+        }
         next
     }
 
@@ -141,12 +265,15 @@ pub fn default_game_dir(install_dir: &Path) -> PathBuf {
 ///
 /// 文件不存在、无法读取、内容损坏时一律返回默认值——配置坏掉不该让启动器
 /// 起不来。真正的写入错误会在 [`save`] 里暴露。
+///
+/// 返回值一定经过 [`Settings::normalize`]：调用方不必再判断「有没有实例」。
 #[must_use]
 pub fn load(path: &Path) -> Settings {
     std::fs::read_to_string(path)
         .ok()
-        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .and_then(|raw| serde_json::from_str::<Settings>(&raw).ok())
         .unwrap_or_default()
+        .normalize()
 }
 
 /// 写入配置文件。
@@ -219,6 +346,9 @@ pub fn migrate_preferences(from: &Path, to: &Path) {
         loader_version: None,
         // 下载源是网络环境决定的偏好，跟机器走，带过来。
         download_source: legacy.download_source,
+        // 实例是「这一份安装的状态」，不迁移——见上面 `selected_version` 的理由。
+        instances: Vec::new(),
+        active_instance: None,
     };
 
     // 没有值得带的东西就别写文件，免得凭空造出一个「用户配置过」的假象。
@@ -232,7 +362,7 @@ pub fn migrate_preferences(from: &Path, to: &Path) {
 #[cfg(test)]
 mod tests {
     use super::{
-        DEFAULT_PLAYER_NAME, MAX_MEMORY_MB, MAX_PLAYER_NAME_LEN, MIN_MEMORY_MB, Settings,
+        DEFAULT_PLAYER_NAME, Instance, MAX_MEMORY_MB, MAX_PLAYER_NAME_LEN, MIN_MEMORY_MB, Settings,
         default_game_dir, ensure_writable, load, save,
     };
     use std::path::PathBuf;
@@ -248,7 +378,9 @@ mod tests {
     fn missing_config_yields_defaults() {
         let dir = TempDir::new().expect("临时目录");
         let settings = load(&dir.path().join("nope.json"));
-        assert_eq!(settings, Settings::default());
+        // 读回来一定带一个默认实例——这是 normalize 保证的不变量。
+        assert_eq!(settings, Settings::default().normalize());
+        assert_eq!(settings.active_instance.as_deref(), Some("默认"));
     }
 
     #[test]
@@ -257,7 +389,7 @@ mod tests {
         let path = dir.path().join("settings.json");
         std::fs::write(&path, b"{ this is not json").expect("应能写入");
 
-        assert_eq!(load(&path), Settings::default());
+        assert_eq!(load(&path), Settings::default().normalize());
     }
 
     #[test]
@@ -265,13 +397,18 @@ mod tests {
         let dir = TempDir::new().expect("临时目录");
         let path = dir.path().join("nested/settings.json");
         let settings = Settings {
-            game_dir: Some(PathBuf::from("/games/qcl")),
             player_name: Some("清辞".to_owned()),
             memory_mb: Some(4096),
             java_path: None,
-            selected_version: Some("26.3".to_owned()),
-            loader_version: Some("0.20.1".to_owned()),
             download_source: Some("bmclapi".to_owned()),
+            instances: vec![Instance {
+                name: "默认".to_owned(),
+                dir: Some(PathBuf::from("/games/qcl")),
+                selected_version: Some("26.3".to_owned()),
+                loader_version: Some("0.20.1".to_owned()),
+            }],
+            active_instance: Some("默认".to_owned()),
+            ..Settings::default()
         };
 
         save(&path, &settings).expect("应能保存");
@@ -406,18 +543,21 @@ mod tests {
 
 #[cfg(test)]
 mod selection_tests {
-    use super::Settings;
+    use super::{Instance, Settings};
     use std::path::PathBuf;
 
     fn populated() -> Settings {
         Settings {
-            game_dir: Some(PathBuf::from("/games/qcl")),
             player_name: Some("清辞".to_owned()),
             memory_mb: Some(6144),
             java_path: Some(PathBuf::from("/usr/bin/java")),
-            selected_version: None,
-            loader_version: None,
-            download_source: None,
+            instances: vec![Instance {
+                name: "默认".to_owned(),
+                dir: Some(PathBuf::from("/games/qcl")),
+                ..Instance::default()
+            }],
+            active_instance: Some("默认".to_owned()),
+            ..Settings::default()
         }
     }
 
@@ -425,10 +565,11 @@ mod selection_tests {
     fn with_selection_only_touches_selection() {
         // 切换版本不该顺手把设置表单里的值改掉——两边是独立的写入路径。
         let next = populated().with_selection(Some("26.3".to_owned()), Some("0.20.1".to_owned()));
+        let active = next.active().expect("必有当前实例");
 
-        assert_eq!(next.selected_version.as_deref(), Some("26.3"));
-        assert_eq!(next.loader_version.as_deref(), Some("0.20.1"));
-        assert_eq!(next.game_dir, Some(PathBuf::from("/games/qcl")));
+        assert_eq!(active.selected_version.as_deref(), Some("26.3"));
+        assert_eq!(active.loader_version.as_deref(), Some("0.20.1"));
+        assert_eq!(active.dir, Some(PathBuf::from("/games/qcl")));
         assert_eq!(next.player_name.as_deref(), Some("清辞"));
         assert_eq!(next.memory_mb, Some(6144));
         assert_eq!(next.java_path, Some(PathBuf::from("/usr/bin/java")));
@@ -438,9 +579,36 @@ mod selection_tests {
     fn empty_selection_is_stored_as_none() {
         // 空串来自界面（加载器选「无」），不该写进配置文件。
         let next = populated().with_selection(Some("  ".to_owned()), Some(String::new()));
+        let active = next.active().expect("必有当前实例");
 
-        assert!(next.selected_version.is_none());
-        assert!(next.loader_version.is_none());
+        assert!(active.selected_version.is_none());
+        assert!(active.loader_version.is_none());
+    }
+
+    #[test]
+    fn 选择记在各自实例上() {
+        // 两个实例各玩各的版本，切过去不该互相覆盖。
+        let mut settings = populated();
+        settings.instances.push(Instance {
+            name: "整合包".to_owned(),
+            dir: Some(PathBuf::from("/games/pack")),
+            ..Instance::default()
+        });
+
+        let first = settings.with_selection(Some("26.3".to_owned()), None);
+        let mut second = first.clone();
+        second.active_instance = Some("整合包".to_owned());
+        let second = second.with_selection(Some("1.7.10".to_owned()), None);
+
+        assert_eq!(
+            second.instances[0].selected_version.as_deref(),
+            Some("26.3"),
+            "切换实例不该改到另一个实例的选择"
+        );
+        assert_eq!(
+            second.instances[1].selected_version.as_deref(),
+            Some("1.7.10")
+        );
     }
 
     #[test]
@@ -477,6 +645,7 @@ mod migration_tests {
                 selected_version: Some("26.3".to_owned()),
                 loader_version: Some("0.20.1".to_owned()),
                 download_source: Some("bmclapi".to_owned()),
+                ..Settings::default()
             },
         )
         .expect("写旧配置");
@@ -564,5 +733,175 @@ mod migration_tests {
         let missing = dir.path().join("nope");
         assert!(!is_writable(&missing));
         assert!(!missing.exists());
+    }
+}
+
+#[cfg(test)]
+mod instance_tests {
+    use super::{Instance, Settings, load, save};
+    use std::path::PathBuf;
+
+    fn temp_path() -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::TempDir::new().expect("临时目录");
+        let path = dir.path().join("settings.json");
+        (dir, path)
+    }
+
+    #[test]
+    fn 旧版单目录配置迁移成一个实例() {
+        let (_dir, path) = temp_path();
+        // 0.1.x 的文件：只有一套目录与一个选择。
+        std::fs::write(
+            &path,
+            r#"{"gameDir":"/games/qcl","selectedVersion":"26.3","loaderVersion":"0.20.1"}"#,
+        )
+        .expect("写入旧配置");
+
+        let settings = load(&path);
+
+        assert_eq!(settings.instances.len(), 1);
+        assert_eq!(settings.instances[0].name, "默认");
+        assert_eq!(settings.instances[0].dir, Some(PathBuf::from("/games/qcl")));
+        assert_eq!(
+            settings.instances[0].selected_version.as_deref(),
+            Some("26.3")
+        );
+        assert_eq!(
+            settings.instances[0].loader_version.as_deref(),
+            Some("0.20.1")
+        );
+        assert_eq!(settings.active_instance.as_deref(), Some("默认"));
+
+        // 旧字段必须清掉：留着就是两份真相，下次保存会写出互相矛盾的配置。
+        assert_eq!(settings.game_dir, None);
+        assert_eq!(settings.selected_version, None);
+        assert_eq!(settings.loader_version, None);
+    }
+
+    #[test]
+    fn 迁移是幂等的() {
+        // load 里调 normalize，所以「读出来再存回去再读」不能越变越多实例。
+        let once = Settings::default().normalize();
+        let twice = once.clone().normalize();
+        assert_eq!(once, twice);
+        assert_eq!(twice.instances.len(), 1);
+    }
+
+    #[test]
+    fn 当前实例指向不存在的名字时回落到第一个() {
+        let settings = Settings {
+            instances: vec![
+                Instance {
+                    name: "A".to_owned(),
+                    dir: Some(PathBuf::from("/a")),
+                    ..Instance::default()
+                },
+                Instance {
+                    name: "B".to_owned(),
+                    dir: Some(PathBuf::from("/b")),
+                    ..Instance::default()
+                },
+            ],
+            // 手改配置或删掉了正在用的实例。
+            active_instance: Some("已删除".to_owned()),
+            ..Settings::default()
+        }
+        .normalize();
+
+        assert_eq!(settings.active_instance.as_deref(), Some("A"));
+    }
+
+    #[test]
+    fn 保存后旧字段不出现在文件里() {
+        let (_dir, path) = temp_path();
+        let settings = Settings {
+            game_dir: Some(PathBuf::from("/games/qcl")),
+            ..Settings::default()
+        }
+        .normalize();
+
+        save(&path, &settings).expect("应能保存");
+        let raw = std::fs::read_to_string(&path).expect("应能读回");
+
+        assert!(!raw.contains("gameDir"), "旧字段不该被写回：{raw}");
+        assert!(!raw.contains("selectedVersion"), "旧字段不该被写回：{raw}");
+        assert!(raw.contains("\"instances\""), "应写出实例列表：{raw}");
+    }
+
+    #[test]
+    fn 实例名重复会被拒绝() {
+        let settings = Settings {
+            instances: vec![
+                Instance {
+                    name: "生存".to_owned(),
+                    dir: Some(PathBuf::from("/a")),
+                    ..Instance::default()
+                },
+                Instance {
+                    name: "生存".to_owned(),
+                    dir: Some(PathBuf::from("/b")),
+                    ..Instance::default()
+                },
+            ],
+            active_instance: Some("生存".to_owned()),
+            ..Settings::default()
+        };
+
+        let error = settings.validate().expect_err("重名应被拒绝");
+        assert!(error.contains("重复"), "{error}");
+    }
+
+    #[test]
+    fn 两个实例都用默认目录会被拒绝() {
+        // 都指向 <安装目录>/game 的话，两个实例其实是同一个，切换看起来毫无反应。
+        let settings = Settings {
+            instances: vec![
+                Instance {
+                    name: "A".to_owned(),
+                    dir: None,
+                    ..Instance::default()
+                },
+                Instance {
+                    name: "B".to_owned(),
+                    dir: None,
+                    ..Instance::default()
+                },
+            ],
+            active_instance: Some("A".to_owned()),
+            ..Settings::default()
+        };
+
+        let error = settings.validate().expect_err("应被拒绝");
+        assert!(error.contains("默认目录"), "{error}");
+    }
+
+    #[test]
+    fn 实例名为空或过长会被拒绝() {
+        let with_name = |name: &str| Settings {
+            instances: vec![Instance {
+                name: name.to_owned(),
+                dir: Some(PathBuf::from("/a")),
+                ..Instance::default()
+            }],
+            active_instance: Some(name.to_owned()),
+            ..Settings::default()
+        };
+
+        assert!(with_name("   ").validate().is_err());
+        assert!(with_name(&"名".repeat(33)).validate().is_err());
+        assert!(with_name(&"名".repeat(32)).validate().is_ok());
+    }
+
+    #[test]
+    fn 实例目录缺省时用安装目录下的_game() {
+        let instance = Instance {
+            name: "A".to_owned(),
+            dir: None,
+            ..Instance::default()
+        };
+        assert_eq!(
+            Settings::instance_dir(&PathBuf::from("/opt/qcl"), &instance),
+            PathBuf::from("/opt/qcl/game")
+        );
     }
 }

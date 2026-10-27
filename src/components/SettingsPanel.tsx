@@ -37,6 +37,10 @@ export function SettingsPanel({
   error,
   onSave,
   onRefreshJava,
+  onSwitchInstance,
+  onCreateInstance,
+  onRenameInstance,
+  onDeleteInstance,
   embedded = false,
 }: {
   settings: SettingsView;
@@ -45,12 +49,21 @@ export function SettingsPanel({
   error: string | null;
   onSave: (input: SettingsInput) => void;
   onRefreshJava: () => void;
+  onSwitchInstance: (name: string) => void;
+  onCreateInstance: (name: string) => void;
+  onRenameInstance: (from: string, to: string) => void;
+  onDeleteInstance: (name: string) => void;
   /** 放在抽屉等已有容器里时去掉自身的卡片外框，避免卡片套卡片。 */
   embedded?: boolean;
 }) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(settings));
   const [baseline, setBaseline] = useState<SettingsView>(settings);
   const [localError, setLocalError] = useState<string | null>(null);
+  // 实例的新建与重命名是即时生效的（不像上面那些字段要等「保存」），
+  // 所以各自的输入放在本地状态里。
+  const [newInstance, setNewInstance] = useState("");
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   // 外部设置变化时同步草稿（例如保存成功后后端返回了规范化后的路径）。
   //
@@ -155,6 +168,126 @@ export function SettingsPanel({
       )}
 
       <div className="grid grid-cols-1 gap-4 text-[13px] lg:grid-cols-2">
+        {/* 实例 */}
+        <div className="lg:col-span-2">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[var(--color-text-secondary)]">实例</span>
+            <span className="text-[12px] text-[var(--color-text-muted)]">
+              每个实例是一套独立的游戏目录，版本选择也各记各的
+            </span>
+          </div>
+
+          <ul className="mt-1.5 divide-y divide-[var(--color-border-subtle)] rounded border border-[var(--color-border-subtle)]">
+            {settings.instances.map((instance) => (
+              <li key={instance.name} className="flex items-center gap-2 px-2.5 py-2">
+                {renaming === instance.name ? (
+                  <>
+                    <input
+                      value={renameValue}
+                      onChange={(event) => setRenameValue(event.target.value)}
+                      aria-label="重命名后的实例名"
+                      spellCheck={false}
+                      className="min-w-0 flex-1 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2 py-1 text-[13px]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onRenameInstance(instance.name, renameValue);
+                        setRenaming(null);
+                      }}
+                      disabled={saving || renameValue.trim() === ""}
+                      className="shrink-0 rounded px-2 py-1 text-[12px] text-[var(--color-accent-text)] hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
+                    >
+                      确定
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRenaming(null)}
+                      className="shrink-0 rounded px-2 py-1 text-[12px] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"
+                    >
+                      取消
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onSwitchInstance(instance.name)}
+                      disabled={instance.active || saving}
+                      className="min-w-0 flex-1 text-left disabled:cursor-default"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate text-[13px] text-[var(--color-text-primary)]">
+                          {instance.name}
+                        </span>
+                        {instance.active && (
+                          <span className="shrink-0 rounded bg-[var(--color-accent-soft)] px-1.5 py-0.5 text-[11px] text-[var(--color-accent-text)]">
+                            当前
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-0.5 block truncate font-mono text-[11px] text-[var(--color-text-muted)]">
+                        {instance.gameDir}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRenaming(instance.name);
+                        setRenameValue(instance.name);
+                      }}
+                      disabled={saving}
+                      className="shrink-0 rounded px-2 py-1 text-[12px] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40"
+                    >
+                      重命名
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteInstance(instance.name)}
+                      disabled={saving || settings.instances.length <= 1}
+                      // 只移除记录，不删文件——说清楚比事后解释好。
+                      title={
+                        settings.instances.length <= 1
+                          ? "至少要保留一个实例"
+                          : "从列表移除，不会删除磁盘上的文件"
+                      }
+                      className="shrink-0 rounded px-2 py-1 text-[12px] text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 disabled:opacity-30"
+                    >
+                      移除
+                    </button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-2 flex gap-2">
+            <input
+              value={newInstance}
+              onChange={(event) => setNewInstance(event.target.value)}
+              placeholder="新实例名，如「整合包」"
+              aria-label="新实例名"
+              spellCheck={false}
+              className="min-w-0 flex-1 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2.5 py-2 text-[13px]"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                onCreateInstance(newInstance.trim());
+                setNewInstance("");
+              }}
+              disabled={saving || newInstance.trim() === ""}
+              className="shrink-0 rounded border border-[var(--color-border-subtle)] px-3 py-1.5 hover:bg-[var(--color-accent-soft)] disabled:opacity-40"
+            >
+              新建
+            </button>
+          </div>
+          <p className="mt-1 text-[12px] text-[var(--color-text-muted)]">
+            新建的实例默认落在 <span className="font-mono">instances/&lt;名字&gt;</span>，
+            创建后可以在下面改目录。
+          </p>
+        </div>
+
         {/* 游戏目录 */}
         <div className="lg:col-span-2">
           <label className="flex items-center gap-2 text-[var(--color-text-secondary)]">

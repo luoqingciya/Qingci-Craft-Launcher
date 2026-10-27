@@ -26,6 +26,8 @@ const SETTINGS: SettingsView = {
   selectedVersion: null,
   loaderVersion: null,
   downloadSource: "official",
+  instances: [{ name: "默认", gameDir: "C:\\games\\qcl", isDefaultDir: false, active: true, selectedVersion: null, loaderVersion: null }],
+  activeInstance: "默认",
 };
 
 function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {}) {
@@ -68,6 +70,10 @@ function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {})
     onInstallUpdate: vi.fn(),
     onSaveSettings: vi.fn(),
     onRefreshJava: vi.fn(),
+    onSwitchInstance: vi.fn(),
+    onCreateInstance: vi.fn(),
+    onRenameInstance: vi.fn(),
+    onDeleteInstance: vi.fn(),
     ...overrides,
   };
   render(<LauncherView {...props} />);
@@ -77,19 +83,7 @@ function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {})
 describe("LauncherView", () => {
   it("下载界面标注 BMCLAPI 来源（走镜像时）", () => {
     renderView({
-      settings: {
-        gameDir: "C:\\games\\qcl",
-        defaultGameDir: "C:\\games\\qcl",
-        isCustom: false,
-        fallbackReason: null,
-        playerName: "Player",
-        memoryMb: null,
-        javaPath: null,
-        memoryRange: [512, 65536],
-        selectedVersion: null,
-        loaderVersion: null,
-        downloadSource: "bmclapi",
-      },
+      settings: { ...SETTINGS, downloadSource: "bmclapi" },
       progress: { phase: "assets", completed: 1, total: 10, percent: 10 },
     });
 
@@ -245,5 +239,48 @@ describe("崩溃摘要", () => {
     renderView({ selected: "26.3", crash: null });
 
     expect(screen.queryByRole("button", { name: "复制摘要" })).not.toBeInTheDocument();
+  });
+});
+
+describe("实例切换器", () => {
+  const TWO = [
+    {
+      name: "默认",
+      gameDir: "C:\\games\\qcl",
+      isDefaultDir: false,
+      active: true,
+      selectedVersion: null,
+      loaderVersion: null,
+    },
+    {
+      name: "整合包",
+      gameDir: "C:\\games\\pack",
+      isDefaultDir: false,
+      active: false,
+      selectedVersion: null,
+      loaderVersion: null,
+    },
+  ];
+
+  it("只有一个实例时不占地方", () => {
+    // 只有一个实例时切换器没有任何可选项，多一行只是噪音。
+    renderView();
+
+    expect(screen.queryByLabelText("切换实例")).toBeNull();
+  });
+
+  it("多个实例时出现在启动面板上", async () => {
+    const onSwitch = vi.fn();
+    renderView({
+      settings: { ...SETTINGS, instances: TWO, activeInstance: "默认" },
+      onSwitchInstance: onSwitch,
+    });
+
+    const select = screen.getByLabelText("切换实例");
+    expect(select).toHaveValue("默认");
+
+    await userEvent.selectOptions(select, "整合包");
+
+    expect(onSwitch).toHaveBeenCalledWith("整合包");
   });
 });

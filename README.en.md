@@ -35,7 +35,7 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 | Crash summary | ✅ | Non-zero exit produces a verdict; reads `crash-reports/` when present |
 | Auto-update | ✅ | Installed builds check automatically; nothing installs without a valid signature |
 | Microsoft login | ✅ | Device code flow (the launcher never sees the password); tokens live in the OS keychain and refresh silently at startup |
-| Instances | ⬜ | Multiple isolated game directories |
+| Instances | ✅ | Multiple independent game directories, each with its own version selection |
 | Forge / NeoForge | ⬜ | See roadmap |
 
 ## Design principles

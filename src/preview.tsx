@@ -51,6 +51,8 @@ const SETTINGS: SettingsView = {
   selectedVersion: null,
   loaderVersion: null,
   downloadSource: "official",
+  instances: [{ name: "默认", gameDir: "C:\\games\\qcl", isDefaultDir: false, active: true, selectedVersion: null, loaderVersion: null }],
+  activeInstance: "默认",
 };
 
 const LOGS: LogEntry[] = [
@@ -114,6 +116,10 @@ function Preview() {
       onClearLogs={() => setLogs([])}
       onSaveSettings={() => {}}
       onRefreshJava={() => {}}
+      onSwitchInstance={() => {}}
+      onCreateInstance={() => {}}
+      onRenameInstance={() => {}}
+      onDeleteInstance={() => {}}
     />
   );
 }

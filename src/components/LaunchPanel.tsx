@@ -3,6 +3,7 @@
 // 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
 
 import type { Account, GameStatus, InstallProgressEvent, VersionSummary } from "../api";
+import type { InstanceView } from "../api";
 import { InstallProgressBar } from "./SettingsPanel";
 
 /**
@@ -18,6 +19,8 @@ export function LaunchPanel({
   account,
   msaLogin,
   downloadSource,
+  instances,
+  activeInstance,
   selected,
   selectedVersion,
   loaderLabel,
@@ -34,15 +37,19 @@ export function LaunchPanel({
   onStop,
   onLogin,
   onSignOut,
+  onSwitchInstance,
 }: {
-  /** 离线玩家名。已登录时界面显示的是账号名，这里只是回落值。 */
-  playerName: string;
+  /** 离线玩家名。已登录时界面显示的是账号名，这里只是回落值。 */  playerName: string;
   /** 已登录的账号，未登录为 `null`。 */
   account: Account | null;
   /** 本次构建是否内置了微软登录能力。 */
   msaLogin: boolean;
   /** 下载源，下载界面要据此标注 BMCLAPI 来源（使用协议要求）。 */
   downloadSource: string;
+  /** 已知实例，用于切换器。 */
+  instances: InstanceView[];
+  /** 当前实例名。 */
+  activeInstance: string;
   selected: string | null;
   selectedVersion: VersionSummary | undefined;
   /** 当前加载器的显示文案，如「无（原版）」或「Fabric 0.20.1」。 */
@@ -60,6 +67,8 @@ export function LaunchPanel({
   onStop: () => void;
   onLogin: () => void;
   onSignOut: () => void;
+  /** 切换实例：整套游戏目录跟着换。 */
+  onSwitchInstance: (name: string) => void;
 }) {
   const running = status.running;
   const displayName = account?.name ?? playerName;
@@ -110,6 +119,30 @@ export function LaunchPanel({
 
       {/* 当前版本 + 加载器：两行都是「可点击的选择入口」 */}
       <section className="overflow-hidden rounded-2xl bg-[var(--color-surface-raised)] ring-1 ring-inset ring-[var(--color-border-subtle)]">
+        {/* 只有一个实例时不显示切换器：多一行没得选的东西只是噪音。 */}
+        {instances.length > 1 && (
+          <>
+            <label className="flex items-center gap-3 px-4 py-3">
+              <span className="min-w-0 flex-1 text-[12px] text-[var(--color-text-muted)]">
+                实例
+              </span>
+              <select
+                value={activeInstance}
+                onChange={(event) => onSwitchInstance(event.target.value)}
+                disabled={running}
+                aria-label="切换实例"
+                className="max-w-[180px] rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2 py-1 text-[13px] text-[var(--color-text-primary)] disabled:opacity-60"
+              >
+                {instances.map((instance) => (
+                  <option key={instance.name} value={instance.name}>
+                    {instance.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="h-px bg-[var(--color-border-subtle)]" />
+          </>
+        )}
         <button
           type="button"
           onClick={onPickVersion}
