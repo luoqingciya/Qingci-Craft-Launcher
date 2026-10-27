@@ -180,13 +180,15 @@ Two distribution channels, deliberately kept apart:
 | Channel | Contents | Purpose |
 | --- | --- | --- |
 | COS (`qcl.luoqingciya.cn/releases/`) | Windows NSIS installer + `.sig` + `latest.json` | the auto-update channel |
-| GitHub Releases | all of the above, plus Linux AppImage and deb | manual downloads |
+| GitHub Releases | all of the above, plus the Windows portable build and Linux AppImage/deb | manual downloads |
 
 `latest.json` therefore carries **only** a `windows-x86_64` entry. The Linux artifacts stay on GitHub
 Releases: the AppImage is 83 MB and does not participate in auto-update, so putting it on COS would
 cost bandwidth for nothing.
 
-- **Windows**: NSIS, 3.5 MB, reuses the system WebView2; auto-update installs silently and relaunches.
+- **Windows installer**: NSIS, 3.5 MB, reuses the system WebView2; auto-update installs silently and relaunches.
+- **Windows portable**: 11 MB, the very exe that lives inside the installer — double-click to run, game
+  directory next to the exe. No auto-update: replacing a running exe is not allowed on Windows.
 - **Linux AppImage**: 83 MB. Self-contained — it carries the whole WebKitGTK + JavaScriptCore + GTK3
   stack (530 files once extracted), which is why it is over ten times the size of the deb.
 - **Linux deb**: 4.9 MB, depends on the distribution's `libwebkit2gtk-4.1`.
