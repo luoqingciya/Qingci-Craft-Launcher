@@ -356,15 +356,20 @@ Fabric 的界面（选版本 → 选加载器 → 安装 → 启动）已在后�
 
 结论：**技术上可行，且不必自己重写 processors**——但国内网络下有三个必须处理的坑。
 
-现代 Forge 安装器的命令行契约（源码 `MinecraftForge/Installer` 分支 2.0，
-`SimpleInstaller.java`）：
+现代 Forge 安装器的命令行契约（**已用真实 installer 实测**，`1.20.1-47.2.0`，
+经 BMCLAPI 下载，`java -jar forge-installer.jar --help` 输出）：
 
 ```
---installClient <dir>   装到指定目录（源码里显式 headless = true，不需要界面）
---installServer <dir>
---offline               不做任何网络调用
---mirror <URL>          自定义镜像
+--installClient [File]  Install the client files to the specified directory (default: .)
+--installServer [File]  Install a server to the specified directory (default: .)
+--mirror <URL>          Use a specific mirror URL
+--offline               Don't attempt any network calls
+--debug                 不删除任何文件
+-h, --help
 ```
+
+源码（`MinecraftForge/Installer` 分支 2.0，`SimpleInstaller.java`）里
+`--installClient` 会显式 `headless = true`，不需要界面。
 
 `ClientInstall.run()` 自己会做完这些：解出 Forge 的 version json → 下 vanilla client jar →
 下 libraries → **跑 processors**。最后一步正是自己实现时最贵的地方。
@@ -380,9 +385,25 @@ Fabric 的界面（选版本 → 选加载器 → 安装 → 启动）已在后�
    也会直接退出**。绕法是 `--offline`，但那要求先用我们自己的下载器（含镜像兜底）
    把 vanilla jar 与 libraries 备齐。
 
-未完成：端到端实测。本机到 `maven.minecraftforge.net` 约 500 B/s 且频繁超时
-（200 KB 的 maven-metadata 五分钟没下完），下载不到 installer jar。要真正验证，
-需要一台能稳定访问 Forge maven 的机器。
+#### BMCLAPI 对 Forge / NeoForge 是**真镜像**（实测）
+
+这一点与 MC 本体相反，实现时要区别对待：
+
+| 目标 | 镜像行为 | 实测 |
+|---|---|---|
+| Forge maven 产物 | **真镜像** | pom 取回内容与官方 SHA-1 完全一致；installer jar 5.7 MB，2.4 MB/s |
+| NeoForge maven 产物 | **真镜像** | 返回 SHA-1 寻址的下载地址，说明有货 |
+| MC 客户端 jar（`/v1/objects`） | **回源官方** | 5/5 落到 `piston-data.mojang.com`，不是镜像 |
+| MC 元数据（`/v1/packages`） | 自家 CDN | 5/5 落到 `bmclapi*.sakura.*`，本机不通 |
+
+BMCLAPI 有多个后端，路由随机：Forge maven 稳定落到 `mirrors.cernet.edu.cn` /
+`unicom.mirrors.ustc.edu.cn`（可用），MC 元数据稳定落到 `bmclapi*.sakura.*`（本机不通）。
+所以「镜像能不能用」要**按产物类型分别看**，不能一句话概括。
+
+一个直接对比：官方 `maven.minecraftforge.net` 本机约 500 B/s，经 BMCLAPI 是 2.4 MB/s。
+
+未完成：`--installClient` 的完整流程（要准备 `launcher_profiles.json` 与 vanilla jar）。
+CLI 契约与下载链路已实测，安装流程本身还没跑过。
 
 ### Phase 5 · 发布工程 🟡 在线更新已完成，其余未开始
 
