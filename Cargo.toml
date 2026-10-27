@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/qcl-core", "crates/qcl-net", "crates/qcl-java", "crates/qcl-runtime", "crates/qcl-install", "crates/qcl-cli", "crates/qcl-platform", "crates/qcl-auth", "crates/qcl-mods", "src-tauri"]
 
 [workspace.package]
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 rust-version = "1.90"
 license = "GPL-3.0-only"
