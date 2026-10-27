@@ -33,6 +33,9 @@ export function LaunchPanel({
   onLogin,
   onSignOut,
   onSwitchInstance,
+  gameDir,
+  modCount,
+  onOpenGameDir,
 }: {
   /** 离线玩家名。已登录时界面显示的是账号名，这里只是回落值。 */  playerName: string;
   /** 已登录的账号，未登录为 `null`。 */
@@ -59,6 +62,11 @@ export function LaunchPanel({
   onSignOut: () => void;
   /** 切换实例：整套游戏目录跟着换。 */
   onSwitchInstance: (name: string) => void;
+  /** 当前实例的游戏目录，点一下用系统文件管理器打开。 */
+  gameDir: string;
+  /** 已安装的模组数量；`null` 表示还没读出来。 */
+  modCount: number | null;
+  onOpenGameDir: () => void;
 }) {
   const running = status.running;
   const displayName = account?.name ?? playerName;
@@ -67,11 +75,14 @@ export function LaunchPanel({
   return (
     <div className="flex h-full flex-col gap-4">
       {/*
-        一张卡装下「账户 → 实例 → 版本 → 加载器」四行，用发丝线分隔。
+        一张卡装下「账户 → 实例 → 版本 → 加载器 → 目录/模组」，用发丝线分隔。
         原来是两张带间隙的卡片，视觉上是「一摞盒子」；合成一张之后层级更清楚，
-        而且四行都属于「这台机器上玩什么」这件事，本来就不该分开。
+        而且这些行都属于「这台机器上玩什么」这件事，本来就不该分开。
+
+        卡片吃满剩余高度（`flex-1`），中段的空档留在卡**内部**——比留一块
+        面板底色的空洞更像「留白」，而不是「没做完」。
       */}
-      <section className="overflow-hidden rounded-2xl bg-[var(--color-surface-raised)] ring-1 ring-inset ring-[var(--color-border-subtle)]">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-[var(--color-surface-raised)] ring-1 ring-inset ring-[var(--color-border-subtle)]">
         {/* 账户 */}
         <div className="flex items-center gap-3 p-4">
           <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#22a7c4] to-[var(--color-accent)] text-[22px] font-semibold text-white shadow-[0_8px_20px_-8px_var(--color-accent-shadow)]">
@@ -182,9 +193,38 @@ export function LaunchPanel({
           </div>
           <Chevron className="shrink-0 text-[var(--color-text-muted)] transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[var(--color-accent-text)]" />
         </button>
+
+        {/* 把信息行推到底部：中段的空档留在卡内，读起来是留白而不是空洞。 */}
+        <div className="mt-auto" />
+        <div className="h-px bg-[var(--color-border-subtle)]" />
+
+        {/* 静默信息区：目录能点开，模组数一眼可见。字号比上面小一档，
+            不让它跟「版本/加载器」这些主信息抢注意力。 */}
+        <div className="flex flex-col gap-1.5 p-3">
+          <button
+            type="button"
+            onClick={onOpenGameDir}
+            title={gameDir}
+            className="group flex items-baseline gap-2 text-left"
+          >
+            <span className="shrink-0 text-[11px] text-[var(--color-text-muted)]">游戏目录</span>
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--color-text-secondary)] transition-colors group-hover:text-[var(--color-accent-text)] group-hover:underline">
+              {gameDir}
+            </span>
+            <span className="shrink-0 text-[11px] text-[var(--color-text-muted)] transition-colors group-hover:text-[var(--color-accent-text)]">
+              打开
+            </span>
+          </button>
+          <div className="flex items-baseline gap-2">
+            <span className="shrink-0 text-[11px] text-[var(--color-text-muted)]">已装模组</span>
+            <span className="text-[11px] text-[var(--color-text-secondary)]">
+              {modCount === null ? "读取中…" : `${modCount} 个`}
+            </span>
+          </div>
+        </div>
       </section>
 
-      <div className="mt-auto flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         {/* 没选版本时不要给一个点不动的死按钮：直接变成「选择版本」的入口。 */}
         <button
           type="button"

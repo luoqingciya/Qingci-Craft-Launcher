@@ -17,6 +17,7 @@ import {
   listJava,
   createInstance,
   deleteInstance,
+  listMods,
   listVersions,
   renameInstance,
   switchInstance,
@@ -43,6 +44,8 @@ import { useUpdate } from "./lib/useUpdate";
 export default function App() {
   const [state, setState] = useState<VersionsState>({ status: "loading" });
   const [settings, setSettings] = useState<SettingsView | null>(null);
+  // 启动页要显示「已装模组 N 个」。读不出来时保持 null，界面显示「读取中…」。
+  const [modCount, setModCount] = useState<number | null>(null);
   const [javaOptions, setJavaOptions] = useState<JavaOption[]>([]);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -348,6 +351,33 @@ export default function App() {
     [adoptInstance]
   );
 
+  /**
+   * 刷新「已装模组」数量。
+   *
+   * 失败时置 `null` 而不是 0：0 会被读成「一个都没装」，那是错误信息。
+   */
+  const refreshModCount = useCallback(async () => {
+    try {
+      setModCount((await listMods()).length);
+    } catch {
+      setModCount(null);
+    }
+  }, []);
+
+  /** 用系统文件管理器打开当前实例的游戏目录。 */
+  const openGameDir = useCallback(async () => {
+    const dir = settings?.gameDir;
+    if (!dir) {
+      return;
+    }
+    try {
+      const { openPath } = await import("@tauri-apps/plugin-opener");
+      await openPath(dir);
+    } catch (cause: unknown) {
+      setError(`打开游戏目录失败：${String(cause)}`);
+    }
+  }, [settings?.gameDir]);
+
   const refreshJava = useCallback(async () => {
     try {
       setJavaOptions(await listJava());
@@ -450,6 +480,9 @@ export default function App() {
       onSaveSettings={(input) => void saveSettingsInput(input)}
       onRefreshJava={() => void refreshJava()}
       onSwitchInstance={switchInstanceByName}
+      modCount={modCount}
+      onOpenGameDir={() => void openGameDir()}
+      onRefreshModCount={() => void refreshModCount()}
       onCreateInstance={createInstanceByName}
       onRenameInstance={renameInstanceByNames}
       onDeleteInstance={deleteInstanceByName}

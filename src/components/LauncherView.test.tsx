@@ -74,6 +74,9 @@ function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {})
     onCreateInstance: vi.fn(),
     onRenameInstance: vi.fn(),
     onDeleteInstance: vi.fn(),
+    modCount: 63,
+    onOpenGameDir: vi.fn(),
+    onRefreshModCount: vi.fn(),
     onDismissMessage: vi.fn(),
     onDismissError: vi.fn(),
     ...overrides,
@@ -284,5 +287,32 @@ describe("实例切换器", () => {
     await userEvent.selectOptions(select, "整合包");
 
     expect(onSwitch).toHaveBeenCalledWith("整合包");
+  });
+});
+
+describe("启动页信息区", () => {
+  it("显示游戏目录与已装模组数", () => {
+    renderView({ modCount: 63 });
+
+    expect(screen.getByText(/已装模组/)).toBeInTheDocument();
+    expect(screen.getByText("63 个")).toBeInTheDocument();
+    // 目录用等宽字体截断显示，完整路径放在 title 里。
+    expect(screen.getByTitle(SETTINGS.gameDir)).toBeInTheDocument();
+  });
+
+  it("模组数没读出来时不显示 0", () => {
+    // 0 会被读成「一个都没装」，那是错误信息。
+    renderView({ modCount: null });
+
+    expect(screen.getByText("读取中…")).toBeInTheDocument();
+  });
+
+  it("点目录会用系统文件管理器打开", async () => {
+    const onOpen = vi.fn();
+    renderView({ onOpenGameDir: onOpen });
+
+    await userEvent.click(screen.getByTitle(SETTINGS.gameDir));
+
+    expect(onOpen).toHaveBeenCalled();
   });
 });
