@@ -14,7 +14,9 @@
   --color-border-strong: #2e3f52;
   --color-text-primary: #e8eef4;
   --color-text-secondary: #94a3b3;
-  --color-text-muted: #66788a;
+  /* 对比度：在卡片底色 #131b25 上 5.09:1，在 #0b1118 上 5.57:1（AA 要求 4.5）。
+     原来用的 #66788a 只有 3.81:1，12px 的提示文字读起来发灰。 */
+  --color-text-muted: #7b8da1;
   /* 强调色取自应用图标的青绿环，整体偏青蓝而不是纯绿。 */
   --color-accent: #0e7490;
   --color-accent-strong: #155e75;
@@ -45,12 +47,15 @@
   --color-border-strong: #c3d0d2;
   --color-text-primary: #12212b;
   --color-text-secondary: #52656e;
-  --color-text-muted: #8194a0;
+  /* 对比度：在画布 #f4f7f8 上 4.91:1，在纯白上 5.29:1。原来的 #8194a0 只有 2.92:1。 */
+  --color-text-muted: #5d6e79;
   --color-accent: #0f766e;
   --color-accent-strong: #115e59;
   --color-accent-soft: #e0f2fe;
   --color-accent-text: #0e7490;
-  --color-success: #0d9488;
+  /* 原来的 #0d9488 在白底上只有 3.74:1，作为「成功」文字色不达标；
+     换成更绿的 #15803d（5.02:1），顺带和青绿强调色拉开区分。 */
+  --color-success: #15803d;
   --color-danger: #cf3b3b;
   --color-warning: #b45309;
   --color-accent-shadow: rgba(14, 116, 144, 0.35);
