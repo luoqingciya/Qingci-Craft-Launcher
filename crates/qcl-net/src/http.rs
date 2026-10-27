@@ -74,6 +74,44 @@ impl HttpDownloader {
         self.source
     }
 
+    /// 按下载源的顺序发请求，成功就返回。
+    ///
+    /// 镜像优先、官方兜底。**必须有兜底**：BMCLAPI 的元数据端点会 302 到
+    /// `bmclapi*.sakura.sld.tw` 这些 CDN 节点，它们在某些网络下直接 reset——
+    /// 没有兜底时用户切到镜像反而连版本列表都拿不到，比不切更糟。
+    ///
+    /// 只有「连接失败」或「明确的失败状态」才换下一个地址。重定向是镜像的正常行为
+    /// （reqwest 会自己跟），不能当成失败。
+    async fn send_first_ok<F>(
+        &self,
+        url: &str,
+        build: F,
+    ) -> Result<reqwest::Response, DownloadError>
+    where
+        F: Fn(&reqwest::Client, &str) -> reqwest::RequestBuilder,
+    {
+        let mut last_response: Option<reqwest::Response> = None;
+        let mut last_error: Option<DownloadError> = None;
+
+        for candidate in self.source.candidates(url) {
+            match build(&self.client, candidate.as_ref()).send().await {
+                Ok(response) if response.status().is_success() => return Ok(response),
+                Ok(response) => {
+                    // 全部失败时把最后一个响应交回去，让调用方按原有逻辑报错，
+                    // 这样错误信息里才有真实的状态码，而不是一句笼统的「都失败了」。
+                    last_response = Some(response);
+                }
+                Err(error) => last_error = Some(DownloadError::Network(error.to_string())),
+            }
+        }
+
+        if let Some(response) = last_response {
+            return Ok(response);
+        }
+
+        Err(last_error.unwrap_or_else(|| DownloadError::Other("没有可用的下载地址".to_owned())))
+    }
+
     /// 使用外部提供的客户端创建下载器（便于复用连接池或注入测试配置）。
     #[must_use]
     pub fn with_client(client: reqwest::Client, game_dir: impl Into<PathBuf>) -> Self {
@@ -119,13 +157,9 @@ impl HttpDownloader {
     /// 与 [`DownloadOps::fetch_once`] 的区别：不落盘、不做 SHA-1 校验。
     /// 需要校验时由调用方拿返回值自行比对——清单文件很小，留在内存里更直接。
     pub async fn fetch_text(&self, url: &str) -> Result<String, DownloadError> {
-        let url = self.source.rewrite(url);
         let response = self
-            .client
-            .get(url.as_ref())
-            .send()
-            .await
-            .map_err(|error| DownloadError::Network(error.to_string()))?;
+            .send_first_ok(url, |client, url| client.get(url))
+            .await?;
 
         let status = response.status();
         if !status.is_success() {
@@ -162,13 +196,9 @@ impl HttpDownloader {
 
     /// 用 HEAD 请求取 `Content-Length`。
     async fn head_size(&self, url: &str) -> Result<u64, DownloadError> {
-        let url = self.source.rewrite(url);
         let response = self
-            .client
-            .head(url.as_ref())
-            .send()
-            .await
-            .map_err(|error| DownloadError::Network(error.to_string()))?;
+            .send_first_ok(url, |client, url| client.head(url))
+            .await?;
 
         check_status(response.status())?;
 
@@ -182,14 +212,11 @@ impl HttpDownloader {
 
     /// 用单字节范围请求读总长度。
     async fn ranged_size(&self, url: &str) -> Result<u64, DownloadError> {
-        let url = self.source.rewrite(url);
         let response = self
-            .client
-            .get(url.as_ref())
-            .header(reqwest::header::RANGE, "bytes=0-0")
-            .send()
-            .await
-            .map_err(|error| DownloadError::Network(error.to_string()))?;
+            .send_first_ok(url, |client, url| {
+                client.get(url).header(reqwest::header::RANGE, "bytes=0-0")
+            })
+            .await?;
 
         let status = response.status();
         check_status(status)?;
@@ -221,14 +248,13 @@ impl HttpDownloader {
         url: &str,
         user_agent: &str,
     ) -> Result<String, DownloadError> {
-        let url = self.source.rewrite(url);
         let response = self
-            .client
-            .get(url.as_ref())
-            .header(reqwest::header::USER_AGENT, user_agent)
-            .send()
-            .await
-            .map_err(|error| DownloadError::Network(error.to_string()))?;
+            .send_first_ok(url, |client, url| {
+                client
+                    .get(url)
+                    .header(reqwest::header::USER_AGENT, user_agent)
+            })
+            .await?;
 
         let status = response.status();
         if !status.is_success() {
@@ -265,13 +291,9 @@ impl HttpDownloader {
         task: &DownloadTask,
         part: &Path,
     ) -> Result<(), DownloadError> {
-        let url = self.source.rewrite(&task.url);
         let response = self
-            .client
-            .get(url.as_ref())
-            .send()
-            .await
-            .map_err(|error| DownloadError::Network(error.to_string()))?;
+            .send_first_ok(&task.url, |client, url| client.get(url))
+            .await?;
 
         let status = response.status();
         if !status.is_success() {
