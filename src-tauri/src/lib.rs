@@ -375,6 +375,42 @@ pub fn ms_client_id() -> Option<&'static str> {
     normalize_client_id(option_env!("QCL_MS_CLIENT_ID"))
 }
 
+/// 设置与回退目录该放哪。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConfigHome {
+    /// 安装版：`%APPDATA%\<标识符>\`。
+    Installed,
+    /// 便携版且 exe 所在目录可写：设置就放在 exe 旁边。
+    Portable,
+    /// 便携版但 exe 目录不可写：退到 `%APPDATA%\<标识符>\portable\`。
+    PortableFallback,
+}
+
+/// 判断设置该放哪。
+///
+/// 便携版与安装版用的是**同一个应用标识符**，`app_config_dir()` 自然指向同一个目录，
+/// 于是一边选的版本会出现在另一边。分开之后：
+///
+/// - 安装版留在 `%APPDATA%\<标识符>\`——安装形态下用户目录才是应用数据该在的地方
+/// - 便携版把设置放在 exe 旁边，整个目录拷走即可迁移
+/// - exe 旁边不可写（放在 Program Files 之类）时退到 `%APPDATA%\<标识符>\portable\`，
+///   **仍然与安装版分开**
+fn config_home(installed: bool, install_dir_writable: bool) -> ConfigHome {
+    match (installed, install_dir_writable) {
+        (true, _) => ConfigHome::Installed,
+        (false, true) => ConfigHome::Portable,
+        (false, false) => ConfigHome::PortableFallback,
+    }
+}
+
+/// 判断是否为安装版。
+///
+/// 判据是安装目录里有没有 NSIS 写的 `uninstall.exe`。用它而不是「路径在
+/// %LOCALAPPDATA% 下」，是因为安装时允许自选路径，而卸载器在哪个目录都会写。
+fn is_installed(install_dir: &Path) -> bool {
+    install_dir.join("uninstall.exe").is_file()
+}
+
 /// 判断当前是否为安装版。
 ///
 /// 界面要据此决定「检查更新」之后能不能自动安装：便携版自更新得替换正在运行的
@@ -382,10 +418,7 @@ pub fn ms_client_id() -> Option<&'static str> {
 #[tauri::command]
 fn runtime_info() -> Result<RuntimeInfo, String> {
     let exe = std::env::current_exe().map_err(|error| format!("无法定位可执行文件：{error}"))?;
-    let installed = exe
-        .parent()
-        .map(|directory| directory.join("uninstall.exe").is_file())
-        .unwrap_or(false);
+    let installed = exe.parent().map(is_installed).unwrap_or(false);
 
     Ok(RuntimeInfo {
         installed,
@@ -401,6 +434,17 @@ fn runtime_info() -> Result<RuntimeInfo, String> {
 /// 这是启动期错误，没有可恢复的路径。
 pub fn run() {
     tauri::Builder::default()
+        // 必须排在所有插件最前面：第二个实例要在其余初始化之前就被拦下，
+        // 否则会先把窗口、下载器、配置都建起来，再被结束——看起来就是「闪一下」。
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // 第二次双击：把已有窗口拉到前台，而不是再开一个。
+            // 只 show() 不够——窗口可能是最小化的，用户会以为没反应。
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         // 在线更新：updater 负责校验签名并安装，process 负责装完重启自己。
@@ -413,8 +457,30 @@ pub fn run() {
                 .map(Path::to_path_buf)
                 .ok_or_else(|| "无法定位安装目录".to_string())?;
 
-            let config_path = app.path().app_config_dir()?.join("settings.json");
-            let fallback_dir = app.path().app_data_dir()?.join("game");
+            let installed = is_installed(&install_dir);
+            let app_config = app.path().app_config_dir()?;
+            let app_data = app.path().app_data_dir()?;
+
+            // 安装版与便携版共用同一个应用标识符，不分开的话两份安装会读同一份
+            // settings.json——在一边选的版本会出现在另一边。
+            let (config_path, fallback_dir) =
+                match config_home(installed, settings::is_writable(&install_dir)) {
+                    ConfigHome::Installed => (app_config.join("settings.json"), app_data.join("game")),
+                    ConfigHome::Portable => (
+                        install_dir.join("settings.json"),
+                        app_data.join("portable").join("game"),
+                    ),
+                    ConfigHome::PortableFallback => (
+                        app_config.join("portable").join("settings.json"),
+                        app_data.join("portable").join("game"),
+                    ),
+                };
+
+            // 便携版第一次用新位置：把旧共用文件里的用户偏好带过来（只带偏好，
+            // 不带版本选择——那正是要分开的东西）。
+            if !installed {
+                settings::migrate_preferences(&app_config.join("settings.json"), &config_path);
+            }
 
             let saved = settings::load(&config_path);
             let (game_dir, fallback_reason) = resolve_game_dir(&saved, &install_dir, &fallback_dir);
@@ -474,7 +540,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_client_id;
+    use super::{ConfigHome, config_home, normalize_client_id};
 
     #[test]
     fn 客户端_id_去掉首尾空白() {
@@ -487,5 +553,25 @@ mod tests {
         assert_eq!(normalize_client_id(Some("")), None);
         assert_eq!(normalize_client_id(Some("   ")), None);
         assert_eq!(normalize_client_id(None), None);
+    }
+
+    #[test]
+    fn 安装版用用户目录() {
+        assert_eq!(config_home(true, true), ConfigHome::Installed);
+        // 装到可写目录也一样：安装形态下「应用数据」就该在用户目录。
+        assert_eq!(config_home(true, false), ConfigHome::Installed);
+    }
+
+    #[test]
+    fn 便携版把设置放在自己旁边() {
+        assert_eq!(config_home(false, true), ConfigHome::Portable);
+    }
+
+    #[test]
+    fn 便携版目录不可写时退回用户目录但仍是独立子目录() {
+        // 关键是「独立」：退到 %APPDATA% 也不能和安装版共用一份，
+        // 否则又回到「一边选的版本出现在另一边」。
+        assert_eq!(config_home(false, false), ConfigHome::PortableFallback);
+        assert_ne!(config_home(false, false), config_home(true, false));
     }
 }
