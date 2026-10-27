@@ -65,7 +65,7 @@ handing that trust to it**:
   endpoints 302 to `bmclapi*.sakura.sld.tw`, and those nodes reset outright on some networks. Without
   the fallback, switching to the mirror would leave the user unable to even list versions.
 
-The UI credits the mirror when it is selected, which BMCLAPI's terms of use also require.
+The UI credits the mirror in **two** places: in Settings when it is selected, and next to the download progress bar. The latter is not optional — BMCLAPI's terms require the source to be shown "in the download UI or another visible part", and a note buried in Settings is invisible to anyone who never opens it.
 
 ### Not yet implemented (current risk)
 

@@ -213,3 +213,20 @@ describe("InstallProgressBar", () => {
     expect(screen.getByText("100%")).toBeInTheDocument();
   });
 });
+
+describe("InstallProgressBar 的来源标注", () => {
+  const progress = { phase: "assets" as const, completed: 10, total: 100, percent: 10 };
+
+  it("走镜像时在下载界面标出 BMCLAPI", () => {
+    // BMCLAPI 使用协议第 3 条：使用它的程序必须在下载界面或其他可视部分标明来源。
+    render(<InstallProgressBar progress={progress} mirrored />);
+
+    expect(screen.getByRole("link", { name: "BMCLAPI" })).toBeInTheDocument();
+  });
+
+  it("官方源不标", () => {
+    render(<InstallProgressBar progress={progress} />);
+
+    expect(screen.queryByRole("link", { name: "BMCLAPI" })).toBeNull();
+  });
+});

@@ -312,7 +312,20 @@ export function SettingsPanel({
 }
 
 /** 安装进度条。阶段切换时文字随之变化，避免把两个阶段的百分比混为一谈。 */
-export function InstallProgressBar({ progress }: { progress: InstallProgressEvent }) {
+export function InstallProgressBar({
+  progress,
+  mirrored = false,
+}: {
+  progress: InstallProgressEvent;
+  /**
+   * 下载是否走 BMCLAPI 镜像。
+   *
+   * 不是装饰：BMCLAPI 的使用协议第 3 条要求「所有使用 BMCLAPI 的程序必需在
+   * 下载界面或其他可视部分标明来源」。只在设置页标注不够——用户不去设置页就
+   * 永远看不到，所以这里跟着进度条一起显示。
+   */
+  mirrored?: boolean;
+}) {
   return (
     <div className="mt-2">
       <div className="flex items-center justify-between text-[12px] text-[var(--color-text-secondary)]">
@@ -327,6 +340,13 @@ export function InstallProgressBar({ progress }: { progress: InstallProgressEven
           style={{ width: `${progress.percent}%` }}
         />
       </div>
+      {mirrored && (
+        <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+          下载源：
+          <ExternalLink href="https://bmclapidoc.bangbang93.com/">BMCLAPI</ExternalLink>
+          镜像
+        </p>
+      )}
     </div>
   );
 }
