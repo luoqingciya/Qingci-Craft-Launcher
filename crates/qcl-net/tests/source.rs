@@ -152,3 +152,26 @@ fn 非官方主机只有一个候选不会重试() {
         assert_eq!(candidates[0], url);
     }
 }
+
+#[test]
+fn sha1_文本始终走官方() {
+    // 镜像的 maven 下没有 `.sha1`（实测 404），改写过去只会多一次必然失败的请求。
+    // 只有 fabric-loader 缺 sha1 时会取它，所以省下的是每次装 Fabric 的一个往返。
+    let url = "https://maven.fabricmc.net/net/fabricmc/fabric-loader/0.20.1/fabric-loader-0.20.1.jar.sha1";
+
+    assert_eq!(DownloadSource::Bmclapi.rewrite(url), url);
+    // 只有一个候选，意味着不会先打镜像再回落。
+    assert_eq!(DownloadSource::Bmclapi.candidates(url).len(), 1);
+}
+
+#[test]
+fn sha1_旁边的_jar_仍然走镜像() {
+    // 排除的是 `.sha1` 这一种后缀，不是整个 maven 路径。
+    let jar =
+        "https://maven.fabricmc.net/net/fabricmc/fabric-loader/0.20.1/fabric-loader-0.20.1.jar";
+    assert_eq!(
+        DownloadSource::Bmclapi.rewrite(jar),
+        "https://bmclapi2.bangbang93.com/maven/net/fabricmc/fabric-loader/0.20.1/fabric-loader-0.20.1.jar"
+    );
+    assert_eq!(DownloadSource::Bmclapi.candidates(jar).len(), 2);
+}
