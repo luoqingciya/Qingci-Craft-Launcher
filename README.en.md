@@ -90,7 +90,7 @@ Download from [Releases](https://github.com/luoqingciya/Qingci-Craft-Launcher/re
 |---|---|---|---|
 | Windows | `QingciCraftLauncher_*_x64-setup.exe` | 3.8 MB | NSIS installer; installs per-user, no admin rights; supports auto-update |
 | Windows | `QingciCraftLauncher_*_x64-portable.exe` | 12.7 MB | No install, double-click to run; game directory sits next to the exe; **no auto-update** |
-| Linux | `QingciCraftLauncher_*_amd64.deb` | 5.2 MB | Debian / Ubuntu package; depends on the system webkit2gtk |
+| Linux | `QingciCraftLauncher_*_amd64.deb` | 5.3 MB | Debian / Ubuntu package; depends on the system webkit2gtk |
 | Linux | `QingciCraftLauncher_*_x86_64.AppImage` | 83.5 MB | No install; self-contained runtime |
 
 The Linux artifacts and the Windows portable build are **GitHub Releases only** and take no part in
