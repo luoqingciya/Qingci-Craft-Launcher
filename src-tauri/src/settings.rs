@@ -165,6 +165,53 @@ pub fn ensure_writable(dir: &Path) -> std::io::Result<PathBuf> {
     Ok(dunce::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf()))
 }
 
+/// 目录是否可写，**不创建目录**。
+///
+/// 与 [`ensure_writable`] 的区别：那个是「准备好这个目录」，这个只回答能不能写。
+/// 判断便携版该把设置放在 exe 旁边还是退回用户目录时用它——探测过程本身不能
+/// 在 Program Files 这类地方留下东西。
+pub fn is_writable(dir: &Path) -> bool {
+    let probe = dir.join(".qcl-write-test");
+    match std::fs::write(&probe, b"") {
+        Ok(()) => {
+            let _ = std::fs::remove_file(&probe);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+/// 把旧位置的用户偏好搬到新位置。
+///
+/// 便携版过去和安装版共用 `%APPDATA%\<标识符>\settings.json`，这正是「一边选的版本
+/// 出现在另一边」的原因。分开之后，玩家名、内存、Java 路径属于**用户偏好**，值得带过来；
+/// 游戏目录与版本选择属于**这一份安装的状态**，不迁移——带过来就等于把串味的问题
+/// 再固化一次。
+///
+/// 目标已存在时什么都不做，所以重复调用是安全的。
+pub fn migrate_preferences(from: &Path, to: &Path) {
+    if to.exists() || !from.exists() {
+        return;
+    }
+
+    let legacy = load(from);
+    let carried = Settings {
+        game_dir: None,
+        player_name: legacy.player_name,
+        memory_mb: legacy.memory_mb,
+        java_path: legacy.java_path,
+        selected_version: None,
+        loader_version: None,
+    };
+
+    // 没有值得带的东西就别写文件，免得凭空造出一个「用户配置过」的假象。
+    if carried == Settings::default() {
+        return;
+    }
+
+    let _ = save(to, &carried);
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -387,5 +434,115 @@ mod selection_tests {
         super::save(&path, &settings).expect("应能保存");
 
         assert_eq!(super::load(&path), settings);
+    }
+}
+
+#[cfg(test)]
+mod migration_tests {
+    use super::{Settings, is_writable, load, migrate_preferences, save};
+
+    #[test]
+    fn 只带用户偏好不带版本选择() {
+        // 版本选择正是「一边选了另一边也跟着选」的那个东西，不能带过去。
+        let dir = tempfile::TempDir::new().expect("临时目录");
+        let legacy = dir.path().join("legacy.json");
+        let target = dir.path().join("portable").join("settings.json");
+
+        save(
+            &legacy,
+            &Settings {
+                game_dir: Some(dir.path().join("old-game")),
+                player_name: Some("阿辞".to_owned()),
+                memory_mb: Some(6144),
+                java_path: Some(dir.path().join("java.exe")),
+                selected_version: Some("26.3".to_owned()),
+                loader_version: Some("0.20.1".to_owned()),
+            },
+        )
+        .expect("写旧配置");
+
+        migrate_preferences(&legacy, &target);
+
+        let migrated = load(&target);
+        assert_eq!(migrated.player_name.as_deref(), Some("阿辞"));
+        assert_eq!(migrated.memory_mb, Some(6144));
+        assert!(migrated.java_path.is_some());
+        // 这三个属于「这一份安装的状态」，迁移过来等于把串味问题固化一次。
+        assert_eq!(migrated.game_dir, None);
+        assert_eq!(migrated.selected_version, None);
+        assert_eq!(migrated.loader_version, None);
+    }
+
+    #[test]
+    fn 目标已存在时不动它() {
+        // 用户已经在便携版里配置过，旧文件不该覆盖回去。
+        let dir = tempfile::TempDir::new().expect("临时目录");
+        let legacy = dir.path().join("legacy.json");
+        let target = dir.path().join("settings.json");
+
+        save(
+            &legacy,
+            &Settings {
+                player_name: Some("旧的".to_owned()),
+                ..Settings::default()
+            },
+        )
+        .expect("写旧配置");
+        save(
+            &target,
+            &Settings {
+                player_name: Some("新的".to_owned()),
+                ..Settings::default()
+            },
+        )
+        .expect("写新配置");
+
+        migrate_preferences(&legacy, &target);
+
+        assert_eq!(load(&target).player_name.as_deref(), Some("新的"));
+    }
+
+    #[test]
+    fn 没有旧文件时不凭空造一个() {
+        let dir = tempfile::TempDir::new().expect("临时目录");
+        let legacy = dir.path().join("missing.json");
+        let target = dir.path().join("settings.json");
+
+        migrate_preferences(&legacy, &target);
+
+        assert!(!target.exists());
+    }
+
+    #[test]
+    fn 旧文件没有值得带的东西时不写文件() {
+        let dir = tempfile::TempDir::new().expect("临时目录");
+        let legacy = dir.path().join("legacy.json");
+        let target = dir.path().join("settings.json");
+
+        save(
+            &legacy,
+            &Settings {
+                selected_version: Some("26.3".to_owned()),
+                ..Settings::default()
+            },
+        )
+        .expect("写旧配置");
+
+        migrate_preferences(&legacy, &target);
+
+        // 只剩版本选择时迁移结果是空的，写出去只会造出「配置过」的假象。
+        assert!(!target.exists());
+    }
+
+    #[test]
+    fn 可写性判断不留下探测文件() {
+        let dir = tempfile::TempDir::new().expect("临时目录");
+        assert!(is_writable(dir.path()));
+        assert!(!dir.path().join(".qcl-write-test").exists());
+
+        // 不存在的目录不该被判成可写——探测不能顺手创建它。
+        let missing = dir.path().join("nope");
+        assert!(!is_writable(&missing));
+        assert!(!missing.exists());
     }
 }

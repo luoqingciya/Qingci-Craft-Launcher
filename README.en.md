@@ -108,6 +108,16 @@ The default game directory is **`game/` inside the install directory** (portable
 copy the whole folder and your worlds move with it). If that location is not writable,
 the launcher falls back to the app data directory and explains why in the UI.
 
+**The installed build and the portable build keep separate settings.** The installed one uses
+`%APPDATA%\cn.luoqingciya.qcl\`; the portable one writes `settings.json` next to the exe. They share
+the same application identifier, and used to share a single config file — which meant a version
+picked in one showed up in the other. That is no longer the case.
+
+**Only one instance may run at a time**: double-clicking again focuses the existing window instead of
+opening a second one. Note that the installed and portable builds share the application identifier, so
+they exclude each other too — double-clicking the portable build while the installed one is running
+just brings the installed window forward.
+
 ### Auto-update
 
 An installed build checks for updates at startup and stays silent when there is none. When a newer

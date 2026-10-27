@@ -45,6 +45,7 @@ tauri-plugin-updater = { version = "2.14.0", default-features = false, features 
 ] }
 tauri-plugin-process = "2.4.0"
 keyring = { version = "4.2.0", features = ["apple-native-keyring-store"] }
+tauri-plugin-single-instance = "2.5.4"
 
 [dev-dependencies]
 tempfile = "3.27.0"
