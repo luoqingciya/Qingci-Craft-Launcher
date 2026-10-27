@@ -60,6 +60,10 @@ handing that trust to it**:
   not corrupted, not that it came from Mojang.
 - So this trades **authenticity for availability**: the mirror only makes sense when the official
   endpoints are unreachable, and official stays the default.
+- **A failing mirror falls back to official automatically** (only on connection failure or an explicit
+  failure status — a redirect is not a failure). This is not just about UX: BMCLAPI's metadata
+  endpoints 302 to `bmclapi*.sakura.sld.tw`, and those nodes reset outright on some networks. Without
+  the fallback, switching to the mirror would leave the user unable to even list versions.
 
 The UI credits the mirror when it is selected, which BMCLAPI's terms of use also require.
 

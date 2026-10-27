@@ -118,3 +118,37 @@ fn 配置值可往返且无法识别时回落官方() {
     assert_eq!(DownloadSource::Bmclapi.as_str(), "bmclapi");
     assert_eq!(DownloadSource::Official.as_str(), "official");
 }
+
+#[test]
+fn 镜像启用时官方地址作为兜底排在后面() {
+    // 实测 BMCLAPI 的元数据端点会 302 到 CDN，那些节点在某些网络下直接 reset。
+    // 只给一个地址的话，用户切到镜像反而连版本列表都拿不到。
+    let url = "https://piston-meta.mojang.com/v1/packages/abc/34.json";
+    let candidates = DownloadSource::Bmclapi.candidates(url);
+
+    assert_eq!(candidates.len(), 2, "镜像 + 官方兜底");
+    assert_eq!(
+        candidates[0],
+        "https://bmclapi2.bangbang93.com/v1/packages/abc/34.json"
+    );
+    assert_eq!(candidates[1], url, "兜底必须是原始官方地址");
+}
+
+#[test]
+fn 官方源只有一个候选() {
+    let url = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+    assert_eq!(DownloadSource::Official.candidates(url).len(), 1);
+}
+
+#[test]
+fn 非官方主机只有一个候选不会重试() {
+    // 认证与 Modrinth 不该因为下载源是镜像就多试一次。
+    for url in [
+        "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
+        "https://api.modrinth.com/v2/search",
+    ] {
+        let candidates = DownloadSource::Bmclapi.candidates(url);
+        assert_eq!(candidates.len(), 1, "{url}");
+        assert_eq!(candidates[0], url);
+    }
+}

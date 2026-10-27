@@ -94,6 +94,21 @@ impl DownloadSource {
         Cow::Borrowed(url)
     }
 
+    /// 依次尝试的地址：镜像优先（若启用），官方兜底。
+    ///
+    /// 返回一组而不是一个，是因为镜像可能整段不可用——实测 BMCLAPI 的**元数据**
+    /// 端点会 302 到 CDN 节点（`bmclapi*.sakura.sld.tw`），那些节点在某些网络下
+    /// 直接 reset。没有兜底的话，用户切到镜像反而连版本列表都拿不到，比不切更糟。
+    ///
+    /// 不是已知官方主机的地址只返回它自己——认证、Modrinth 这些不该被重试。
+    #[must_use]
+    pub fn candidates<'a>(self, url: &'a str) -> Vec<Cow<'a, str>> {
+        match self.rewrite(url) {
+            Cow::Borrowed(_) => vec![Cow::Borrowed(url)],
+            Cow::Owned(mirror) => vec![Cow::Owned(mirror), Cow::Borrowed(url)],
+        }
+    }
+
     /// 配置里的字符串形式。
     #[must_use]
     pub fn as_str(self) -> &'static str {
