@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import type { InstallProgressEvent, JavaOption, SettingsInput, SettingsView } from "../api";
 import { phaseLabel } from "../lib/format";
+import { ExternalLink } from "./ExternalLink";
 
 /** 表单草稿。内存用字符串保存，才能表示「留空 = 官方默认」。 */
 interface Draft {
@@ -10,6 +11,7 @@ interface Draft {
   playerName: string;
   memory: string;
   javaPath: string;
+  downloadSource: string;
 }
 
 function toDraft(settings: SettingsView): Draft {
@@ -18,6 +20,7 @@ function toDraft(settings: SettingsView): Draft {
     playerName: settings.playerName,
     memory: settings.memoryMb === null ? "" : String(settings.memoryMb),
     javaPath: settings.javaPath ?? "",
+    downloadSource: settings.downloadSource,
   };
 }
 
@@ -62,7 +65,8 @@ export function SettingsPanel({
     draft.gameDir !== settings.gameDir ||
     draft.playerName !== settings.playerName ||
     draft.memory !== (settings.memoryMb === null ? "" : String(settings.memoryMb)) ||
-    draft.javaPath !== (settings.javaPath ?? "");
+    draft.javaPath !== (settings.javaPath ?? "") ||
+    draft.downloadSource !== settings.downloadSource;
 
   const [minMemory, maxMemory] = settings.memoryRange;
 
@@ -94,6 +98,7 @@ export function SettingsPanel({
       playerName: draft.playerName.trim(),
       memoryMb,
       javaPath: draft.javaPath.trim() === "" ? null : draft.javaPath.trim(),
+      downloadSource: draft.downloadSource === "bmclapi" ? "bmclapi" : null,
     });
   }
 
@@ -213,6 +218,31 @@ export function SettingsPanel({
             inputMode="numeric"
             className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2.5 py-2 text-[13px]"
           />
+        </div>
+
+        {/* 下载源 */}
+        <div className="lg:col-span-2">
+          <label htmlFor="download-source" className="text-[var(--color-text-secondary)]">
+            下载源
+          </label>
+          <select
+            id="download-source"
+            value={draft.downloadSource}
+            onChange={(event) =>
+              setDraft((c) => ({ ...c, downloadSource: event.target.value }))
+            }
+            className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2.5 py-2 text-[13px]"
+          >
+            <option value="official">Mojang 官方</option>
+            <option value="bmclapi">BMCLAPI 镜像（国内更快）</option>
+          </select>
+          {draft.downloadSource === "bmclapi" && (
+            <p className="mt-1.5 text-[12px] text-[var(--color-text-muted)]">
+              下载由{" "}
+              <ExternalLink href="https://bmclapidoc.bangbang93.com/">BMCLAPI</ExternalLink>{" "}
+              提供镜像。游戏文件仍逐个校验官方 SHA-1，镜像只改变从哪里取，不改变校验标准。
+            </p>
+          )}
         </div>
 
         {/* Java */}
