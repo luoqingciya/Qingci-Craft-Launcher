@@ -325,13 +325,13 @@ Qingci-Craft-Launcher/
 | #8 | `feat(java): JRE 探测 + Mojang runtime 安装` | 目录夹具覆盖 Win/mac/Linux 布局；版本匹配规则单测 |
 | #9 | `feat(cli): headless 启动闭环` | CI 上 `qcl-cli launch 26.3` 下载完成并启动至主菜单（Linux + xvfb），退出码 0 |
 
-### Phase 2 · 桌面 MVP ✅ 已完成（实例管理除外）
+### Phase 2 · 桌面 MVP ✅ 已完成
 
 | PR | 内容 | 验收标准 |
 |---|---|---|
 | #10 | `feat(app): IPC 命令层 + 事件桥` | 前端可收到节流后的进度事件；命令错误结构统一 |
 | #11 | `feat(ui): 版本列表 + 下载进度 + 启动按钮` | 三平台手工冒烟：全新环境装包 → 启动 26.3 到主菜单 |
-| #12 | `feat(ui): 实例管理 + 设置（内存/JVM 参数/Java 路径）` | 配置持久化并在重启后生效 |
+| #12 | `feat(ui): 实例管理 + 设置（内存/JVM 参数/Java 路径）` ✅ | 配置持久化并在重启后生效 |
 | #13 | `feat(app): 日志控制台 + 崩溃摘要` | 非 0 退出码能生成可导出的日志包 |
 
 ### Phase 3 · 账号 ✅ 已完成
@@ -574,15 +574,14 @@ Gatekeeper 拦下。
 
 ## 13. 下一步
 
-Phase 0–3 已完成（含正版登录），Fabric 与模组管理已接入，在线更新与两条分发通道已上线。
+Phase 0–3 已完成（含正版登录与实例管理），Fabric 与模组管理已接入，在线更新与两条分发通道已上线。
 接下来按优先级：
 
-1. **实例管理**（Phase 2 剩余项）：多份独立游戏目录，切换实例不互相污染。
-2. **Forge / NeoForge**（Phase 4 剩余项，风险 R5）：可行性已调研，路径是调用官方 installer
+1. **Forge / NeoForge**（Phase 4 剩余项，风险 R5）：可行性已调研，路径是调用官方 installer
    而非自研 processors；但仍受「安装器会探测 Mojang 主机并校验证书」的限制。
-3. **macOS 产物**（R3）：需要 Apple 开发者账号与公证；updater 的 `zip` 特性还要重新评估。
-4. **代码签名**（R2）：Windows Authenticode / macOS 公证，缓解 SmartScreen 拦截。
-5. **i18n**（Phase 5）：zh-CN / en-US。
+2. **macOS 产物**（R3）：需要 Apple 开发者账号与公证；updater 的 `zip` 特性还要重新评估。
+3. **代码签名**（R2）：Windows Authenticode / macOS 公证，缓解 SmartScreen 拦截。
+4. **i18n**（Phase 5）：zh-CN / en-US。
 
 ---
 

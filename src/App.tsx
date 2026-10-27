@@ -15,7 +15,11 @@ import {
   launchGame,
   listLoaders,
   listJava,
+  createInstance,
+  deleteInstance,
   listVersions,
+  renameInstance,
+  switchInstance,
   rememberSelection,
   runtimeInfo,
   saveSettings,
@@ -267,6 +271,66 @@ export default function App() {
     }
   }, []);
 
+  /**
+   * 切换/新建/删除实例后的统一收尾。
+   *
+   * 不能只 setSettings：版本清单来自游戏目录，换了实例就是另一份清单；
+   * 选择也要跟着换成该实例记下的那个，否则界面上会显示上一实例的版本。
+   */
+  const adoptInstance = useCallback(
+    async (apply: () => Promise<SettingsView>) => {
+      setSavingSettings(true);
+      setSettingsError(null);
+      try {
+        const view = await apply();
+        setSettings(view);
+
+        setSelected(view.selectedVersion);
+        setLoader(view.loaderVersion ?? "");
+        if (view.selectedVersion) {
+          void loadLoaders(view.selectedVersion);
+        } else {
+          setLoaders([]);
+        }
+
+        setState({ status: "ready", versions: await listVersions() });
+      } catch (cause: unknown) {
+        setSettingsError(String(cause));
+      } finally {
+        setSavingSettings(false);
+      }
+    },
+    [loadLoaders]
+  );
+
+  const switchInstanceByName = useCallback(
+    (name: string) => {
+      void adoptInstance(() => switchInstance(name));
+    },
+    [adoptInstance]
+  );
+
+  const createInstanceByName = useCallback(
+    (name: string) => {
+      void adoptInstance(() => createInstance(name, null));
+    },
+    [adoptInstance]
+  );
+
+  const renameInstanceByNames = useCallback(
+    (from: string, to: string) => {
+      void adoptInstance(() => renameInstance(from, to));
+    },
+    [adoptInstance]
+  );
+
+  const deleteInstanceByName = useCallback(
+    (name: string) => {
+      void adoptInstance(() => deleteInstance(name));
+    },
+    [adoptInstance]
+  );
+
   const refreshJava = useCallback(async () => {
     try {
       setJavaOptions(await listJava());
@@ -366,6 +430,10 @@ export default function App() {
       onClearLogs={() => setLogs([])}
       onSaveSettings={(input) => void saveSettingsInput(input)}
       onRefreshJava={() => void refreshJava()}
+      onSwitchInstance={switchInstanceByName}
+      onCreateInstance={createInstanceByName}
+      onRenameInstance={renameInstanceByNames}
+      onDeleteInstance={deleteInstanceByName}
     />
   );
 }

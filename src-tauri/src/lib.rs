@@ -103,6 +103,28 @@ struct SettingsView {
     loader_version: Option<String>,
     /// 下载源：`official` / `bmclapi`。
     download_source: String,
+    /// 已知实例，按添加顺序排列。
+    instances: Vec<InstanceView>,
+    /// 当前实例名。
+    active_instance: String,
+}
+
+/// 前端看到的一个实例。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InstanceView {
+    /// 显示名，同时是标识。
+    name: String,
+    /// 实际生效的游戏目录。
+    game_dir: String,
+    /// 是否使用默认目录（跟随安装位置）。
+    is_default_dir: bool,
+    /// 是否为当前实例。
+    active: bool,
+    /// 该实例上次选择的版本。
+    selected_version: Option<String>,
+    /// 该实例上次选择的加载器版本。
+    loader_version: Option<String>,
 }
 
 /// 前端提交的设置。
@@ -162,8 +184,8 @@ fn resolve_game_dir(
     fallback_dir: &Path,
 ) -> (PathBuf, Option<String>) {
     let preferred = saved
-        .game_dir
-        .clone()
+        .active()
+        .map(|instance| settings::Settings::instance_dir(install_dir, instance))
         .unwrap_or_else(|| settings::default_game_dir(install_dir));
 
     match settings::ensure_writable(&preferred) {
@@ -182,12 +204,16 @@ fn resolve_game_dir(
 impl AppState {
     /// 组装设置视图。
     fn view(&self, inner: &Inner) -> SettingsView {
+        let active = inner.settings.active();
         SettingsView {
             game_dir: inner.game_dir.display().to_string(),
             default_game_dir: settings::default_game_dir(&self.install_dir)
                 .display()
                 .to_string(),
-            is_custom: inner.settings.game_dir.is_some(),
+            is_custom: inner
+                .settings
+                .active()
+                .is_some_and(|instance| instance.dir.is_some()),
             fallback_reason: inner.fallback_reason.clone(),
             player_name: inner.settings.player_name_or_default(),
             memory_mb: inner.settings.memory_mb,
@@ -197,9 +223,26 @@ impl AppState {
                 .as_ref()
                 .map(|path| path.display().to_string()),
             memory_range: [settings::MIN_MEMORY_MB, settings::MAX_MEMORY_MB],
-            selected_version: inner.settings.selected_version.clone(),
-            loader_version: inner.settings.loader_version.clone(),
+            selected_version: active.and_then(|instance| instance.selected_version.clone()),
+            loader_version: active.and_then(|instance| instance.loader_version.clone()),
             download_source: inner.settings.download_source().as_str().to_owned(),
+            instances: inner
+                .settings
+                .instances
+                .iter()
+                .map(|instance| InstanceView {
+                    name: instance.name.clone(),
+                    game_dir: settings::Settings::instance_dir(&self.install_dir, instance)
+                        .display()
+                        .to_string(),
+                    is_default_dir: instance.dir.is_none(),
+                    active: inner.settings.active_instance.as_deref()
+                        == Some(instance.name.as_str()),
+                    selected_version: instance.selected_version.clone(),
+                    loader_version: instance.loader_version.clone(),
+                })
+                .collect(),
+            active_instance: inner.settings.active_instance.clone().unwrap_or_default(),
         }
     }
 }
@@ -260,40 +303,23 @@ async fn save_settings(
             .map_err(|error| format!("{} 不可写：{error}", dir.display()))?;
     }
 
-    // 保留已有选择：保存设置是表单提交，不该顺手把「上次玩的版本」清掉。
+    // 保留已有选择与实例列表：保存设置是表单提交，不该顺手把「上次玩的版本」
+    // 清掉，也不该把别的实例抹掉。表单里的游戏目录只作用于**当前实例**。
     let previous = state.settings_snapshot()?;
-    let saved = settings::Settings {
-        game_dir: requested_dir,
-        player_name: normalize(input.player_name),
-        memory_mb: input.memory_mb,
-        java_path: normalize(input.java_path).map(PathBuf::from),
-        selected_version: previous.selected_version,
-        loader_version: previous.loader_version,
-        download_source: normalize(input.download_source),
-    };
+    let mut saved = previous.clone();
+    saved.player_name = normalize(input.player_name);
+    saved.memory_mb = input.memory_mb;
+    saved.java_path = normalize(input.java_path).map(PathBuf::from);
+    saved.download_source = normalize(input.download_source);
+    if let Some(active) = saved.active_mut() {
+        active.dir = requested_dir;
+    }
 
     // 校验放在写盘之前：任何一项不合法都不该留下半套配置。
     saved.validate()?;
 
-    let (game_dir, fallback_reason) =
-        resolve_game_dir(&saved, &state.install_dir, &state.fallback_dir);
-
-    // 下载源变了也要重建：地址改写发生在请求时，旧下载器仍带着旧源。
-    let downloader = HttpDownloader::with_source(&game_dir, saved.download_source())
-        .map_err(|error| format!("无法在 {} 初始化下载器：{error}", game_dir.display()))?;
-
-    settings::save(&state.config_path, &saved).map_err(|error| format!("保存设置失败：{error}"))?;
-
-    let mut inner = state
-        .inner
-        .write()
-        .map_err(|_| "内部状态锁已中毒".to_owned())?;
-    inner.settings = saved;
-    inner.game_dir = game_dir;
-    inner.fallback_reason = fallback_reason;
-    inner.downloader = Arc::new(downloader);
-
-    Ok(state.view(&inner))
+    // 目录或下载源变了都要重建下载器：地址改写发生在请求时，旧下载器仍带着旧源。
+    apply_settings(&state, saved)
 }
 
 /// 记住当前选择（版本 + 加载器）。
@@ -316,6 +342,171 @@ fn remember_selection(
     inner.settings = saved;
 
     Ok(())
+}
+
+/// 实例增删改后统一收尾：重算目录、重建下载器、落盘、刷新内存状态。
+///
+/// 这几步必须一起做：目录变了而下载器不换，后续下载会往旧目录写。
+fn apply_settings(state: &AppState, next: settings::Settings) -> Result<SettingsView, String> {
+    // 校验放在写盘之前：任何一项不合法都不该留下半套配置。
+    next.validate()?;
+
+    let (game_dir, fallback_reason) =
+        resolve_game_dir(&next, &state.install_dir, &state.fallback_dir);
+    let downloader = HttpDownloader::with_source(&game_dir, next.download_source())
+        .map_err(|error| format!("无法在 {} 初始化下载器：{error}", game_dir.display()))?;
+
+    settings::save(&state.config_path, &next).map_err(|error| format!("保存设置失败：{error}"))?;
+
+    let mut inner = state
+        .inner
+        .write()
+        .map_err(|_| "内部状态锁已中毒".to_owned())?;
+    inner.settings = next;
+    inner.game_dir = game_dir;
+    inner.fallback_reason = fallback_reason;
+    inner.downloader = Arc::new(downloader);
+
+    Ok(state.view(&inner))
+}
+
+/// 把实例名变成安全的目录名。
+///
+/// 只保留字母数字与 `-` `_`（中文属于字母，会保留），其余替换成 `_`。
+/// 不这么做的话，名字里的 `/` 或 `..` 会把目录带出 `instances/`。
+fn safe_dir_name(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|ch| {
+            if ch.is_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let trimmed = cleaned.trim_matches('_');
+    if trimmed.is_empty() {
+        "instance".to_owned()
+    } else {
+        trimmed.to_owned()
+    }
+}
+
+/// 新建实例并切换过去。
+#[tauri::command]
+fn create_instance(
+    state: tauri::State<'_, AppState>,
+    name: String,
+    dir: Option<String>,
+) -> Result<SettingsView, String> {
+    let name = name.trim().to_owned();
+    if name.is_empty() {
+        return Err("实例名不能为空".to_owned());
+    }
+
+    let mut next = state.settings_snapshot()?;
+    if next.instances.iter().any(|instance| instance.name == name) {
+        return Err(format!("实例名已存在：{name}"));
+    }
+
+    // 没指定目录时落在 `<安装目录>/instances/<名字>`。新建实例一律带显式目录，
+    // 否则多个实例会指向同一个默认目录，切换看起来毫无反应。
+    let requested = match dir.as_deref().map(str::trim).filter(|raw| !raw.is_empty()) {
+        Some(raw) => PathBuf::from(raw),
+        None => state
+            .install_dir
+            .join("instances")
+            .join(safe_dir_name(&name)),
+    };
+    let dir = settings::ensure_writable(&requested)
+        .map_err(|error| format!("{} 不可写：{error}", requested.display()))?;
+
+    next.instances.push(settings::Instance {
+        name: name.clone(),
+        dir: Some(dir),
+        selected_version: None,
+        loader_version: None,
+    });
+    next.active_instance = Some(name);
+
+    apply_settings(&state, next)
+}
+
+/// 切换到另一个实例。
+#[tauri::command]
+fn switch_instance(
+    state: tauri::State<'_, AppState>,
+    name: String,
+) -> Result<SettingsView, String> {
+    let mut next = state.settings_snapshot()?;
+    if !next.instances.iter().any(|instance| instance.name == name) {
+        return Err(format!("实例不存在：{name}"));
+    }
+    next.active_instance = Some(name);
+
+    apply_settings(&state, next)
+}
+
+/// 重命名实例。
+///
+/// 名字是标识，所以「重命名」等于换标识：当前实例指针要跟着改。
+#[tauri::command]
+fn rename_instance(
+    state: tauri::State<'_, AppState>,
+    from: String,
+    to: String,
+) -> Result<SettingsView, String> {
+    let to = to.trim().to_owned();
+    if to.is_empty() {
+        return Err("实例名不能为空".to_owned());
+    }
+
+    let mut next = state.settings_snapshot()?;
+    if to != from && next.instances.iter().any(|instance| instance.name == to) {
+        return Err(format!("实例名已存在：{to}"));
+    }
+    let Some(instance) = next
+        .instances
+        .iter_mut()
+        .find(|instance| instance.name == from)
+    else {
+        return Err(format!("实例不存在：{from}"));
+    };
+    instance.name = to.clone();
+
+    if next.active_instance.as_deref() == Some(from.as_str()) {
+        next.active_instance = Some(to);
+    }
+
+    apply_settings(&state, next)
+}
+
+/// 从列表里移除实例。
+///
+/// **只移除记录，不删文件**：游戏目录里可能有存档，误删无法挽回。
+/// 要腾空间请用户自己删目录。
+#[tauri::command]
+fn delete_instance(
+    state: tauri::State<'_, AppState>,
+    name: String,
+) -> Result<SettingsView, String> {
+    let mut next = state.settings_snapshot()?;
+    if next.instances.len() <= 1 {
+        return Err("至少要保留一个实例".to_owned());
+    }
+
+    let before = next.instances.len();
+    next.instances.retain(|instance| instance.name != name);
+    if next.instances.len() == before {
+        return Err(format!("实例不存在：{name}"));
+    }
+
+    if next.active_instance.as_deref() == Some(name.as_str()) {
+        next.active_instance = next.instances.first().map(|instance| instance.name.clone());
+    }
+
+    apply_settings(&state, next)
 }
 
 /// 列出本机可用的 Java，供设置页选择。
@@ -520,6 +711,10 @@ pub fn run() {
             list_versions,
             get_settings,
             save_settings,
+            create_instance,
+            switch_instance,
+            rename_instance,
+            delete_instance,
             list_java,
             remember_selection,
             runtime_info,
@@ -580,5 +775,41 @@ mod tests {
         // 否则又回到「一边选的版本出现在另一边」。
         assert_eq!(config_home(false, false), ConfigHome::PortableFallback);
         assert_ne!(config_home(false, false), config_home(true, false));
+    }
+}
+
+#[cfg(test)]
+mod dir_name_tests {
+    use super::safe_dir_name;
+
+    #[test]
+    fn 名字里的路径分隔符不会带出目录() {
+        // 实例名是用户输入的，`../` 这种能直接把目录带出 instances/。
+        // 断言的是**性质**而不是具体结果：只要不含分隔符、不是 `..`、非空，
+        // 它就一定落在 instances/ 下面。
+        for name in ["../逃逸", "a/b", r"a\b", "..", "a/../b", "./x"] {
+            let safe = safe_dir_name(name);
+            assert!(
+                !safe.contains('/') && !safe.contains('\\'),
+                "{name} → {safe}"
+            );
+            assert_ne!(safe, "..", "{name}");
+            assert_ne!(safe, ".", "{name}");
+            assert!(!safe.is_empty(), "{name}");
+        }
+    }
+
+    #[test]
+    fn 中文与常见字符保留() {
+        assert_eq!(safe_dir_name("生存"), "生存");
+        assert_eq!(safe_dir_name("1.21-整合包"), "1_21-整合包");
+    }
+
+    #[test]
+    fn 全是非法字符时有兜底() {
+        // 空目录名会让 join 落到父目录上。
+        assert_eq!(safe_dir_name("..."), "instance");
+        assert_eq!(safe_dir_name("   "), "instance");
+        assert_eq!(safe_dir_name(""), "instance");
     }
 }

@@ -22,6 +22,8 @@ function settings(overrides: Partial<SettingsView> = {}): SettingsView {
     selectedVersion: null,
     loaderVersion: null,
     downloadSource: "official",
+    instances: [{ name: "默认", gameDir: "C:\\games\\qcl", isDefaultDir: false, active: true, selectedVersion: null, loaderVersion: null }],
+    activeInstance: "默认",
     ...overrides,
   };
 }
@@ -40,6 +42,10 @@ function renderPanel(overrides: Partial<SettingsView> = {}, onSave = vi.fn()) {
       error={null}
       onSave={onSave}
       onRefreshJava={vi.fn()}
+      onSwitchInstance={vi.fn()}
+      onCreateInstance={vi.fn()}
+      onRenameInstance={vi.fn()}
+      onDeleteInstance={vi.fn()}
     />,
   );
   return onSave;
@@ -153,6 +159,10 @@ describe("SettingsPanel", () => {
         error="保存失败：磁盘只读"
         onSave={vi.fn()}
         onRefreshJava={vi.fn()}
+        onSwitchInstance={vi.fn()}
+        onCreateInstance={vi.fn()}
+        onRenameInstance={vi.fn()}
+        onDeleteInstance={vi.fn()}
       />,
     );
 
@@ -228,5 +238,112 @@ describe("InstallProgressBar 的来源标注", () => {
     render(<InstallProgressBar progress={progress} />);
 
     expect(screen.queryByRole("link", { name: "BMCLAPI" })).toBeNull();
+  });
+});
+
+describe("实例管理", () => {
+  const TWO = [
+    {
+      name: "默认",
+      gameDir: "C:\\games\\qcl",
+      isDefaultDir: false,
+      active: true,
+      selectedVersion: null,
+      loaderVersion: null,
+    },
+    {
+      name: "整合包",
+      gameDir: "C:\\games\\pack",
+      isDefaultDir: false,
+      active: false,
+      selectedVersion: null,
+      loaderVersion: null,
+    },
+  ];
+
+  it("列出全部实例并标出当前那个", () => {
+    renderPanel({ instances: TWO, activeInstance: "默认" });
+
+    expect(screen.getByText("默认")).toBeInTheDocument();
+    expect(screen.getByText("整合包")).toBeInTheDocument();
+    expect(screen.getByText("当前")).toBeInTheDocument();
+  });
+
+  it("点击另一个实例就切换过去", async () => {
+    const onSwitch = vi.fn();
+    render(
+      <SettingsPanel
+        settings={settings({ instances: TWO, activeInstance: "默认" })}
+        javaOptions={[]}
+        saving={false}
+        error={null}
+        onSave={vi.fn()}
+        onRefreshJava={vi.fn()}
+        onSwitchInstance={onSwitch}
+        onCreateInstance={vi.fn()}
+        onRenameInstance={vi.fn()}
+        onDeleteInstance={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByText("整合包"));
+
+    expect(onSwitch).toHaveBeenCalledWith("整合包");
+  });
+
+  it("新建实例会去掉首尾空白", async () => {
+    const onCreate = vi.fn();
+    render(
+      <SettingsPanel
+        settings={settings({ instances: TWO, activeInstance: "默认" })}
+        javaOptions={[]}
+        saving={false}
+        error={null}
+        onSave={vi.fn()}
+        onRefreshJava={vi.fn()}
+        onSwitchInstance={vi.fn()}
+        onCreateInstance={onCreate}
+        onRenameInstance={vi.fn()}
+        onDeleteInstance={vi.fn()}
+      />,
+    );
+
+    await userEvent.type(screen.getByLabelText("新实例名"), "  生存  ");
+    await userEvent.click(screen.getByRole("button", { name: "新建" }));
+
+    expect(onCreate).toHaveBeenCalledWith("生存");
+  });
+
+  it("只剩一个实例时不能移除", () => {
+    // 删到一个不剩会让界面没有可用的目录，后端也会拒绝——按钮直接禁用更早。
+    renderPanel({ instances: [TWO[0]], activeInstance: "默认" });
+
+    expect(screen.getByRole("button", { name: "移除" })).toBeDisabled();
+  });
+
+  it("重命名会提交新名字", async () => {
+    const onRename = vi.fn();
+    render(
+      <SettingsPanel
+        settings={settings({ instances: TWO, activeInstance: "默认" })}
+        javaOptions={[]}
+        saving={false}
+        error={null}
+        onSave={vi.fn()}
+        onRefreshJava={vi.fn()}
+        onSwitchInstance={vi.fn()}
+        onCreateInstance={vi.fn()}
+        onRenameInstance={onRename}
+        onDeleteInstance={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getAllByRole("button", { name: "重命名" })[1]);
+    const input = screen.getByLabelText("重命名后的实例名");
+    await userEvent.clear(input);
+    await userEvent.type(input, "模组服");
+    await userEvent.click(screen.getByRole("button", { name: "确定" }));
+
+    expect(onRename).toHaveBeenCalledWith("整合包", "模组服");
   });
 });

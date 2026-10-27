@@ -89,6 +89,10 @@ export function LauncherView({
   onSignOut,
   onSaveSettings,
   onRefreshJava,
+  onSwitchInstance,
+  onCreateInstance,
+  onRenameInstance,
+  onDeleteInstance,
 }: {
   versions: VersionsState;
   selected: string | null;
@@ -131,6 +135,10 @@ export function LauncherView({
   onSignOut: () => void;
   onSaveSettings: (input: SettingsInput) => void;
   onRefreshJava: () => void;
+  onSwitchInstance: (name: string) => void;
+  onCreateInstance: (name: string) => void;
+  onRenameInstance: (from: string, to: string) => void;
+  onDeleteInstance: (name: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("home");
   const [theme, setTheme] = useState<Theme>(loadTheme);
@@ -239,6 +247,9 @@ export function LauncherView({
               account={account}
               msaLogin={msaLogin}
               downloadSource={settings?.downloadSource ?? "official"}
+              instances={settings?.instances ?? []}
+              activeInstance={settings?.activeInstance ?? ""}
+              onSwitchInstance={onSwitchInstance}
               selected={selected}
               selectedVersion={selectedVersion}
               loaderLabel={loaderLabel}
@@ -283,6 +294,10 @@ export function LauncherView({
                   error={settingsError}
                   onSave={onSaveSettings}
                   onRefreshJava={onRefreshJava}
+                  onSwitchInstance={onSwitchInstance}
+                  onCreateInstance={onCreateInstance}
+                  onRenameInstance={onRenameInstance}
+                  onDeleteInstance={onDeleteInstance}
                   embedded
                 />
               </div>
