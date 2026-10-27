@@ -100,31 +100,35 @@ needed. Add it if you ever regenerate with a password.
 
 ### 3. COS
 
-- Bucket `qcl-1331847184`, region `ap-guangzhou`, prefix `releases/`
+- Bucket `qcl-1331847184`, region `ap-guangzhou`, **private read/write**, prefix `releases/`
 - Custom domain `qcl.luoqingciya.cn`, **HTTPS required** — the client rejects http endpoints
 - The bucket must not enable a referer allowlist, or the client cannot fetch the manifest
 
-**How read access is granted.** Bucket ACL and object ACL are two separate things:
+**How read access is granted.** The bucket is **private read/write**; `releases/` is anonymously
+readable because two layers both hold:
 
-| Option | Bucket ACL | What makes `releases/` anonymously readable |
+| Layer | Current state | Evidence |
 | --- | --- | --- |
-| A (current) | public-read / private-write | the bucket ACL itself |
-| B (tighter, recommended) | **private** | the upload script sets `public-read` per object |
+| Object ACL | set to `public-read` on upload | `ACL: "public-read"` in `scripts/publish-cos.mjs` |
+| Bucket policy | anonymous read on the `releases/*` prefix, **"list objects" not granted** | `releases/nope.txt` answers 404, not 403 |
 
-Switching from A to B is safe because `scripts/publish-cos.mjs` already sends
-`ACL: public-read` on every upload. Two things to watch:
+The redundancy is deliberate, but when debugging a 403 remember there are **two** places to look —
+fixing only one may change nothing.
 
-1. **Objects uploaded before the switch may become private with the bucket.** Verify immediately
-   afterwards: `curl -I https://qcl.luoqingciya.cn/releases/latest.json` must return 200. If it
-   returns 403, set those two objects to public-read in the console.
-2. If the bucket disables object-level ACLs, option B is not available — `putObject` will fail. Use a
-   bucket policy instead: resource `qcl-1331847184/releases/*` (**plural `releases`**), action "read
-   operations", and do not enable "list objects". A one-letter typo in the prefix matches nothing,
-   and while the bucket is public-read that mistake is completely invisible — it only shows up as a
-   403 the day you switch to a private bucket.
+Do not set the bucket itself to "public-read": that would make **everything** in the bucket
+anonymously readable, while only `releases/` needs to be public.
 
-Verify the permissions with these three probes; together they tell "is the bucket really private"
-apart from "is the prefix really effective":
+Two preconditions:
+
+1. **The bucket must not disable object-level ACLs.** If it does, `putObject` with an ACL fails
+   outright and every upload breaks; in that case the bucket policy is the only layer, and the object
+   ACL must be dropped.
+2. The policy resource is `qcl-1331847184/releases/*` (**plural `releases`**). A one-letter typo in
+   the prefix matches nothing and **does not fail loudly** — the object ACL still serves the files,
+   and the mistake only surfaces as a 403 once that ACL layer stops working.
+
+These four probes tell whether the permissions are really what the table above claims (verified
+2026-10-27):
 
 ```bash
 # 1. the manifest itself: 200 means it works
@@ -133,11 +137,17 @@ curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/releases/latest
 curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/releases/nope.txt
 # 3. a missing key outside the prefix: 403 = the bucket really is private
 curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/nope.txt
+# 4. anonymous listing: 403 means listing is not open (otherwise anyone can enumerate releases)
+curl -s -o /dev/null -w "%{http_code}\n" "https://qcl.luoqingciya.cn/?prefix=releases/"
 ```
 
 The key insight: **a private bucket answers 403 for a missing object, while a readable prefix answers
 404**. Testing only probe 1 cannot distinguish "permissions are wrong" from "the file is not uploaded
 yet".
+
+Probe 4 is easy to miss: `/releases/` (with the trailing slash) returning 200 is COS's directory
+placeholder and does **not** mean the bucket can be listed; a real listing carries a `?prefix=` query
+string, and only a 403 there proves listing is closed.
 
 ## Releasing
 
