@@ -82,6 +82,20 @@ jobs:
             exit 1
           fi
 
+      # 微软登录的客户端 ID 在编译期注入。缺了它构建不会失败，但产物里登录功能
+      # 会静默不可用——那比发版失败更糟：用户装完才发现。
+      - name: 检查微软登录客户端 ID
+        shell: bash
+        env:
+          MS_CLIENT_ID: ${{ secrets.QCL_MS_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "$MS_CLIENT_ID" ]; then
+            echo "::error::缺少 QCL_MS_CLIENT_ID。没有它，发出去的安装包无法登录微软账号。"
+            echo "在 Azure 应用注册里取「应用程序(客户端) ID」，加到仓库 secret。"
+            exit 1
+          fi
+
   build:
     name: 构建 ${{ matrix.name }}
     needs: prepare
@@ -129,6 +143,8 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # 编译期注入，见 src-tauri/build.rs。仓库里没有这个值。
+          QCL_MS_CLIENT_ID: ${{ secrets.QCL_MS_CLIENT_ID }}
         run: pnpm tauri build --bundles ${{ matrix.bundles }} --config src-tauri/tauri.release.json
 
       # 安装包原名带空格（"Qingci Craft Launcher_0.1.1_x64-setup.exe"）。

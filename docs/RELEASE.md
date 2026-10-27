@@ -64,6 +64,19 @@ Settings → Secrets and variables → Actions：
 | `TENCENT_SECRET_ID` | 腾讯云 API 密钥 |
 | `TENCENT_SECRET_KEY` | 同上 |
 | `TAURI_SIGNING_PRIVATE_KEY` | **私钥文件的全部内容**：一整行 base64，没有换行 |
+| `QCL_MS_CLIENT_ID` | Azure 应用注册里的「应用程序(客户端) ID」 |
+
+`QCL_MS_CLIENT_ID` 由 `src-tauri/build.rs` 在**编译期**注入（`cargo:rustc-env`），
+所以仓库里搜不到它。缺了它构建不会失败，但产物里的微软登录会静默不可用——
+因此发版流程把它做成前置检查，缺了直接失败。
+
+**它不是机密，别把它当机密**。OAuth 2.0 的公共客户端（设备码流程）没有 client secret，
+ID 在每次请求的表单里明文出现。编译期注入只解决「仓库里不出现发布者的应用注册」，
+**二进制里一定有**——`grep -a <id> 程序` 一秒就能找到。想真正防止别人复用这个 ID，
+只能在 Azure 侧处理，代码层面做不到。
+
+贡献者本地没有这个 ID 也能编译、能跑其余功能，只是登录不可用（界面会说明）。
+想自己测登录，就注册一个 Azure 应用然后 `QCL_MS_CLIENT_ID=xxx pnpm tauri dev`。
 
 私钥文件是 base64 编码的 minisign 密钥，**只有一行**（`untrusted comment:` 那些
 标记被编码在 base64 内部，文件里看不到）。整段复制即可，不要自己加换行。
