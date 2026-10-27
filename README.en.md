@@ -44,7 +44,7 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 - **Cross-platform**: Windows 10+ / macOS 12+ / Linux (glibc 2.31+); CI builds and tests on all three.
   Published artifacts cover Windows and Linux.
 - **Testable**: core logic (version parsing, rule evaluation, argument assembly, auth protocols, mod
-  resolution, crash report parsing) lives in GUI-free Rust crates — 312 Rust tests + 132 frontend
+  resolution, crash report parsing) lives in GUI-free Rust crates — 326 Rust tests + 139 frontend
   tests in CI.
 - **Manifest-driven**: versions, libraries and JVM arguments are all derived from official manifests; no version list is hardcoded.
 
@@ -104,24 +104,32 @@ runtime, the deb relies on `libwebkit2gtk-4.1` from the distribution, while an A
 the entire WebKitGTK + JavaScriptCore + GTK3 stack to run on any distribution — that stack alone is
 over 70 MB. Pick the deb if size matters, the AppImage if you want "download and double-click".
 
+Sizes are measured from the current release and drift a little between versions.
+
 **The download source is switchable**: Settings offers Mojang's official endpoints (default) or the
-[BMCLAPI](https://bmclapidoc.bangbang93.com/) mirror. A failing mirror **falls back to official
-automatically** — it is a faster path, not a single point of failure. When the mirror is in use the UI
-credits it, which BMCLAPI's terms also require.
+[BMCLAPI](https://bmclapidoc.bangbang93.com/) mirror. A failing mirror — or a file that fails
+verification — **falls back to official automatically**; it is a faster path, not a single point of
+failure. When the mirror is in use the UI credits it, which BMCLAPI's terms also require.
 
 The default game directory is **`game/` inside the install directory** (portable layout:
 copy the whole folder and your worlds move with it). If that location is not writable,
 the launcher falls back to the app data directory and explains why in the UI.
+
+**Multiple game directories ("instances") are supported.** Settings can create, rename and remove
+them; each has its own directory and its own version selection — vanilla in one, a modpack in another,
+switching does not disturb the other. Once there is more than one, the launch panel grows a switcher.
+New instances land in `instances/<name>` by default, or you can point them anywhere.
+**Removing an instance only drops the record — files on disk are never deleted.**
 
 **The installed build and the portable build keep separate settings.** The installed one uses
 `%APPDATA%\cn.luoqingciya.qcl\`; the portable one writes `settings.json` next to the exe. They share
 the same application identifier, and used to share a single config file — which meant a version
 picked in one showed up in the other. That is no longer the case.
 
-**Only one instance may run at a time**: double-clicking again focuses the existing window instead of
-opening a second one. Note that the installed and portable builds share the application identifier, so
-they exclude each other too — double-clicking the portable build while the installed one is running
-just brings the installed window forward.
+**Only one launcher window may run at a time**: double-clicking again focuses the existing window
+instead of opening a second one. Note that the installed and portable builds share the application
+identifier, so they exclude each other too — double-clicking the portable build while the installed one
+is running just brings the installed window forward.
 
 ### Auto-update
 

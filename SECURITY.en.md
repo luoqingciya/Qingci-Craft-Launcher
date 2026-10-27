@@ -28,7 +28,9 @@ risk, not as an empty promise on a wishlist.
 1. **Download integrity**: every file fetched from Mojang endpoints is verified against the official
    SHA-1. Files with a missing or mismatching digest are never used.
 2. **Path traversal protection**: extracting assets and natives rejects `..`, leading `/`, drive
-   letters and backslashes, so nothing is written outside the game directory.
+   letters and backslashes, so nothing is written outside the game directory. Directory names derived
+   from an instance name keep only letters, digits and `-` `_`, so a `../` in the name cannot escape
+   `instances/` either.
 3. **No unverified execution**: the game is launched only from official artifacts; loader (Fabric)
    libraries are verified the same way.
 4. **Mod download verification**: mods from Modrinth must carry a valid SHA-1 before anything is
@@ -60,10 +62,14 @@ handing that trust to it**:
   not corrupted, not that it came from Mojang.
 - So this trades **authenticity for availability**: the mirror only makes sense when the official
   endpoints are unreachable, and official stays the default.
-- **A failing mirror falls back to official automatically** (only on connection failure or an explicit
-  failure status — a redirect is not a failure). This is not just about UX: BMCLAPI's metadata
-  endpoints 302 to `bmclapi*.sakura.sld.tw`, and those nodes reset outright on some networks. Without
-  the fallback, switching to the mirror would leave the user unable to even list versions.
+- **A failing mirror falls back to official automatically**: on connection failure, an explicit failure
+  status, **and on a SHA-1 mismatch after download**. A redirect is not a failure — that is normal
+  mirror behaviour. The last case matters most: if the mirror answers 200 with the wrong bytes,
+  retrying the same mirror can only ever yield the same wrong bytes, which would turn checksum
+  verification into "it reports the problem but never recovers". This is not just about UX either:
+  BMCLAPI's metadata endpoints 302 to `bmclapi*.sakura.sld.tw`, and those nodes reset outright on some
+  networks. Without the fallback, switching to the mirror would leave the user unable to even list
+  versions.
 
 The UI credits the mirror in **two** places: in Settings when it is selected, and next to the download progress bar. The latter is not optional — BMCLAPI's terms require the source to be shown "in the download UI or another visible part", and a note buried in Settings is invisible to anyone who never opens it.
 
