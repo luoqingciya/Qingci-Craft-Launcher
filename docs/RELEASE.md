@@ -183,7 +183,7 @@ AppImage 有 83 MB，又不参与自动更新，放 COS 上只是白占带宽。
   不参与自动更新——自更新要替换正在运行的 exe，Windows 不允许。
 - **Linux AppImage**：83.5 MB。自包含，把 WebKitGTK + JavaScriptCore + GTK3 整套塞进去了
   （解出来 530 个文件），所以体积是 deb 的十几倍。
-- **Linux deb**：5.2 MB，依赖发行版的 `libwebkit2gtk-4.1`。
+- **Linux deb**：5.3 MB，依赖发行版的 `libwebkit2gtk-4.1`。
 - **Linux 整体不提供自动更新**。「关于」页会识别出 Linux，直接引导到下载页，
   而不是给一个点了就报错的按钮。
 - **macOS**：不发布。自动更新需要 updater 的 `zip` 特性来解压 `.app.tar.gz`，而该特性

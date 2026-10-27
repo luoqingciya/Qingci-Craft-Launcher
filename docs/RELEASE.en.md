@@ -204,7 +204,7 @@ cost bandwidth for nothing.
   directory next to the exe. No auto-update: replacing a running exe is not allowed on Windows.
 - **Linux AppImage**: 83.5 MB. Self-contained — it carries the whole WebKitGTK + JavaScriptCore + GTK3
   stack (530 files once extracted), which is why it is over ten times the size of the deb.
-- **Linux deb**: 5.2 MB, depends on the distribution's `libwebkit2gtk-4.1`.
+- **Linux deb**: 5.3 MB, depends on the distribution's `libwebkit2gtk-4.1`.
 - **Linux in general**: no auto-update. The About page detects Linux and points at the download page
   instead of showing a button that would only fail.
 - **macOS**: not published. Auto-update needs the updater's `zip` feature to unpack `.app.tar.gz`,
