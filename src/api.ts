@@ -314,3 +314,53 @@ export function updateMod(
 ): Promise<string[]> {
   return invoke<string[]>("update_mod", { projectId, oldFile, version, loader });
 }
+
+/** 登录后的账号。令牌不会传到前端。 */
+export interface Account {
+  /** 玩家名。 */
+  name: string;
+  /** 账号 UUID（无连字符）。 */
+  uuid: string;
+}
+
+/** 登录状态推送的事件名。 */
+export const LOGIN_EVENT = "login://state";
+
+/**
+ * 登录状态。
+ *
+ * 三种状态都由后端推过来：轮询节奏（`slow_down` 要加间隔、到点要停）属于协议细节，
+ * 放在前端就要复制一份，两边不一致会出现「微软那边已授权、启动器还在转圈」。
+ */
+export type LoginState =
+  | {
+      kind: "code";
+      /** 要用户输入的短码。 */
+      userCode: string;
+      /** 要用户访问的地址。 */
+      verificationUri: string;
+      /** 短码有效期（秒）。 */
+      expiresIn: number;
+    }
+  | { kind: "done"; account: Account }
+  | { kind: "failed"; message: string };
+
+/** 取当前账号，未登录时为 `null`。 */
+export function currentAccount(): Promise<Account | null> {
+  return invoke<Account | null>("current_account");
+}
+
+/** 开始设备码登录。结果通过 {@link LOGIN_EVENT} 推送。 */
+export function beginLogin(): Promise<void> {
+  return invoke<void>("begin_login");
+}
+
+/** 取消正在进行的登录。 */
+export function cancelLogin(): Promise<void> {
+  return invoke<void>("cancel_login");
+}
+
+/** 退出登录。 */
+export function signOut(): Promise<void> {
+  return invoke<void>("sign_out");
+}

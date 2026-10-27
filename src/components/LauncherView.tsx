@@ -14,13 +14,16 @@ import type {
   SettingsView,
   VersionSummary,
 } from "../api";
+import type { Account } from "../api";
 import type { CrashSummary } from "../lib/crash";
 import type { LogEntry } from "../lib/logs";
 import { applyTheme, loadTheme, type Theme } from "../lib/theme";
+import type { LoginPhase } from "../lib/useAccount";
 import type { UpdateState } from "../lib/useUpdate";
 import { AboutPanel } from "./AboutPanel";
 import { CrashCard } from "./CrashCard";
 import { LaunchPanel } from "./LaunchPanel";
+import { LoginDialog } from "./LoginDialog";
 import { LogPanel } from "./LogPanel";
 import { ModsTab } from "./ModsTab";
 import { PickerDialog, type PickerItem } from "./PickerDialog";
@@ -61,6 +64,9 @@ export function LauncherView({
   status,
   logs,
   crash,
+  account,
+  msaLogin,
+  loginPhase,
   update,
   portable,
   settings,
@@ -78,6 +84,9 @@ export function LauncherView({
   onDismissCrash,
   onCheckUpdate,
   onInstallUpdate,
+  onLogin,
+  onCancelLogin,
+  onSignOut,
   onSaveSettings,
   onRefreshJava,
 }: {
@@ -92,6 +101,12 @@ export function LauncherView({
   logs: LogEntry[];
   /** 崩溃摘要；`null` 表示这次不是异常退出，或用户已收起。 */
   crash: CrashSummary | null;
+  /** 已登录的账号，未登录为 `null`。 */
+  account: Account | null;
+  /** 本次构建是否内置了微软登录能力。 */
+  msaLogin: boolean;
+  /** 登录对话框阶段。 */
+  loginPhase: LoginPhase;
   /** 更新流程状态。 */
   update: UpdateState;
   /** 便携版无法自更新。 */
@@ -111,6 +126,9 @@ export function LauncherView({
   onDismissCrash: () => void;
   onCheckUpdate: () => void;
   onInstallUpdate: () => void;
+  onLogin: () => void;
+  onCancelLogin: () => void;
+  onSignOut: () => void;
   onSaveSettings: (input: SettingsInput) => void;
   onRefreshJava: () => void;
 }) {
@@ -218,6 +236,8 @@ export function LauncherView({
           <div className="w-[360px] shrink-0 border-r border-[var(--color-border-subtle)] p-4">
             <LaunchPanel
               playerName={playerName}
+              account={account}
+              msaLogin={msaLogin}
               selected={selected}
               selectedVersion={selectedVersion}
               loaderLabel={loaderLabel}
@@ -232,6 +252,8 @@ export function LauncherView({
               onLaunch={onLaunch}
               onInstall={onInstall}
               onStop={onStop}
+              onLogin={onLogin}
+              onSignOut={onSignOut}
             />
           </div>
 
@@ -312,6 +334,8 @@ export function LauncherView({
           onClose={() => setPicker(null)}
         />
       )}
+
+      <LoginDialog phase={loginPhase} onCancel={onCancelLogin} />
     </div>
   );
 }
