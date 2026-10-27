@@ -3088,6 +3088,7 @@ name = "qcl-desktop"
 version = "0.1.2"
 dependencies = [
  "dunce",
+ "qcl-auth",
  "qcl-core",
  "qcl-install",
  "qcl-java",

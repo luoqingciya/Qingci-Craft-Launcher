@@ -203,12 +203,20 @@ pub async fn launch_game(
 
     let launch_options = launch_options_from(&settings);
 
+    // 已登录就用真实账号，否则回落到离线账户。离线模式在界面上有明确标注，
+    // 两者不会混淆。
+    let account = state
+        .auth
+        .account()
+        .map(|account| account.to_account_info())
+        .unwrap_or_else(|| offline_account(&settings.player_name_or_default()));
+
     let command = build_launch_command(
         &java.executable,
         &meta,
         &launch_context(),
         &layout,
-        &offline_account(&settings.player_name_or_default()),
+        &account,
         &launch_options,
     )
     .map_err(|error| format!("组装启动命令失败：{error}"))?;
