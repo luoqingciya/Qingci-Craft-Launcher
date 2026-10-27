@@ -33,7 +33,7 @@
 | 中文译名与筛选 | ✅ | 本地译名库 + 中文关键词别名 + 19 个分类中文化 |
 | 崩溃摘要 | ✅ | 非 0 退出时给出结论，并读取 `crash-reports/` 里的报告 |
 | 在线更新 | ✅ | 安装版自动检查，签名校验通过才安装 |
-| 微软正版登录 | 🟡 | 设备码 + Xbox 认证链已完成并对着真实端点验证，**界面未接入**，需等 Mojang 审核 |
+| 微软正版登录 | ✅ | 设备码流程（启动器碰不到密码）；令牌存系统凭据库，启动时静默刷新 |
 | 实例管理 | ⬜ | 多份独立游戏目录 |
 | Forge / NeoForge | ⬜ | 见路线图 |
 
@@ -53,7 +53,7 @@
 | 异步与网络 | tokio + reqwest（rustls） |
 | 前端质量 | vitest + Testing Library；oxlint（不用 eslint，见下） |
 | 更新分发 | `tauri-plugin-updater` + 腾讯云 COS（签名校验，见 [docs/RELEASE.md](docs/RELEASE.md)） |
-| 凭据存储 | 系统凭据库（尚未实现，当前只有离线账户，见 [SECURITY.md](SECURITY.md)） |
+| 凭据存储 | 系统凭据库：Windows Credential Manager / macOS Keychain / Secret Service（见 [SECURITY.md](SECURITY.md)） |
 
 > **为什么 lint 用 oxlint**：`typescript-eslint` 的 peer 依赖是 `typescript <6.1.0`，
 > 而本项目用 TS 7（Go 原生编译器）。oxlint 自带 TS 解析、不依赖 `typescript` 包。

@@ -323,3 +323,103 @@ mod verification_uri {
         assert!(!is_trusted_verification_uri("https:///path"));
     }
 }
+
+/// 刷新令牌。
+///
+/// 这块最容易出的错是「刷新令牌被轮换了却还在用旧的」——微软每次刷新都可能换一个新的，
+/// 旧值下一次就会 `invalid_grant`，表现成「用着用着突然要重新登录」。
+mod refresh {
+    use qcl_auth::{AuthError, refresh_access_token_from};
+    use qcl_net::HttpDownloader;
+    use tempfile::TempDir;
+    use wiremock::matchers::{body_string_contains, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    async fn downloader() -> (HttpDownloader, TempDir) {
+        let dir = TempDir::new().expect("临时目录");
+        let downloader = HttpDownloader::new(dir.path()).expect("下载器");
+        (downloader, dir)
+    }
+
+    #[tokio::test]
+    async fn 成功时返回新令牌与新刷新令牌() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/token"))
+            .and(body_string_contains("grant_type=refresh_token"))
+            .and(body_string_contains("refresh_token=old-refresh"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(
+                r#"{"access_token":"new-access","refresh_token":"rotated","expires_in":3600}"#,
+            ))
+            .mount(&server)
+            .await;
+
+        let (downloader, _dir) = downloader().await;
+        let tokens = refresh_access_token_from(
+            &downloader,
+            &format!("{}/token", server.uri()),
+            "client",
+            "old-refresh",
+        )
+        .await
+        .expect("刷新应成功");
+
+        assert_eq!(tokens.access_token, "new-access");
+        // 轮换后的新值必须能被调用方看到，否则它没法存回去。
+        assert_eq!(tokens.refresh_token.as_deref(), Some("rotated"));
+    }
+
+    #[tokio::test]
+    async fn 刷新令牌失效时归类为过期而不是普通错误() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/token"))
+            .respond_with(ResponseTemplate::new(400).set_body_string(
+                r#"{"error":"invalid_grant","error_description":"AADSTS70000: refresh token expired"}"#,
+            ))
+            .mount(&server)
+            .await;
+
+        let (downloader, _dir) = downloader().await;
+        let error = refresh_access_token_from(
+            &downloader,
+            &format!("{}/token", server.uri()),
+            "client",
+            "dead",
+        )
+        .await
+        .expect_err("应当失败");
+
+        // 调用方靠这个变体决定「清掉存储、让用户重新登录」。
+        assert!(matches!(error, AuthError::Expired), "实际是 {error:?}");
+    }
+
+    #[tokio::test]
+    async fn 其他失败保留原始信息() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/token"))
+            .respond_with(
+                ResponseTemplate::new(500)
+                    .set_body_string(r#"{"error":"server_error","error_description":"try later"}"#),
+            )
+            .mount(&server)
+            .await;
+
+        let (downloader, _dir) = downloader().await;
+        let error = refresh_access_token_from(
+            &downloader,
+            &format!("{}/token", server.uri()),
+            "client",
+            "token",
+        )
+        .await
+        .expect_err("应当失败");
+
+        // 这类错误重试可能有救，所以不能也归成「过期」。
+        match error {
+            AuthError::Protocol(message) => assert!(message.contains("server_error")),
+            other => panic!("应当保留原始错误，实际是 {other:?}"),
+        }
+    }
+}

@@ -19,7 +19,8 @@ pub mod xbox;
 pub use device::{
     DeviceCode, PollOutcome, TOKEN_URL, TokenSet, interpret_token_response,
     is_trusted_verification_uri, poll_once, poll_once_from, poll_until_granted,
-    poll_until_granted_from, request_device_code, request_device_code_from,
+    poll_until_granted_from, refresh_access_token, refresh_access_token_from, request_device_code,
+    request_device_code_from,
 };
 pub use xbox::{
     MinecraftProfile, MinecraftToken, XboxToken, XstsToken, authenticate_xbox,

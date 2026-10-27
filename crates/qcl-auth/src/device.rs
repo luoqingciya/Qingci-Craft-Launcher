@@ -244,6 +244,63 @@ fn describe_error(body: &str) -> String {
     }
 }
 
+/// 用刷新令牌换一套新的令牌。
+///
+/// `offline_access` 作用域下微软会返回 refresh token；它**每次刷新后可能被轮换**，
+/// 所以调用方必须把响应里的新值存回去。继续用旧值会在下一次刷新时拿到
+/// `invalid_grant`，表现成「用着用着突然要重新登录」这种很难查的问题。
+pub async fn refresh_access_token(
+    downloader: &HttpDownloader,
+    client_id: &str,
+    refresh_token: &str,
+) -> Result<TokenSet, AuthError> {
+    refresh_access_token_from(downloader, TOKEN_URL, client_id, refresh_token).await
+}
+
+/// 同 [`refresh_access_token`]，但可指定端点。
+pub async fn refresh_access_token_from(
+    downloader: &HttpDownloader,
+    url: &str,
+    client_id: &str,
+    refresh_token: &str,
+) -> Result<TokenSet, AuthError> {
+    let response = downloader
+        .request(
+            HttpMethod::Post,
+            url,
+            None,
+            RequestBody::Form(&[
+                ("client_id", client_id),
+                ("grant_type", "refresh_token"),
+                ("refresh_token", refresh_token),
+                ("scope", SCOPE),
+            ]),
+        )
+        .await?;
+
+    if (200..300).contains(&response.status) {
+        return serde_json::from_str(&response.body).map_err(AuthError::Parse);
+    }
+
+    // 刷新失败里唯一值得区分的是 `invalid_grant`：刷新令牌已经不能用了（过期、被吊销、
+    // 或已被轮换掉）。调用方据此清掉存储、让用户重新登录，而不是反复重试。
+    Err(match error_code(&response.body).as_deref() {
+        Some("invalid_grant") => AuthError::Expired,
+        _ => AuthError::Protocol(format!(
+            "刷新令牌失败（HTTP {}）：{}",
+            response.status,
+            describe_error(&response.body)
+        )),
+    })
+}
+
+/// 取出错误响应里的 `error` 字段。
+fn error_code(body: &str) -> Option<String> {
+    serde_json::from_str::<OAuthErrorBody>(body)
+        .ok()
+        .map(|payload| payload.error)
+}
+
 impl From<DownloadError> for AuthError {
     fn from(error: DownloadError) -> Self {
         Self::Network(error.to_string())

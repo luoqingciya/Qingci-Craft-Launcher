@@ -15,6 +15,7 @@ mod game;
 mod install;
 mod mods;
 mod settings;
+mod token_store;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
@@ -433,8 +434,13 @@ pub fn run() {
                     downloader: Arc::new(downloader),
                 }),
                 game: Arc::new(Mutex::new(None)),
-                auth: auth::Auth::default(),
+                auth: auth::Auth::new(),
             });
+
+            // 用存下的刷新令牌恢复登录。失败静默——刚打开的启动器上不该因为
+            // 「上次的令牌过期了」弹一条错误。
+            auth::restore_session(app.handle().clone());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
