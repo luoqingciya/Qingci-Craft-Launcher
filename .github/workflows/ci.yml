@@ -2,6 +2,15 @@ name: CI
 
 # PR 门禁：任何改动在合并前必须通过本文件定义的全部 job。
 # 这些 job 名称同时是 main 分支保护的 required status checks，重命名需同步修改分支保护配置。
+#
+# 两次触发不是重复劳动，但**大部分是**：
+#
+#   pull_request  分支上跑全套（含三平台构建）——这是真正的门禁
+#   push: main    合并后再跑一遍
+#
+# 分支保护开了 strict（要求 PR 分支与 main 同步），所以合并出来的树与 PR head
+# 完全一致，第二次跑的是同一份内容。合并后只保留「不产出、纯验证」里最便宜的那层，
+# 三平台构建只在 PR 上跑——见 build job 上的注释。
 
 on:
   pull_request:
@@ -133,6 +142,14 @@ jobs:
   # 不相关时跳过重活，job 本身仍然成功，避免卡住必需的状态检查。
   build:
     name: build (${{ matrix.os }})
+    # 只在 PR 上跑。
+    #
+    # 分支保护要求 PR 分支与 main 保持同步（strict），所以合并出来的树与 PR head
+    # 完全一致——合并后再编译一遍三个平台纯属重复。而构建产物在 CI 里没有任何
+    # 下游消费者（发版由 release.yml 自己构建），删掉不影响任何东西。
+    #
+    # 这是每次合并能省下的最大一块：三个构建加起来约 12 分钟机器时间。
+    if: github.event_name == 'pull_request'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
