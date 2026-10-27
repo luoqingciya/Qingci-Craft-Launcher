@@ -10,15 +10,20 @@
 //! **令牌不外流**：[`Account`] 序列化给前端时用 `#[serde(skip)]` 去掉令牌与 xuid。
 //! 界面只需要显示名字，拿到令牌只会多一个泄露面。
 
+use std::sync::Arc;
 use std::sync::Mutex;
 
-use qcl_auth::{is_trusted_verification_uri, login_chain, poll_until_granted, request_device_code};
+use qcl_auth::{
+    is_trusted_verification_uri, login_chain, poll_until_granted, refresh_access_token,
+    request_device_code,
+};
 use qcl_core::launch::AccountInfo;
 use qcl_net::HttpDownloader;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::AppState;
+use crate::token_store::{KeyringStore, NullStore, TokenStore};
 
 /// 登录状态推送的事件名。
 pub const LOGIN_EVENT: &str = "login://state";
@@ -92,7 +97,6 @@ pub enum LoginState {
 }
 
 /// 账号与登录会话。
-#[derive(Default)]
 pub struct Auth {
     account: Mutex<Option<Account>>,
     /// 同一时刻只允许一个登录在跑。
@@ -100,9 +104,27 @@ pub struct Auth {
     /// 连点两次「登录」会拿到两个设备码，两个轮询各自完成时，先回来的那个会把
     /// 后登录的账号覆盖掉。所以新登录开始前先中止旧的。
     task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+    /// 刷新令牌的存放位置。凭据库不可用时退化成不持久化。
+    pub(crate) store: Arc<dyn TokenStore>,
 }
 
 impl Auth {
+    /// 建一份账号状态。
+    ///
+    /// 凭据库不可用时（比如 Linux 上没有 Secret Service）退化成 [`NullStore`]：
+    /// 登录照常可用，只是下次启动要重新登录。
+    pub fn new() -> Self {
+        let store: Arc<dyn TokenStore> = match KeyringStore::new() {
+            Some(store) => Arc::new(store),
+            None => Arc::new(NullStore),
+        };
+        Self {
+            account: Mutex::new(None),
+            task: Mutex::new(None),
+            store,
+        }
+    }
+
     /// 当前账号。
     pub fn account(&self) -> Option<Account> {
         self.account.lock().ok().and_then(|slot| slot.clone())
@@ -135,6 +157,8 @@ pub fn current_account(state: tauri::State<'_, AppState>) -> Option<Account> {
 pub fn sign_out(state: tauri::State<'_, AppState>) -> Result<(), String> {
     state.auth.abort();
     state.auth.set_account(None);
+    // 不清掉的话，下次启动会自动把账号登回来——用户点「退出」显然不期望这个。
+    state.auth.store.clear();
     Ok(())
 }
 
@@ -157,8 +181,9 @@ pub fn begin_login(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<
     let handle = tauri::async_runtime::spawn({
         let app = app.clone();
         let client_id = client_id.to_owned();
+        let store = Arc::clone(&state.auth.store);
         async move {
-            let outcome = run_login(&app, &downloader, &client_id).await;
+            let outcome = run_login(&app, &downloader, &client_id, store.as_ref()).await;
             let payload = match outcome {
                 Ok(account) => {
                     if let Some(state) = app.try_state::<AppState>() {
@@ -198,6 +223,7 @@ async fn run_login(
     app: &AppHandle,
     downloader: &HttpDownloader,
     client_id: &str,
+    store: &dyn TokenStore,
 ) -> Result<Account, String> {
     let device = request_device_code(downloader, client_id)
         .await
@@ -222,7 +248,73 @@ async fn run_login(
         .await
         .map_err(|error| error.to_string())?;
 
+    // 先存刷新令牌再继续：后面换 Minecraft 令牌失败（比如账号没买游戏）时，
+    // 用户下次仍然不必重新走一遍设备码。
+    if let Some(refresh_token) = tokens.refresh_token.as_deref() {
+        let _ = store.save(refresh_token);
+    }
+
     // 微软令牌 → Xbox → XSTS → Minecraft → 档案，一次跑完。
+    let info = login_chain(downloader, &tokens.access_token)
+        .await
+        .map_err(|error| error.to_string())?;
+
+    Ok(Account::from_info(info))
+}
+
+/// 启动时用存下的刷新令牌恢复登录。
+///
+/// 失败静默：可能是从没登录过，也可能令牌已经过期——两种情况对用户都是「没登录」，
+/// 不该在刚打开的启动器上弹错误。真正过期时顺手清掉存储，免得每次启动都白试一次。
+pub fn restore_session(app: AppHandle) {
+    let Some(client_id) = crate::ms_client_id() else {
+        return;
+    };
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let Ok((downloader, _)) = state.context() else {
+        return;
+    };
+    let store = Arc::clone(&state.auth.store);
+
+    tauri::async_runtime::spawn(async move {
+        let Some(refresh_token) = store.load() else {
+            return;
+        };
+
+        let outcome =
+            refresh_and_login(&downloader, client_id, store.as_ref(), &refresh_token).await;
+        match outcome {
+            Ok(account) => {
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.auth.set_account(Some(account.clone()));
+                }
+                // 界面可能已经挂载并取过一次账号，所以这里要推一条事件。
+                let _ = app.emit(LOGIN_EVENT, LoginState::Done { account });
+            }
+            Err(_) => store.clear(),
+        }
+    });
+}
+
+/// 刷新令牌 → 新的 Minecraft 令牌 → 账号信息。
+async fn refresh_and_login(
+    downloader: &HttpDownloader,
+    client_id: &str,
+    store: &dyn TokenStore,
+    refresh_token: &str,
+) -> Result<Account, String> {
+    let tokens = refresh_access_token(downloader, client_id, refresh_token)
+        .await
+        .map_err(|error| error.to_string())?;
+
+    // 微软可能轮换刷新令牌。不把新值存回去，下一次刷新就会拿到 `invalid_grant`，
+    // 表现成「用着用着突然要重新登录」。
+    if let Some(rotated) = tokens.refresh_token.as_deref() {
+        let _ = store.save(rotated);
+    }
+
     let info = login_chain(downloader, &tokens.access_token)
         .await
         .map_err(|error| error.to_string())?;

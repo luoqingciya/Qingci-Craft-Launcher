@@ -34,7 +34,7 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 | Chinese names & filters | ✅ | Local name database, Chinese keyword aliases, 19 localised categories |
 | Crash summary | ✅ | Non-zero exit produces a verdict; reads `crash-reports/` when present |
 | Auto-update | ✅ | Installed builds check automatically; nothing installs without a valid signature |
-| Microsoft login | 🟡 | Device code + Xbox chain done and verified against live endpoints; **UI pending**, blocked on Mojang review |
+| Microsoft login | ✅ | Device code flow (the launcher never sees the password); tokens live in the OS keychain and refresh silently at startup |
 | Instances | ⬜ | Multiple isolated game directories |
 | Forge / NeoForge | ⬜ | See roadmap |
 
@@ -57,7 +57,7 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 | Async & network | tokio + reqwest (rustls) |
 | Frontend quality | vitest + Testing Library; oxlint (not eslint — see below) |
 | Update delivery | `tauri-plugin-updater` + Tencent Cloud COS (signature-verified, see [docs/RELEASE.en.md](docs/RELEASE.en.md)) |
-| Credential storage | OS keychain (not implemented; offline accounts only — see [SECURITY.md](SECURITY.md)) |
+| Credential storage | OS keychain: Windows Credential Manager / macOS Keychain / Secret Service (see [SECURITY.md](SECURITY.md)) |
 
 > **Why oxlint instead of eslint**: `typescript-eslint` declares a peer dependency of
 > `typescript <6.1.0`, while this project uses TS 7 (the native Go compiler).

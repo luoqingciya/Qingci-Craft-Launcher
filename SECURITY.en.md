@@ -40,14 +40,19 @@ risk, not as an empty promise on a wishlist.
    version announced in the manifest must also match the version recorded inside the signature —
    otherwise a validly signed but older build could be paired with a forged version number to force a
    downgrade.
-6. **No tokens in logs**: the auth layer (`qcl-auth`) never prints tokens and never persists them.
+6. **Tokens only go to the OS keychain**: the auth layer (`qcl-auth`) never prints tokens. The only
+   secret persisted is the **Microsoft refresh token** (a Minecraft access token lives under an hour,
+   so storing it is pointless); it goes into the OS keychain (Windows Credential Manager / macOS
+   Keychain / Linux Secret Service) and **never into a config file**, which is plaintext. When no
+   keychain is available the launcher degrades to no persistence — login still works, it just has to
+   be repeated next launch.
 
 ### Not yet implemented (current risk)
 
-1. **No credential storage.** Only offline accounts are supported right now, so there are no tokens
-   to store. The Microsoft login protocol layer is complete but **not wired into the UI**, and token
-   persistence is **not implemented**. When it lands it will use the OS keychain (Windows Credential
-   Manager / macOS Keychain / Secret Service), never a config file.
+1. **No protection beyond the OS keychain.** The refresh token is protected by the operating system;
+   any process in the same user session that could read it could do plenty of other things anyway.
+   There is no extra application-level encryption, because the key would have to live on the same
+   machine — that only moves the problem.
 2. **No code signing for executables.** Windows artifacts carry no Authenticode signature; macOS
    artifacts are not codesigned or notarized. The OS may warn about them.
 
