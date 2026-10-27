@@ -164,12 +164,14 @@ GitHub Release（附安装包与 `.sig`）。
 | 通道 | 内容 | 用途 |
 | --- | --- | --- |
 | COS（`qcl.luoqingciya.cn/releases/`） | Windows NSIS 安装包 + `.sig` + `latest.json` | **自动更新通道** |
-| GitHub Releases | 上面那些，外加 Linux 的 AppImage 与 deb | 人工下载 |
+| GitHub Releases | 上面那些，外加 Windows 便携版与 Linux 的 AppImage、deb | 人工下载 |
 
 所以 `latest.json` 里**只有** `windows-x86_64` 一条。Linux 产物留在 GitHub Releases：
 AppImage 有 83 MB，又不参与自动更新，放 COS 上只是白占带宽。
 
-- **Windows**：NSIS 3.5 MB，复用系统 WebView2，自动更新走静默安装 + 重启。
+- **Windows 安装版**：NSIS 3.5 MB，复用系统 WebView2，自动更新走静默安装 + 重启。
+- **Windows 便携版**：11 MB，就是安装包里那个 exe，双击即用，游戏目录落在 exe 旁边。
+  不参与自动更新——自更新要替换正在运行的 exe，Windows 不允许。
 - **Linux AppImage**：83 MB。自包含，把 WebKitGTK + JavaScriptCore + GTK3 整套塞进去了
   （解出来 530 个文件），所以体积是 deb 的十几倍。
 - **Linux deb**：4.9 MB，依赖发行版的 `libwebkit2gtk-4.1`。

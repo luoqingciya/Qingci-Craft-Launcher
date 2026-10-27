@@ -84,10 +84,12 @@ assets/          品牌资产（应用图标源文件、模组译名库数据）
 | 平台 | 文件 | 大小 | 说明 |
 |---|---|---|---|
 | Windows | `QingciCraftLauncher_*_x64-setup.exe` | 3.5 MB | NSIS 安装程序，装到用户目录，不需要管理员权限；支持自动更新 |
+| Windows | `QingciCraftLauncher_*_x64-portable.exe` | 11 MB | 免安装，双击即用；游戏目录在 exe 旁边；**不支持自动更新** |
 | Linux | `QingciCraftLauncher_*_amd64.deb` | 4.9 MB | Debian / Ubuntu 安装包，依赖系统已有的 webkit2gtk |
 | Linux | `QingciCraftLauncher_*_x86_64.AppImage` | 83 MB | 免安装，自包含运行时 |
 
-Linux 产物**只在 GitHub Releases 提供**，不走自动更新（AppImage 太大，不放在更新服务器上）。
+Linux 产物与 Windows 便携版**只在 GitHub Releases 提供**，不走自动更新（AppImage 与便携版都不参与，
+更新服务器上只放 Windows 安装包）。
 
 **macOS 暂不发布**：未签名的 dmg 会被 Gatekeeper 拦下，正常分发需要付费开发者账号与公证。
 

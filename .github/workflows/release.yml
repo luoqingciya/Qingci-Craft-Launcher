@@ -178,6 +178,11 @@ jobs:
             windows)
               copy "target/release/bundle/nsis/*-setup.exe"     "QingciCraftLauncher_${VERSION}_x64-setup.exe"
               copy "target/release/bundle/nsis/*-setup.exe.sig" "QingciCraftLauncher_${VERSION}_x64-setup.exe.sig"
+              # 便携版：就是安装包里的那个 exe，不安装、双击即用，游戏目录落在 exe 旁边。
+              # 它**不进 COS**，也不参与自动更新——自更新要替换正在运行的 exe，Windows 不允许。
+              # 名字刻意不含 `x64-setup`：COS 的上传清单按 `*x64-setup.exe` 过滤，
+              # 这样便携版不会被顺带传上去。
+              copy "target/release/qcl-desktop.exe"             "QingciCraftLauncher_${VERSION}_x64-portable.exe"
               ;;
             linux)
               copy "target/release/bundle/appimage/*.AppImage"     "QingciCraftLauncher_${VERSION}_x86_64.AppImage"
