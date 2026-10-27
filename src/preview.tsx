@@ -86,7 +86,18 @@ if (!("__TAURI_INTERNALS__" in window)) {
       invoke: async (command: string) => {
         switch (command) {
           case "list_mods":
-            return ["fabric-api-0.140.2+26.3.jar", "sodium-fabric-0.6.13.jar"];
+            return [
+              {
+                fileName: "fabric-api-0.140.2+26.3.jar",
+                projectId: "fabric-api",
+                versionNumber: "0.140.2+26.3",
+              },
+              {
+                fileName: "sodium-fabric-0.6.13.jar",
+                projectId: "sodium",
+                versionNumber: "mc26.3-0.6.13",
+              },
+            ];
           case "list_mod_categories":
             return MOCK_CATEGORIES;
           case "search_mods":

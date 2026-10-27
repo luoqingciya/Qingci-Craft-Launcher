@@ -99,9 +99,63 @@ pub fn prune(mods_dir: &Path, manifest: Manifest) -> Manifest {
         .collect()
 }
 
+/// 已安装模组的一条记录：磁盘上的文件名 + 能查到的来源信息。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstalledEntry {
+    /// `mods/` 下的文件名。
+    pub file_name: String,
+    /// Modrinth 项目 id；手动放进 `mods/` 的 jar 为 `None`。
+    pub project_id: Option<String>,
+    /// 安装时的版本号；未知来源时为 `None`。
+    pub version_number: Option<String>,
+}
+
+/// 列出 `mods/` 里的 jar，并尽量补上来源信息。
+///
+/// 界面靠 `project_id` 判断搜索结果「装没装过」——这是唯一可靠的依据：
+/// jar 里的 `fabric.mod.json` 只有模组自己的 id，跟 Modrinth 项目 id 不是一回事，
+/// 而文件名格式各家都不一样，靠猜必然出错。
+///
+/// 顺手清掉孤儿条目（文件已被手动删除）：只在真的清掉东西时才写回，
+/// 避免每次列表都碰一次磁盘。
+#[must_use]
+pub fn list_installed(mods_dir: &Path) -> Vec<InstalledEntry> {
+    let manifest = load(mods_dir);
+    let pruned = prune(mods_dir, manifest.clone());
+    if pruned.len() != manifest.len() {
+        // 写回失败不影响这次列表：清理是顺手做的事，不是列表的前提。
+        let _ = save(mods_dir, &pruned);
+    }
+
+    let Ok(entries) = std::fs::read_dir(mods_dir) else {
+        // 目录不存在就是「还没装过模组」，不是错误。
+        return Vec::new();
+    };
+
+    let mut names: Vec<String> = entries
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().is_file())
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| name.ends_with(".jar"))
+        .collect();
+    names.sort();
+
+    names
+        .into_iter()
+        .map(|file_name| {
+            let known = pruned.get(&file_name);
+            InstalledEntry {
+                project_id: known.map(|item| item.project_id.clone()),
+                version_number: known.map(|item| item.version_number.clone()),
+                file_name,
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{InstalledMod, forget, load, prune, remember, save};
+    use super::{InstalledEntry, InstalledMod, forget, list_installed, load, prune, remember, save};
     use tempfile::TempDir;
 
     #[test]
@@ -187,4 +241,75 @@ mod tests {
         save(&mods, &Default::default()).expect("应能创建目录并写入");
         assert!(mods.join(".qcl-manifest.json").is_file());
     }
+
+    #[test]
+    fn list_installed_merges_disk_and_manifest() {
+        let dir = TempDir::new().expect("临时目录");
+        let mods = dir.path().join("mods");
+        std::fs::create_dir_all(&mods).expect("建目录");
+
+        remember(&mods, "sodium.jar", "AANobbMI", "mc26.3-0.9.3").expect("应能记下");
+        std::fs::write(mods.join("sodium.jar"), b"jar").expect("写文件");
+        // 用户手动扔进来的 jar：磁盘上有，清单里没有。
+        std::fs::write(mods.join("manual.jar"), b"jar").expect("写文件");
+
+        let entries = list_installed(&mods);
+
+        assert_eq!(
+            entries,
+            vec![
+                InstalledEntry {
+                    file_name: "manual.jar".to_owned(),
+                    project_id: None,
+                    version_number: None,
+                },
+                InstalledEntry {
+                    file_name: "sodium.jar".to_owned(),
+                    project_id: Some("AANobbMI".to_owned()),
+                    version_number: Some("mc26.3-0.9.3".to_owned()),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn list_installed_skips_non_jar_files() {
+        // 清单本身也是 json，不能被当成模组列出来。
+        let dir = TempDir::new().expect("临时目录");
+        let mods = dir.path().join("mods");
+        std::fs::create_dir_all(&mods).expect("建目录");
+
+        std::fs::write(mods.join("sodium.jar"), b"jar").expect("写文件");
+        std::fs::write(mods.join("readme.txt"), b"x").expect("写文件");
+
+        let entries = list_installed(&mods);
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].file_name, "sodium.jar");
+    }
+
+    #[test]
+    fn list_installed_prunes_orphans() {
+        // 文件被手动删掉后，清单里的孤儿条目要在下次列表时清掉，
+        // 否则它会一直挂着，更新检查也会去查一个不存在的文件。
+        let dir = TempDir::new().expect("临时目录");
+        let mods = dir.path().join("mods");
+        std::fs::create_dir_all(&mods).expect("建目录");
+
+        remember(&mods, "gone.jar", "AAAAAAA", "1.0").expect("应能记下");
+        assert_eq!(load(&mods).len(), 1);
+
+        let entries = list_installed(&mods);
+
+        assert!(entries.is_empty());
+        assert!(load(&mods).is_empty(), "孤儿条目应被写回清掉");
+    }
+
+    #[test]
+    fn list_installed_handles_missing_dir() {
+        // 还没装过模组：目录不存在不该报错，返回空列表。
+        let dir = TempDir::new().expect("临时目录");
+        assert!(list_installed(&dir.path().join("nope")).is_empty());
+    }
+
 }

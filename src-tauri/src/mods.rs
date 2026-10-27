@@ -165,26 +165,34 @@ pub async fn install_mod(
         .map_err(|error| error.to_string())
 }
 
-/// 列出已安装的模组文件名。
+/// 一个已安装的模组。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledModView {
+    /// `mods/` 下的文件名。
+    pub file_name: String,
+    /// Modrinth 项目 id；手动放进 `mods/` 的 jar 为 null。
+    pub project_id: Option<String>,
+    /// 安装时的版本号；未知来源时为 null。
+    pub version_number: Option<String>,
+}
+
+/// 列出已安装的模组。
+///
+/// 带来源信息：界面靠 `projectId` 判断搜索结果「装没装过」。
+/// 手动放进 `mods/` 的 jar 也会列出来，只是没有来源。
 #[tauri::command]
-pub fn list_mods(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
+pub fn list_mods(state: tauri::State<'_, AppState>) -> Result<Vec<InstalledModView>, String> {
     let (_, game_dir) = state.context()?;
-    let mods_dir = game_dir.join("mods");
 
-    let Ok(entries) = std::fs::read_dir(&mods_dir) else {
-        // 目录不存在就是「还没装过模组」，不是错误。
-        return Ok(Vec::new());
-    };
-
-    let mut names: Vec<String> = entries
-        .filter_map(Result::ok)
-        .filter(|entry| entry.path().is_file())
-        .filter_map(|entry| entry.file_name().into_string().ok())
-        .filter(|name| name.ends_with(".jar"))
-        .collect();
-
-    names.sort();
-    Ok(names)
+    Ok(qcl_mods::manifest::list_installed(&game_dir.join("mods"))
+        .into_iter()
+        .map(|entry| InstalledModView {
+            file_name: entry.file_name,
+            project_id: entry.project_id,
+            version_number: entry.version_number,
+        })
+        .collect())
 }
 
 /// 删除一个已安装的模组。
