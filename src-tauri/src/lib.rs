@@ -10,6 +10,7 @@
 //!
 //! 当前暴露：版本清单、游戏目录设置、安装、启动与停止。
 
+mod auth;
 mod game;
 mod install;
 mod mods;
@@ -49,6 +50,8 @@ pub struct AppState {
     /// 正在运行的游戏。用 `Arc<Mutex<_>>` 而不是普通 `Mutex`，
     /// 是为了让等待进程的后台任务能直接持有它（任务里拿不到 `State`）。
     game: Arc<Mutex<Option<Arc<GameSession>>>>,
+    /// 账号与登录会话。
+    auth: auth::Auth,
 }
 
 impl AppState {
@@ -430,6 +433,7 @@ pub fn run() {
                     downloader: Arc::new(downloader),
                 }),
                 game: Arc::new(Mutex::new(None)),
+                auth: auth::Auth::default(),
             });
             Ok(())
         })
@@ -440,6 +444,10 @@ pub fn run() {
             list_java,
             remember_selection,
             runtime_info,
+            auth::current_account,
+            auth::begin_login,
+            auth::cancel_login,
+            auth::sign_out,
             install::install_game_version,
             install::list_loaders,
             mods::search_mods,
