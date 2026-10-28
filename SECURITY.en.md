@@ -35,7 +35,8 @@ risk, not as an empty promise on a wishlist.
    libraries are verified the same way.
 4. **Mod download verification**: mods from Modrinth must carry a valid SHA-1 before anything is
    downloaded; remote file names are rejected if they contain path separators or `..`, so nothing is
-   written outside `mods/`.
+   written outside `mods/`. **Dependencies installed automatically go through the same path** — being
+   a convenience is not a reason to skip verification.
 5. **Signed update packages**: the updater only reads
    `https://qcl.luoqingciya.cn/releases/latest.json`, and verifies the downloaded package against a
    **public key compiled into the binary** (minisign). A signature mismatch aborts the install. The

@@ -1,6 +1,6 @@
 # Release and Auto-Update
 
-English | [中文](RELEASE.md)
+[中文](RELEASE.md) | **English**
 
 Qingci updates are delivered as "GitHub Actions builds → Tencent Cloud COS serves". CI
 builds the NSIS installer, signs it with a private key, and uploads it to COS together
@@ -198,6 +198,9 @@ Two distribution channels, deliberately kept apart:
 `latest.json` therefore carries **only** a `windows-x86_64` entry. The Linux artifacts stay on GitHub
 Releases: the AppImage is 83.5 MB and does not participate in auto-update, so putting it on COS would
 cost bandwidth for nothing.
+
+Sizes below are measured from the 0.1.5 artifacts and drift a little between versions (more so when
+the frontend changes) — trust the actual artifacts, not these numbers.
 
 - **Windows installer**: NSIS, 3.8 MB, reuses the system WebView2; auto-update installs silently and relaunches.
 - **Windows portable**: 12.7 MB, the very exe that lives inside the installer — double-click to run, game
