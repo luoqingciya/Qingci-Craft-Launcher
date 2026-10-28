@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -100,25 +100,43 @@ describe("SettingsPanel", () => {
     expect(screen.getByDisplayValue("Player")).toBeInTheDocument();
   });
 
-  it("内存超出范围时拒绝保存并提示", async () => {
-    const onSave = renderPanel();
+  it("滑块调整内存后保存新值", async () => {
+    const onSave = renderPanel({ memoryMb: 4096 });
 
-    const memoryInput = screen.getByLabelText("最大内存（MB）");
-    await userEvent.type(memoryInput, "128");
+    // range 输入没法用键盘逐字输入，直接派发 change。
+    fireEvent.change(screen.getByLabelText("最大内存"), { target: { value: "6144" } });
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
 
-    expect(onSave).not.toHaveBeenCalled();
-    expect(screen.getByText(/512–65536/)).toBeInTheDocument();
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ memoryMb: 6144 }));
   });
 
-  it("内存填非整数时拒绝保存", async () => {
-    const onSave = renderPanel();
+  it("未指定内存时滑块禁用并显示「官方默认」", () => {
+    renderPanel({ memoryMb: null });
 
-    await userEvent.type(screen.getByLabelText("最大内存（MB）"), "4g");
+    const slider = screen.getByLabelText("最大内存") as HTMLInputElement;
+    expect(slider).toBeDisabled();
+    // 停在下限之上只是显示位置，不代表已经指定了值。
+    expect(slider.value).toBe("2048");
+    expect(screen.getByText("官方默认")).toBeInTheDocument();
+  });
+
+  it("取消「跟随官方默认」后滑块可用，并从 2 GB 起", async () => {
+    renderPanel({ memoryMb: null });
+
+    await userEvent.click(screen.getByLabelText("跟随官方默认"));
+
+    const slider = screen.getByLabelText("最大内存") as HTMLInputElement;
+    expect(slider).not.toBeDisabled();
+    expect(slider.value).toBe("2048");
+  });
+
+  it("勾上「跟随官方默认」时提交 null", async () => {
+    const onSave = renderPanel({ memoryMb: 4096 });
+
+    await userEvent.click(screen.getByLabelText("跟随官方默认"));
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
 
-    expect(onSave).not.toHaveBeenCalled();
-    expect(screen.getByText(/必须是整数/)).toBeInTheDocument();
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ memoryMb: null }));
   });
 
   it("玩家名为空时拒绝保存", async () => {

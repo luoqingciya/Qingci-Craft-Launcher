@@ -14,6 +14,17 @@ interface Draft {
   downloadSource: string;
 }
 
+/**
+ * 内存滑块的步长。
+ *
+ * 256 MB 足够细（1024 / 2048 / 6144 都落得上去），又不会滑出 3847 这种值——
+ * 堆内存调成那种数没有任何好处，只会让人怀疑自己手滑了。
+ */
+const MEMORY_STEP = 256;
+
+/** 取消「跟随官方默认」时滑块的起点。2 GB 是绝大多数版本的合理下限。 */
+const MEMORY_FALLBACK = 2048;
+
 function toDraft(settings: SettingsView): Draft {
   return {
     gameDir: settings.gameDir,
@@ -82,6 +93,11 @@ export function SettingsPanel({
     draft.downloadSource !== settings.downloadSource;
 
   const [minMemory, maxMemory] = settings.memoryRange;
+
+  // 滑块没法表达「不指定」，所以用一个复选框承载「跟随官方默认」。
+  // 未指定时滑块停在 2 GB——只是显示位置，不代表已保存的值。
+  const memoryDefault = draft.memory === "";
+  const memoryValue = memoryDefault ? MEMORY_FALLBACK : Number(draft.memory);
 
   function submit() {
     setLocalError(null);
@@ -336,18 +352,49 @@ export function SettingsPanel({
         </div>
 
         {/* 内存 */}
-        <div>
-          <label htmlFor="memory" className="text-[var(--color-text-secondary)]">
-            最大内存（MB）
-          </label>
+        <div className="lg:col-span-2">
+          <div className="flex items-baseline justify-between gap-3">
+            <label htmlFor="memory" className="text-[var(--color-text-secondary)]">
+              最大内存
+            </label>
+            {/*
+              滑块没法表达「不指定」，而「不指定」是有意义的：这时用的是版本自带的
+              `arguments.default-user-jvm`（26.3 是 -Xms2G -Xmx4G）。用一个复选框
+              显式表达，比在滑块左端塞一个「0 = 默认」的隐藏约定清楚。
+              放在标题行而不是刻度之间——夹在两个数字中间会被当成刻度标注。
+            */}
+            <label className="flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--color-text-secondary)]">
+              <input
+                type="checkbox"
+                checked={memoryDefault}
+                onChange={(event) =>
+                  setDraft((c) => ({
+                    ...c,
+                    memory: event.target.checked ? "" : String(MEMORY_FALLBACK),
+                  }))
+                }
+              />
+              跟随官方默认
+            </label>
+            <span className="ml-auto font-mono text-[13px] tabular-nums">
+              {memoryDefault ? "官方默认" : `${memoryValue} MB`}
+            </span>
+          </div>
           <input
             id="memory"
-            value={draft.memory}
+            type="range"
+            min={minMemory}
+            max={maxMemory}
+            step={MEMORY_STEP}
+            value={memoryValue}
+            disabled={memoryDefault}
             onChange={(event) => setDraft((c) => ({ ...c, memory: event.target.value }))}
-            placeholder="留空 = 官方默认"
-            inputMode="numeric"
-            className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2.5 py-2 text-[13px]"
+            className="memory-range mt-2 w-full"
           />
+          <div className="mt-1 flex items-center justify-between text-[11px] tabular-nums text-[var(--color-text-muted)]">
+            <span>{minMemory} MB</span>
+            <span>{maxMemory} MB</span>
+          </div>
         </div>
 
         <GroupHeading title="下载" hint="游戏文件的来源；内容仍逐个校验官方 SHA-1" />
