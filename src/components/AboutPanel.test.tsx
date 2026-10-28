@@ -9,12 +9,27 @@ import { describe, expect, it, vi } from "vitest";
 import type { UpdateState } from "../lib/useUpdate";
 import { AboutPanel } from "./AboutPanel";
 
+const RUNTIME = {
+  installed: true,
+  msaLogin: true,
+  appVersion: "0.1.5",
+  tauriVersion: "2.12.5",
+  os: "windows",
+  arch: "x86_64",
+};
+
 function renderPanel(
   update: UpdateState,
-  { portable = false, onCheck = vi.fn(), onInstall = vi.fn() } = {},
+  { portable = false, onCheck = vi.fn(), onInstall = vi.fn(), runtime = RUNTIME } = {},
 ) {
   render(
-    <AboutPanel update={update} portable={portable} onCheck={onCheck} onInstall={onInstall} />,
+    <AboutPanel
+      update={update}
+      portable={portable}
+      runtime={runtime}
+      onCheck={onCheck}
+      onInstall={onInstall}
+    />,
   );
   return { onCheck, onInstall };
 }
@@ -101,5 +116,40 @@ describe("AboutPanel 更新区", () => {
     expect(screen.getByText("当前平台不支持自动更新")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /检查更新/ })).toBeNull();
     expect(screen.getByRole("link", { name: "去下载" })).toBeInTheDocument();
+  });
+});
+
+describe("AboutPanel 运行环境", () => {
+  it("列出应用版本、系统、Tauri 与 WebView", () => {
+    renderPanel({ kind: "idle" });
+
+    // 用 Tauri 版本定位那一行：标题里也有 v0.1.5，按版本号找会撞上两个元素。
+    const line = screen.getByText(/Tauri 2\.12\.5/);
+    expect(line).toHaveTextContent("v0.1.5");
+    expect(line).toHaveTextContent("windows/x86_64");
+    expect(line).toHaveTextContent(/WebView/);
+  });
+
+  it("读不到运行环境时不崩，明确说明失败", () => {
+    // 关于页必须永远能打开——它是用户找「这是什么版本」的地方。
+    renderPanel({ kind: "idle" }, { runtime: null });
+
+    expect(screen.getByText("运行环境读取失败")).toBeInTheDocument();
+  });
+
+  it("复制的是多行诊断文本", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+
+    renderPanel({ kind: "idle" });
+    await userEvent.click(screen.getByRole("button", { name: "复制" }));
+
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalled());
+    const text = writeText.mock.calls[0][0] as string;
+    expect(text).toContain("清辞 v0.1.5");
+    expect(text).toContain("系统：windows/x86_64");
+    expect(text).toContain("Tauri：2.12.5");
+    // 贴进 issue 时要能一行一条，不能挤成一句。
+    expect(text.split("\n")).toHaveLength(4);
   });
 });
