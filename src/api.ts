@@ -325,6 +325,29 @@ export function listMods(): Promise<InstalledMod[]> {
   return invoke<InstalledMod[]>("list_mods");
 }
 
+/** 一个必需依赖。 */
+export interface ModDependency {
+  /** Modrinth 项目 id。 */
+  projectId: string;
+  /** 项目标题；查不到时为 null。 */
+  title: string | null;
+  /** 是否已经装上了。 */
+  installed: boolean;
+}
+
+/**
+ * 查一个模组的必需依赖。
+ *
+ * 界面上是「点开才查」：每个项目要一次 version 请求，塞进搜索会拖慢列表。
+ */
+export function modDependencies(
+  projectId: string,
+  version: string,
+  loader: string,
+): Promise<ModDependency[]> {
+  return invoke<ModDependency[]>("mod_dependencies", { projectId, version, loader });
+}
+
 /** 删除一个已安装的模组。只接受 mods/ 下的 .jar 文件名。 */
 export function removeMod(filename: string): Promise<void> {
   return invoke<void>("remove_mod", { filename });

@@ -102,6 +102,10 @@ if (!("__TAURI_INTERNALS__" in window)) {
             return MOCK_CATEGORIES;
           case "search_mods":
             return { query: "优化", hits: MOCK_HITS };
+          case "mod_dependencies":
+            return [
+              { projectId: "P7dR8mSH", title: "Fabric API", installed: true },
+            ];
           case "check_mod_updates":
             return [];
           default:

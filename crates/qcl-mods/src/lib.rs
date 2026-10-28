@@ -459,6 +459,90 @@ pub async fn install_with_dependencies(
     install_with_dependencies_from(downloader, MODRINTH_API, project_id, game_version, loader).await
 }
 
+/// 一个必需依赖的展示信息。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DependencyInfo {
+    /// Modrinth 项目 id。
+    pub project_id: String,
+    /// 项目标题；查不到时为 `None`——依赖本身仍然有效，只是没有名字可显示。
+    pub title: Option<String>,
+}
+
+/// 解析一个模组的必需依赖，并尽量补上项目标题。
+///
+/// 只取 `dependency_type == "required"`：可选依赖（联动模组）装上去反而可能冲突，
+/// 安装流程也是这么筛的，两边必须一致，否则界面说的和实际装的会对不上。
+pub async fn dependencies(
+    downloader: &HttpDownloader,
+    project_id: &str,
+    game_version: &str,
+    loader: &str,
+) -> Result<Vec<DependencyInfo>, ModError> {
+    dependencies_from(downloader, MODRINTH_API, project_id, game_version, loader).await
+}
+
+/// 同 [`dependencies`]，但可指定 API 根地址。
+pub async fn dependencies_from(
+    downloader: &HttpDownloader,
+    api: &str,
+    project_id: &str,
+    game_version: &str,
+    loader: &str,
+) -> Result<Vec<DependencyInfo>, ModError> {
+    let file = resolve_file_from(downloader, api, project_id, game_version, loader).await?;
+    if file.dependencies.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // 标题查不到不该让整件事失败：用户至少要知道「有依赖、会被装」。
+    let titles = project_titles_from(downloader, api, &file.dependencies)
+        .await
+        .unwrap_or_default();
+
+    Ok(file
+        .dependencies
+        .into_iter()
+        .map(|id| DependencyInfo {
+            title: titles.get(&id).cloned(),
+            project_id: id,
+        })
+        .collect())
+}
+
+/// 批量取项目标题。
+///
+/// 用 `/projects?ids=[...]` 一次拿完：逐个请求会让「看依赖」这种随手一点的操作
+/// 变成好几次往返。
+async fn project_titles_from(
+    downloader: &HttpDownloader,
+    api: &str,
+    ids: &[String],
+) -> Result<std::collections::HashMap<String, String>, ModError> {
+    let list = serde_json::to_string(ids)?;
+    let url = format!(
+        "{}/projects?ids={}",
+        api.trim_end_matches('/'),
+        encode_query_value(&list)
+    );
+
+    let raw = downloader
+        .fetch_text_with_user_agent(&url, USER_AGENT)
+        .await
+        .map_err(|error| ModError::Network(error.to_string()))?;
+
+    #[derive(Deserialize)]
+    struct Project {
+        id: String,
+        title: String,
+    }
+
+    let projects: Vec<Project> = serde_json::from_str(&raw)?;
+    Ok(projects
+        .into_iter()
+        .map(|project| (project.id, project.title))
+        .collect())
+}
+
 /// 依赖递归的最大深度。
 ///
 /// 实测 Fabric 生态的依赖链通常只有 1 层（模组 → Fabric API），

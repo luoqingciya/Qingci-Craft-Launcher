@@ -195,6 +195,50 @@ pub fn list_mods(state: tauri::State<'_, AppState>) -> Result<Vec<InstalledModVi
         .collect())
 }
 
+/// 一个必需依赖。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DependencyView {
+    /// Modrinth 项目 id。
+    pub project_id: String,
+    /// 项目标题；查不到时为 null。
+    pub title: Option<String>,
+    /// 是否已经装上了。
+    pub installed: bool,
+}
+
+/// 查一个模组的必需依赖。
+///
+/// 界面上是「点开才查」：每个项目要一次 version 请求，塞进搜索会拖慢列表。
+#[tauri::command]
+pub async fn mod_dependencies(
+    state: tauri::State<'_, AppState>,
+    project_id: String,
+    version: String,
+    loader: String,
+) -> Result<Vec<DependencyView>, String> {
+    let (downloader, game_dir) = state.context()?;
+
+    let dependencies = qcl_mods::dependencies(&downloader, &project_id, &version, &loader)
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let installed: std::collections::HashSet<String> =
+        qcl_mods::manifest::list_installed(&game_dir.join("mods"))
+            .into_iter()
+            .filter_map(|entry| entry.project_id)
+            .collect();
+
+    Ok(dependencies
+        .into_iter()
+        .map(|item| DependencyView {
+            installed: installed.contains(&item.project_id),
+            project_id: item.project_id,
+            title: item.title,
+        })
+        .collect())
+}
+
 /// 删除一个已安装的模组。
 ///
 /// 只删 mods/ 下的 .jar，并且要求文件名通过安全校验——
