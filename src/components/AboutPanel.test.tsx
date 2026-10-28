@@ -6,6 +6,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import type { RuntimeInfo } from "../api";
 import type { UpdateState } from "../lib/useUpdate";
 import { AboutPanel } from "./AboutPanel";
 
@@ -20,7 +21,18 @@ const RUNTIME = {
 
 function renderPanel(
   update: UpdateState,
-  { portable = false, onCheck = vi.fn(), onInstall = vi.fn(), runtime = RUNTIME } = {},
+  {
+    portable = false,
+    onCheck = vi.fn(),
+    onInstall = vi.fn(),
+    runtime = RUNTIME,
+  }: {
+    portable?: boolean;
+    onCheck?: () => void;
+    onInstall?: () => void;
+    /** 显式允许 null：要测「读不到运行环境」的情况。 */
+    runtime?: RuntimeInfo | null;
+  } = {},
 ) {
   render(
     <AboutPanel
