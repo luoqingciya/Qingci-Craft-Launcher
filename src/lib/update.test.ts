@@ -126,6 +126,10 @@ function withRuntime(userAgent: string, run: () => void) {
 const WINDOWS_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)";
 const LINUX_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko)";
+const MACOS_ARM_UA =
+  "Mozilla/5.0 (Macintosh; ARM Mac OS X 15_0) AppleWebKit/605.1.15 (KHTML, like Gecko)";
+const MACOS_INTEL_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)";
 
 describe("updateSupported", () => {
   it("浏览器里（没有 Tauri 运行时）判定为不支持", () => {
@@ -143,5 +147,15 @@ describe("updateSupported", () => {
     withRuntime(LINUX_UA, () => {
       expect(updateSupported()).toBe(false);
     });
+  });
+
+  it("macOS（Apple Silicon 与 Intel）都判定为不支持", () => {
+    // 产物是未签名 dmg，不进 COS；updater 的 zip 特性也关着。
+    // 漏判的话点「检查更新」会拿到一个「找不到 darwin 平台」的错误。
+    for (const ua of [MACOS_ARM_UA, MACOS_INTEL_UA]) {
+      withRuntime(ua, () => {
+        expect(updateSupported()).toBe(false);
+      });
+    }
   });
 });

@@ -213,7 +213,7 @@ function UpdateRow({
 
       {update.kind === "unsupported" && (
         <p className="text-[12px] text-[var(--color-text-muted)]">
-          Linux 版的安装包不放在更新服务器上，请到下载页获取新版本。
+          当前平台（Linux / macOS）的安装包不放在更新服务器上，请到下载页获取新版本。
         </p>
       )}
 
@@ -227,7 +227,7 @@ function UpdateRow({
 function headline(update: UpdateState, portable: boolean): string {
   switch (update.kind) {
     case "unsupported":
-      // Linux：清单里没有对应平台的条目，所以压根没有可自动下载的更新。
+      // Linux / macOS：清单里没有对应平台的条目，所以压根没有可自动下载的更新。
       return "当前平台不支持自动更新";
     case "checking":
       return "正在检查更新…";

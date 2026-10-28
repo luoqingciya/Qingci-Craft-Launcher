@@ -107,13 +107,22 @@ jobs:
           - name: Windows
             os: windows-latest
             kind: windows
-            bundles: nsis
+            build: --bundles nsis --config src-tauri/tauri.release.json
           - name: Linux
             # 用 22.04 而不是 latest：glibc 基线 2.35，向下兼容面更广。
             # 24.04 构建的产物在旧发行版上会直接无法启动。
             os: ubuntu-22.04
             kind: linux
-            bundles: appimage,deb
+            build: --bundles appimage,deb --config src-tauri/tauri.release.json
+          - name: macOS
+            # 通用二进制：一次构建同时含 arm64 与 x86_64，用户不必挑。
+            #
+            # 用独立的 release 配置：macOS 不参与自动更新，所以不生成 updater 产物。
+            # 那条路径要求构建时提供签名私钥，而 `.app.tar.gz` 的解压又依赖 updater
+            # 的 `zip` 特性——它因 RUSTSEC-2026-0367/0368 关着（见 src-tauri/Cargo.toml）。
+            os: macos-latest
+            kind: macos
+            build: --bundles dmg --config src-tauri/tauri.release-macos.json --target universal-apple-darwin
     steps:
       - uses: actions/checkout@v7
 
@@ -128,6 +137,10 @@ jobs:
       - name: 安装 AppImage 打包依赖
         if: runner.os == 'Linux'
         run: sudo apt-get install -y --no-install-recommends libfuse2
+      - name: 安装 macOS 双架构目标
+        if: runner.os == 'macOS'
+        # 通用二进制要先有这两个 target，Tauri 会把两份产物 lipo 成一个。
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -139,13 +152,17 @@ jobs:
 
       # createUpdaterArtifacts 只在这份 release 配置里打开：它要求构建时必须提供私钥，
       # 而贡献者本地打包不该被这个要求挡住（见 tauri.release.json）。
+      # macOS 走 tauri.release-macos.json，那边是关掉的。
       - name: 构建并签名
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # 编译期注入，见 src-tauri/build.rs。仓库里没有这个值。
           QCL_MS_CLIENT_ID: ${{ secrets.QCL_MS_CLIENT_ID }}
-        run: pnpm tauri build --bundles ${{ matrix.bundles }} --config src-tauri/tauri.release.json
+          # macOS 不签名：没有开发者账号，产物由用户右键「打开」绕过 Gatekeeper。
+          # 显式关掉自动发现，免得 runner 上万一存在证书时行为不一致。
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ runner.os == 'macOS' && 'false' || '' }}
+        run: pnpm tauri build ${{ matrix.build }}
 
       # 安装包原名带空格（"Qingci Craft Launcher_0.1.1_x64-setup.exe"）。
       # 换成纯 ASCII 名字，URL 里就不用再操心编码。用 glob 而不是拼文件名：
@@ -188,6 +205,11 @@ jobs:
               copy "target/release/bundle/appimage/*.AppImage"     "QingciCraftLauncher_${VERSION}_x86_64.AppImage"
               copy "target/release/bundle/appimage/*.AppImage.sig" "QingciCraftLauncher_${VERSION}_x86_64.AppImage.sig"
               copy "target/release/bundle/deb/*.deb"               "QingciCraftLauncher_${VERSION}_amd64.deb"
+              ;;
+            macos)
+              # 指定了 --target，产物落在 target/<triple>/ 下而不是 target/release/。
+              # 没有 .sig：macOS 不生成 updater 产物（见 tauri.release-macos.json）。
+              copy "target/universal-apple-darwin/release/bundle/dmg/*.dmg" "QingciCraftLauncher_${VERSION}_universal.dmg"
               ;;
             *)
               echo "::error::未知平台 $KIND"
@@ -248,7 +270,9 @@ jobs:
 
           # 清单里只有 Windows。Linux 的 AppImage 不上 COS（80 MB，而且只是自包含的
           # 打包结果），所以清单里没有 linux 条目——Linux 用户从 GitHub Release 手动下载。
-          # 客户端那边也会据此把 Linux 判为「不支持自动更新」，不会给出一个点了就报错的按钮。
+          # macOS 同理，而且它还是未签名的，更不该走自动更新。
+          # 客户端那边也会据此把 Linux 与 macOS 判为「不支持自动更新」，
+          # 不会给出一个点了就报错的按钮。
           platforms=()
           add() {  # $1=目标 $2=glob
             local files=($2)

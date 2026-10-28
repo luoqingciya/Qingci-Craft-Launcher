@@ -45,8 +45,8 @@
 ## 设计取向
 
 - **轻量**：复用系统 WebView。便携版可执行文件 12.7 MB，NSIS 安装包 3.8 MB。
-- **跨平台**：Windows 10+ / macOS 12+ / Linux（glibc 2.31+），三平台 CI 构建与测试。发布产物覆盖 Windows 与 Linux。
-- **可验证**：核心逻辑（版本解析、依赖求值、参数组装、认证协议、模组解析、崩溃报告解析）放在不依赖 GUI 的 Rust crate 中，CI 里 334 个 Rust 测试 + 176 个前端测试全量覆盖。
+- **跨平台**：Windows 10+ / macOS 12+ / Linux（glibc 2.31+），三平台 CI 构建与测试。发布产物覆盖 Windows、macOS 与 Linux。
+- **可验证**：核心逻辑（版本解析、依赖求值、参数组装、认证协议、模组解析、崩溃报告解析）放在不依赖 GUI 的 Rust crate 中，CI 里 340 个 Rust 测试 + 183 个前端测试全量覆盖。
 - **清单驱动**：版本、依赖库、JVM 参数全部从官方清单推导，不硬编码任何版本列表。
 
 ## 技术栈
@@ -90,13 +90,27 @@ assets/          品牌资产（应用图标源文件、模组译名库数据）
 |---|---|---|---|
 | Windows | `QingciCraftLauncher_*_x64-setup.exe` | 3.8 MB | NSIS 安装程序，装到用户目录，不需要管理员权限；支持自动更新 |
 | Windows | `QingciCraftLauncher_*_x64-portable.exe` | 12.7 MB | 免安装，双击即用；游戏目录在 exe 旁边；**不支持自动更新** |
+| macOS | `QingciCraftLauncher_*_universal.dmg` | 12.1 MB | 通用二进制，Intel 与 Apple Silicon 都能跑；**未签名**，首次打开需要右键「打开」 |
 | Linux | `QingciCraftLauncher_*_amd64.deb` | 5.3 MB | Debian / Ubuntu 安装包，依赖系统已有的 webkit2gtk |
 | Linux | `QingciCraftLauncher_*_x86_64.AppImage` | 83.5 MB | 免安装，自包含运行时 |
 
-Linux 产物与 Windows 便携版**只在 GitHub Releases 提供**，不走自动更新（AppImage 与便携版都不参与，
-更新服务器上只放 Windows 安装包）。
+macOS、Linux 产物与 Windows 便携版**只在 GitHub Releases 提供**，不走自动更新
+（更新服务器上只放 Windows 安装包）。
 
-**macOS 暂不发布**：未签名的 dmg 会被 Gatekeeper 拦下，正常分发需要付费开发者账号与公证。
+### macOS 首次打开
+
+dmg 里的应用**没有签名，也没有经过公证**——这需要付费的 Apple 开发者账号。
+macOS 会因此拒绝直接双击运行，提示「无法验证开发者」。三种打开方式任选：
+
+1. **右键点应用 → 打开**，在弹出的对话框里再点「打开」（只需一次）
+2. 系统设置 → 隐私与安全性 → 底部会有一条拦截记录 → 「仍要打开」
+3. 终端执行 `xattr -dr com.apple.quarantine "/Applications/Qingci Craft Launcher.app"`
+
+第 3 种最省事，也最不直观——**没有别的办法**，除非买开发者账号做签名与公证。
+这是未签名分发的固有代价，不是这一版的问题。
+
+安装位置没有限制，但**不要放在只读位置**：游戏目录默认跟着应用走，不可写时会回退到
+`~/Library/Application Support/cn.luoqingciya.qcl/`（界面会提示原因）。
 
 三个平台体积差这么多，是因为**复用系统 WebView 的程度不同**：Windows 用系统自带的 WebView2，
 deb 依赖发行版仓库里的 `libwebkit2gtk-4.1`，而 AppImage 必须自带一整套 WebKitGTK +

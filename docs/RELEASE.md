@@ -173,10 +173,11 @@ GitHub Release（附安装包与 `.sig`）。
 | 通道 | 内容 | 用途 |
 | --- | --- | --- |
 | COS（`qcl.luoqingciya.cn/releases/`） | Windows NSIS 安装包 + `.sig` + `latest.json` | **自动更新通道** |
-| GitHub Releases | 上面那些，外加 Windows 便携版与 Linux 的 AppImage、deb | 人工下载 |
+| GitHub Releases | 上面那些，外加 Windows 便携版、macOS 的 dmg、Linux 的 AppImage 与 deb | 人工下载 |
 
-所以 `latest.json` 里**只有** `windows-x86_64` 一条。Linux 产物留在 GitHub Releases：
-AppImage 有 83 MB，又不参与自动更新，放 COS 上只是白占带宽。
+所以 `latest.json` 里**只有** `windows-x86_64` 一条。macOS 与 Linux 产物留在
+GitHub Releases：AppImage 有 83 MB、dmg 有 12 MB，又都不参与自动更新，
+放 COS 上只是白占带宽。
 
 体积取自 0.1.5 的实测产物，版本之间会有小幅浮动（前端改动大时更明显）——发布前以实际产物为准，
 不要照抄这几个数字。
@@ -184,14 +185,18 @@ AppImage 有 83 MB，又不参与自动更新，放 COS 上只是白占带宽。
 - **Windows 安装版**：NSIS 3.8 MB，复用系统 WebView2，自动更新走静默安装 + 重启。
 - **Windows 便携版**：12.7 MB，就是安装包里那个 exe，双击即用，游戏目录落在 exe 旁边。
   不参与自动更新——自更新要替换正在运行的 exe，Windows 不允许。
+- **macOS 通用 dmg**：12.1 MB，`--target universal-apple-darwin`，一次构建同时含 arm64 与 x86_64，
+  用户不必挑架构。**未签名、未公证**：没有付费开发者账号，用户首次打开要右键「打开」
+  或 `xattr -dr com.apple.quarantine`，README 里写了三种方式。
+- **macOS 走独立的 release 配置**（`tauri.release-macos.json`），把
+  `createUpdaterArtifacts` 关掉。两个理由：打开它会要求构建时提供签名私钥；
+  而 `.app.tar.gz` 的解压依赖 updater 的 `zip` 特性，那个特性因两个解压漏洞
+  （RUSTSEC-2026-0367 / 0368）被关着（见 `src-tauri/Cargo.toml`）。
 - **Linux AppImage**：83.5 MB。自包含，把 WebKitGTK + JavaScriptCore + GTK3 整套塞进去了
   （解出来 530 个文件），所以体积是 deb 的十几倍。
 - **Linux deb**：5.3 MB，依赖发行版的 `libwebkit2gtk-4.1`。
-- **Linux 整体不提供自动更新**。「关于」页会识别出 Linux，直接引导到下载页，
-  而不是给一个点了就报错的按钮。
-- **macOS**：不发布。自动更新需要 updater 的 `zip` 特性来解压 `.app.tar.gz`，而该特性
-  目前因为两个解压漏洞（RUSTSEC-2026-0367 / 0368）被关掉了，见 `src-tauri/Cargo.toml`；
-  另外未签名的 dmg 会被 Gatekeeper 直接拦下，正常分发需要付费开发者账号与公证。
+- **macOS 与 Linux 都不提供自动更新**。「关于」页按 UA 识别（Linux / Macintosh），
+  直接引导到下载页，而不是给一个点了就报错的按钮。
 
 ## 客户端行为
 

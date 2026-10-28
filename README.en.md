@@ -48,9 +48,9 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 
 - **Lightweight**: uses the system WebView. Portable executable is 12.7 MB, NSIS installer 3.8 MB.
 - **Cross-platform**: Windows 10+ / macOS 12+ / Linux (glibc 2.31+); CI builds and tests on all three.
-  Published artifacts cover Windows and Linux.
+  Published artifacts cover Windows, macOS and Linux.
 - **Testable**: core logic (version parsing, rule evaluation, argument assembly, auth protocols, mod
-  resolution, crash report parsing) lives in GUI-free Rust crates — 334 Rust tests + 176 frontend
+  resolution, crash report parsing) lives in GUI-free Rust crates — 340 Rust tests + 183 frontend
   tests in CI.
 - **Manifest-driven**: versions, libraries and JVM arguments are all derived from official manifests; no version list is hardcoded.
 
@@ -96,14 +96,28 @@ Download from [Releases](https://github.com/luoqingciya/Qingci-Craft-Launcher/re
 |---|---|---|---|
 | Windows | `QingciCraftLauncher_*_x64-setup.exe` | 3.8 MB | NSIS installer; installs per-user, no admin rights; supports auto-update |
 | Windows | `QingciCraftLauncher_*_x64-portable.exe` | 12.7 MB | No install, double-click to run; game directory sits next to the exe; **no auto-update** |
+| macOS | `QingciCraftLauncher_*_universal.dmg` | 12.1 MB | Universal binary, runs on Intel and Apple Silicon; **unsigned**, first launch needs right-click → Open |
 | Linux | `QingciCraftLauncher_*_amd64.deb` | 5.3 MB | Debian / Ubuntu package; depends on the system webkit2gtk |
 | Linux | `QingciCraftLauncher_*_x86_64.AppImage` | 83.5 MB | No install; self-contained runtime |
 
-The Linux artifacts and the Windows portable build are **GitHub Releases only** and take no part in
-auto-update — the update server carries just the Windows installer.
+The macOS and Linux artifacts and the Windows portable build are **GitHub Releases only** and take no
+part in auto-update — the update server carries just the Windows installer.
 
-**macOS is not published yet**: an unsigned dmg is blocked by Gatekeeper, so proper distribution
-needs a paid developer account and notarization.
+### First launch on macOS
+
+The app inside the dmg is **not signed and not notarized** — that needs a paid Apple Developer
+account. macOS therefore refuses a plain double-click with "cannot verify the developer". Pick one:
+
+1. **Right-click the app → Open**, then click "Open" in the dialog (once only)
+2. System Settings → Privacy & Security → the blocked item appears at the bottom → "Open Anyway"
+3. Terminal: `xattr -dr com.apple.quarantine "/Applications/Qingci Craft Launcher.app"`
+
+The third is the least obvious and the most effective — **there is no other way** short of paying for
+signing and notarization. That is the cost of unsigned distribution, not a defect of this release.
+
+Where you put it does not matter, but **avoid read-only locations**: the game directory follows the
+app by default, and falls back to `~/Library/Application Support/cn.luoqingciya.qcl/` when the
+location is not writable (the UI says why).
 
 The size gap comes from **how much of the WebView is reused**: Windows uses the bundled WebView2
 runtime, the deb relies on `libwebkit2gtk-4.1` from the distribution, while an AppImage has to carry

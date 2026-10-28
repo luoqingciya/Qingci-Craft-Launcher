@@ -590,7 +590,8 @@ Phase 0–3 已完成（含正版登录与实例管理），Fabric 与模组管�
 
 1. **Forge / NeoForge**（Phase 4 剩余项，风险 R5）：可行性已调研，路径是调用官方 installer
    而非自研 processors；但仍受「安装器会探测 Mojang 主机并校验证书」的限制。
-2. **macOS 产物**（R3）：需要 Apple 开发者账号与公证；updater 的 `zip` 特性还要重新评估。
+2. **macOS 签名与公证**（R3）：未签名的通用 dmg 已经在 0.1.8 发布，用户需右键打开；
+   要消掉这个门槛得买 Apple 开发者账号。updater 的 `zip` 特性也要先恢复才谈得上自动更新。
 3. **代码签名**（R2）：Windows Authenticode / macOS 公证，缓解 SmartScreen 拦截。
 4. **i18n**（Phase 5）：zh-CN / en-US。
 
