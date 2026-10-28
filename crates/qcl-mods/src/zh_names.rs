@@ -350,10 +350,11 @@ mod tests {
     }
 
     fn set_tables(names: &str, aliases: &str, categories: &str) {
-        let mut next = Tables::default();
-        next.names = parse(names, "names");
-        next.aliases = parse(aliases, "aliases");
-        next.categories = parse(categories, "categories");
+        let next = Tables {
+            names: parse(names, "names"),
+            aliases: parse(aliases, "aliases"),
+            categories: parse(categories, "categories"),
+        };
         *tables().write().expect("锁可用") = next;
     }
 
