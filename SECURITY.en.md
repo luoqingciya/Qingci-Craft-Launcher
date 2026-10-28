@@ -99,7 +99,9 @@ binary.
    There is no extra application-level encryption, because the key would have to live on the same
    machine — that only moves the problem.
 2. **No code signing for executables.** Windows artifacts carry no Authenticode signature; macOS
-   artifacts are not codesigned or notarized. The OS may warn about them.
+   artifacts are not codesigned or notarized — **the macOS build ships in exactly that state**, so the
+   first launch requires bypassing Gatekeeper manually (the README lists three ways). The "cannot
+   verify the developer" prompt is a genuine warning, not a false positive.
 
 > Keep the two kinds of signing apart: **minisign signatures on update packages** exist today and
 > guarantee that an update really came from this project. **Code signing of the executables**

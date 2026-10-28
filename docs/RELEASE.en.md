@@ -193,11 +193,11 @@ Two distribution channels, deliberately kept apart:
 | Channel | Contents | Purpose |
 | --- | --- | --- |
 | COS (`qcl.luoqingciya.cn/releases/`) | Windows NSIS installer + `.sig` + `latest.json` | the auto-update channel |
-| GitHub Releases | all of the above, plus the Windows portable build and Linux AppImage/deb | manual downloads |
+| GitHub Releases | all of the above, plus the Windows portable build, the macOS dmg and Linux AppImage/deb | manual downloads |
 
-`latest.json` therefore carries **only** a `windows-x86_64` entry. The Linux artifacts stay on GitHub
-Releases: the AppImage is 83.5 MB and does not participate in auto-update, so putting it on COS would
-cost bandwidth for nothing.
+`latest.json` therefore carries **only** a `windows-x86_64` entry. The macOS and Linux artifacts stay
+on GitHub Releases: the AppImage is 83.5 MB, the dmg is 12 MB, and neither participates in
+auto-update, so putting them on COS would cost bandwidth for nothing.
 
 Sizes below are measured from the 0.1.5 artifacts and drift a little between versions (more so when
 the frontend changes) — trust the actual artifacts, not these numbers.
@@ -205,11 +205,19 @@ the frontend changes) — trust the actual artifacts, not these numbers.
 - **Windows installer**: NSIS, 3.8 MB, reuses the system WebView2; auto-update installs silently and relaunches.
 - **Windows portable**: 12.7 MB, the very exe that lives inside the installer — double-click to run, game
   directory next to the exe. No auto-update: replacing a running exe is not allowed on Windows.
+- **macOS universal dmg**: 12.1 MB, built with `--target universal-apple-darwin`, so one file carries both arm64
+  and x86_64 — no architecture picking. **Unsigned and not notarized**: without a paid developer
+  account, the first launch needs right-click → Open, or `xattr -dr com.apple.quarantine`; the README
+  lists three ways.
+- **macOS uses its own release config** (`tauri.release-macos.json`) with `createUpdaterArtifacts`
+  turned off. Two reasons: enabling it demands a signing key at build time, and unpacking
+  `.app.tar.gz` needs the updater's `zip` feature, which is disabled because of two extraction
+  advisories (RUSTSEC-2026-0367 / 0368) — see `src-tauri/Cargo.toml`.
 - **Linux AppImage**: 83.5 MB. Self-contained — it carries the whole WebKitGTK + JavaScriptCore + GTK3
   stack (530 files once extracted), which is why it is over ten times the size of the deb.
 - **Linux deb**: 5.3 MB, depends on the distribution's `libwebkit2gtk-4.1`.
-- **Linux in general**: no auto-update. The About page detects Linux and points at the download page
-  instead of showing a button that would only fail.
+- **macOS and Linux**: no auto-update. The About page detects them from the UA (Linux / Macintosh) and
+  points at the download page instead of showing a button that would only fail.
 - **macOS**: not published. Auto-update needs the updater's `zip` feature to unpack `.app.tar.gz`,
   and that feature is currently disabled because of two extraction vulnerabilities
   (RUSTSEC-2026-0367 / 0368) — see `src-tauri/Cargo.toml`. An unsigned dmg is also blocked outright
