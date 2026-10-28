@@ -16,6 +16,7 @@ import type { InstanceView } from "../api";
 export function LaunchPanel({
   playerName,
   account,
+  restoring,
   msaLogin,
   instances,
   activeInstance,
@@ -40,6 +41,8 @@ export function LaunchPanel({
   /** 离线玩家名。已登录时界面显示的是账号名，这里只是回落值。 */  playerName: string;
   /** 已登录的账号，未登录为 `null`。 */
   account: Account | null;
+  /** 是否仍在恢复上次的登录。 */
+  restoring: boolean;
   /** 本次构建是否内置了微软登录能力。 */
   msaLogin: boolean;
   /** 已知实例，用于切换器。 */
@@ -71,6 +74,18 @@ export function LaunchPanel({
   const running = status.running;
   const displayName = account?.name ?? playerName;
   const initial = displayName.trim().charAt(0) || "?";
+  // 恢复期间「还没有账号」和「还没查完」看起来一样，必须分开说：
+  // 直接说「离线账户」再跳成「正版账户」，用户看到的就是账号时有时无。
+  const accountLabel = restoring
+    ? "正在恢复登录…"
+    : account
+      ? "正版账户"
+      : "离线账户";
+  const accountDot = restoring
+    ? "bg-[var(--color-text-muted)]"
+    : account
+      ? "bg-[var(--color-success)]"
+      : "bg-[var(--color-warning)]";
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -91,15 +106,11 @@ export function LaunchPanel({
           <div className="min-w-0 flex-1">
             <div className="truncate text-[15px] font-medium">{displayName}</div>
             <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-[var(--color-text-secondary)]">
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  account ? "bg-[var(--color-success)]" : "bg-[var(--color-warning)]"
-                }`}
-              />
-              {account ? "正版账户" : "离线账户"}
+              <span className={`h-1.5 w-1.5 rounded-full ${accountDot}`} />
+              {accountLabel}
             </div>
           </div>
-          {account ? (
+          {restoring ? null : account ? (
             <button
               type="button"
               onClick={onSignOut}

@@ -67,6 +67,7 @@ export function LauncherView({
   logs,
   crash,
   account,
+  restoring,
   msaLogin,
   loginPhase,
   update,
@@ -115,6 +116,8 @@ export function LauncherView({
   crash: CrashSummary | null;
   /** 已登录的账号，未登录为 `null`。 */
   account: Account | null;
+  /** 是否仍在恢复上次的登录。 */
+  restoring: boolean;
   /** 本次构建是否内置了微软登录能力。 */
   msaLogin: boolean;
   /** 登录对话框阶段。 */
@@ -272,6 +275,7 @@ export function LauncherView({
             <LaunchPanel
               playerName={playerName}
               account={account}
+              restoring={restoring}
               msaLogin={msaLogin}
               instances={settings?.instances ?? []}
               activeInstance={settings?.activeInstance ?? ""}
