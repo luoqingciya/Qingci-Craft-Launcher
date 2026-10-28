@@ -23,6 +23,7 @@ import {
   switchInstance,
   rememberSelection,
   runtimeInfo,
+  type RuntimeInfo,
   saveSettings,
   stopGame,
   type CrashReport,
@@ -92,16 +93,16 @@ export default function App() {
   const account = useAccount();
   // 便携版没有卸载器，装不了更新。默认按便携版处理——宁可少给一个按钮，
   // 也不要让用户点了「下载并安装」之后被装出一份新的副本。
-  const [portable, setPortable] = useState(true);
-  // 本次构建有没有内置微软登录所需的客户端 ID。默认 false：没确认之前不给登录入口，
-  // 免得点了才发现用不了。
-  const [msaLogin, setMsaLogin] = useState(false);
+  // 运行环境信息：既决定「能不能自更新」，也是关于页要显示的诊断信息。
+  // 查不到时按最保守的情况处理（当作便携版、不给登录入口）。
+  const [runtime, setRuntime] = useState<RuntimeInfo | null>(null);
+  const portable = runtime ? !runtime.installed : true;
+  const msaLogin = runtime?.msaLogin ?? false;
 
   useEffect(() => {
     void runtimeInfo()
       .then((info) => {
-        setPortable(!info.installed);
-        setMsaLogin(info.msaLogin);
+        setRuntime(info);
       })
       .catch(() => {
         // 查不到就维持保守判断：按便携版、不给登录入口处理。
@@ -457,6 +458,7 @@ export default function App() {
       onDismissError={() => setError(null)}
       update={update.state}
       portable={portable}
+      runtime={runtime}
       account={account.account}
       msaLogin={msaLogin}
       loginPhase={account.phase}

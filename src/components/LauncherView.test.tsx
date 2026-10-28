@@ -50,6 +50,7 @@ function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {})
     loginPhase: { kind: "idle" as const },
     update: { kind: "idle" as const },
     portable: false,
+    runtime: null,
     settings: SETTINGS,
     javaOptions: [],
     savingSettings: false,

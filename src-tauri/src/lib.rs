@@ -550,6 +550,14 @@ pub struct RuntimeInfo {
     ///
     /// 为 false 时界面要说明「此构建未启用微软登录」，而不是给一个点了必然失败的按钮。
     pub msa_login: bool,
+    /// 应用版本。
+    pub app_version: String,
+    /// 编译时链接的 Tauri 版本。
+    pub tauri_version: String,
+    /// 目标系统，如 `windows`。
+    pub os: String,
+    /// 目标架构，如 `x86_64`。
+    pub arch: String,
 }
 
 /// 去掉首尾空白，空串视为「没有」。
@@ -621,6 +629,10 @@ fn runtime_info() -> Result<RuntimeInfo, String> {
     Ok(RuntimeInfo {
         installed,
         msa_login: ms_client_id().is_some(),
+        app_version: env!("CARGO_PKG_VERSION").to_owned(),
+        tauri_version: tauri::VERSION.to_owned(),
+        os: std::env::consts::OS.to_owned(),
+        arch: std::env::consts::ARCH.to_owned(),
     })
 }
 

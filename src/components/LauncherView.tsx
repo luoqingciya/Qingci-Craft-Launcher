@@ -10,6 +10,7 @@ import type {
   InstallProgressEvent,
   JavaOption,
   LoaderOption,
+  RuntimeInfo,
   SettingsInput,
   SettingsView,
   VersionSummary,
@@ -70,6 +71,7 @@ export function LauncherView({
   loginPhase,
   update,
   portable,
+  runtime,
   settings,
   javaOptions,
   savingSettings,
@@ -121,6 +123,8 @@ export function LauncherView({
   update: UpdateState;
   /** 便携版无法自更新。 */
   portable: boolean;
+  /** 运行环境信息，关于页显示诊断用；查不到时为 null。 */
+  runtime: RuntimeInfo | null;
   settings: SettingsView | null;
   javaOptions: JavaOption[];
   savingSettings: boolean;
@@ -335,6 +339,7 @@ export function LauncherView({
       {tab === "about" && (
         <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-br from-[var(--color-canvas-from)] to-[var(--color-canvas-to)]">
           <AboutPanel
+            runtime={runtime}
             update={update}
             portable={portable}
             onCheck={onCheckUpdate}

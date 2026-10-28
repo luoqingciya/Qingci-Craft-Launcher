@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { copyText } from "../lib/clipboard";
 import {
   MAX_LINES,
   filterLogs,
@@ -206,32 +207,4 @@ function ToolButton({
       {children}
     </button>
   );
-}
-
-/**
- * 复制到剪贴板。
- *
- * 先试 `navigator.clipboard`，失败再退回 `execCommand`：Tauri 的 WebView 在部分
- * 平台上不把 `tauri://` 视作安全上下文，clipboard API 会直接抛错。
- */
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    const area = document.createElement("textarea");
-    area.value = text;
-    area.style.position = "fixed";
-    area.style.opacity = "0";
-    document.body.appendChild(area);
-    area.select();
-    let ok = false;
-    try {
-      ok = document.execCommand("copy");
-    } catch {
-      ok = false;
-    }
-    document.body.removeChild(area);
-    return ok;
-  }
 }

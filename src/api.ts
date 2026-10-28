@@ -233,6 +233,14 @@ export interface RuntimeInfo {
   installed: boolean;
   /** 本次构建是否内置了微软登录所需的客户端 ID。 */
   msaLogin: boolean;
+  /** 应用版本。 */
+  appVersion: string;
+  /** 编译时链接的 Tauri 版本。 */
+  tauriVersion: string;
+  /** 目标系统，如 windows。 */
+  os: string;
+  /** 目标架构，如 x86_64。 */
+  arch: string;
 }
 
 /** 查询运行环境。 */

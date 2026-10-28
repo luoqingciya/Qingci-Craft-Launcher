@@ -2,9 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
 
+import { useState } from "react";
+
 import { version } from "../../package.json";
+import type { RuntimeInfo } from "../api";
 // 用已生成好的 128px 图标而不是 929 KB 的源文件：界面里最大也只显示 56px。
 import iconUrl from "../../src-tauri/icons/128x128.png";
+import { copyText } from "../lib/clipboard";
 import type { UpdateState } from "../lib/useUpdate";
 import { ExternalLink } from "./ExternalLink";
 
@@ -26,15 +30,21 @@ const DOWNLOAD_URL = "https://github.com/luoqingciya/Qingci-Craft-Launcher/relea
 export function AboutPanel({
   update,
   portable,
+  runtime,
   onCheck,
   onInstall,
 }: {
   update: UpdateState;
+  /** 运行环境信息；查不到时为 null（关于页仍要能打开）。 */
+  runtime: RuntimeInfo | null;
   /** 便携版无法自更新（Windows 不允许替换正在运行的 exe）。 */
   portable: boolean;
   onCheck: () => void;
   onInstall: () => void;
 }) {
+  // 「已复制」只在本地存在两秒：它不是业务状态，没必要往上抬。
+  const [copied, setCopied] = useState(false);
+
   return (
     <div className="mx-auto flex w-full max-w-[620px] flex-col gap-4 px-6 py-8">
       <div className="flex items-center gap-4">
@@ -65,6 +75,26 @@ export function AboutPanel({
         </LinkRow>
       </Section>
 
+      <Section title="运行环境">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="break-all font-mono text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+              {environment(runtime).join(" · ")}
+            </div>
+            <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+              反馈问题时附上这一行，能省掉一轮「你是什么系统」的来回。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void copyEnvironment(runtime, setCopied)}
+            className="shrink-0 rounded-md px-2 py-1 text-[12px] text-[var(--color-text-secondary)] ring-1 ring-inset ring-[var(--color-border-subtle)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)]"
+          >
+            {copied ? "已复制" : "复制"}
+          </button>
+        </div>
+      </Section>
+
       <Section title="许可证">
         <p className="text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
           GPL-3.0，并附有 <strong className="text-[var(--color-text-primary)]">GPLv3 第 7 条附加条款</strong>：
@@ -82,6 +112,48 @@ export function AboutPanel({
       </Section>
     </div>
   );
+}
+
+/**
+ * 运行环境的一行摘要。
+ *
+ * WebView 版本从 UA 里取：Tauri 没有把它单独暴露出来，而排查渲染问题
+ * （老 WebView2 上的 CSS/字体问题）时这一项恰恰最有用。
+ */
+function environment(runtime: RuntimeInfo | null): string[] {
+  if (!runtime) {
+    return ["运行环境读取失败"];
+  }
+  return [
+    `v${runtime.appVersion}`,
+    `${runtime.os}/${runtime.arch}`,
+    `Tauri ${runtime.tauriVersion}`,
+    webviewLabel(),
+  ];
+}
+
+/** 从 UA 里抠出 WebView 的主版本号。 */
+function webviewLabel(): string {
+  const match = navigator.userAgent.match(/(?:Edg|Chrome)\/(\d+)/);
+  return match ? `WebView ${match[1]}` : "WebView 未知";
+}
+
+/** 复制成适合贴进 issue 的多行文本。 */
+async function copyEnvironment(runtime: RuntimeInfo | null, done: (value: boolean) => void): Promise<void> {
+  if (!runtime) {
+    return;
+  }
+  const text = [
+    `清辞 v${runtime.appVersion}`,
+    `系统：${runtime.os}/${runtime.arch}`,
+    `Tauri：${runtime.tauriVersion}`,
+    webviewLabel(),
+  ].join("\n");
+
+  if (await copyText(text)) {
+    done(true);
+    window.setTimeout(() => done(false), 2000);
+  }
 }
 
 /**

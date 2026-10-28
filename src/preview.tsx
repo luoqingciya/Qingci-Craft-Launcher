@@ -198,6 +198,14 @@ function Preview() {
       onSignOut={() => {}}
       update={{ kind: "idle" }}
       portable={false}
+      runtime={{
+        installed: true,
+        msaLogin: false,
+        appVersion: "0.1.5",
+        tauriVersion: "2.12.5",
+        os: "windows",
+        arch: "x86_64",
+      }}
       onCheckUpdate={() => {}}
       onInstallUpdate={() => {}}
       settings={SETTINGS}
