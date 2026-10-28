@@ -1,6 +1,6 @@
 # 发版与在线更新
 
-[English](RELEASE.en.md) | 中文
+**中文** | [English](RELEASE.en.md)
 
 Qingci Craft Launcher 的更新走「GitHub Actions 构建 → 腾讯云 COS 分发」：CI 打出 NSIS 安装包并用
 私钥签名，连同更新清单 `latest.json` 一起推到 COS；客户端启动后读清单，发现新版本
@@ -177,6 +177,9 @@ GitHub Release（附安装包与 `.sig`）。
 
 所以 `latest.json` 里**只有** `windows-x86_64` 一条。Linux 产物留在 GitHub Releases：
 AppImage 有 83 MB，又不参与自动更新，放 COS 上只是白占带宽。
+
+体积取自 0.1.5 的实测产物，版本之间会有小幅浮动（前端改动大时更明显）——发布前以实际产物为准，
+不要照抄这几个数字。
 
 - **Windows 安装版**：NSIS 3.8 MB，复用系统 WebView2，自动更新走静默安装 + 重启。
 - **Windows 便携版**：12.7 MB，就是安装包里那个 exe，双击即用，游戏目录落在 exe 旁边。

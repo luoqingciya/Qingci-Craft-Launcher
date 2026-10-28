@@ -15,9 +15,12 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 > versions (26.3, plus older releases such as 1.7.10 with the legacy asset layout) works end to end:
 > fetch manifest → download ~598 MB → pick Java → assemble command → launch → stream logs → stop.
 > Fabric is selectable per version; the mods tab supports search, install (required dependencies
-> pulled in automatically), removal and update checks. Abnormal exits produce a crash summary that
-> also reads the game's own `crash-reports/`. Installed builds update in place: check, download,
-> verify the signature, install silently, relaunch.
+> pulled in automatically), removal and update checks. Installed projects are marked, the
+> dependencies to be pulled in are visible before installing, and update checks also report mods
+> with no build for the current version. The log panel filters by level, searches, and copies.
+> Abnormal exits produce a crash summary that also reads the game's own `crash-reports/`.
+> Installed builds update in place: check, download, verify the signature, install silently,
+> relaunch.
 > Roadmap: [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) · Changes: [CHANGELOG.md](CHANGELOG.md).
 
 ## Feature status
@@ -30,12 +33,15 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 | Launch & logs | ✅ | Streams stdout/stderr live; "Stop" really terminates the process |
 | Settings | ✅ | Game directory, offline player name, max heap, Java runtime, download source |
 | Fabric loader | ✅ | Version → loader → install → launch; the merged profile is persisted |
-| Mod management | ✅ | Modrinth search / install / remove / update check; required dependencies installed automatically |
+| Mod management | ✅ | Modrinth search / install / remove / update check; required dependencies installed automatically and previewable before install |
+| Mod status | ✅ | Installed projects are marked; update checks also report mods incompatible with the current version |
 | Chinese names & filters | ✅ | Local name database, Chinese keyword aliases, 19 localised categories |
+| Log tools | ✅ | Filter by level, search, one-click copy (copies the filtered lines) |
 | Crash summary | ✅ | Non-zero exit produces a verdict; reads `crash-reports/` when present |
 | Auto-update | ✅ | Installed builds check automatically; nothing installs without a valid signature |
 | Microsoft login | ✅ | Device code flow (the launcher never sees the password); tokens live in the OS keychain and refresh silently at startup |
-| Instances | ✅ | Multiple independent game directories, each with its own version selection |
+| Instances | ✅ | Multiple independent game directories, each with its own version selection; the launch panel opens the directory and shows the installed mod count |
+| Runtime info | ✅ | The about tab shows version, OS/arch, Tauri and WebView, copyable as a bug-report block |
 | Forge / NeoForge | ⬜ | See roadmap |
 
 ## Design principles
@@ -44,7 +50,7 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 - **Cross-platform**: Windows 10+ / macOS 12+ / Linux (glibc 2.31+); CI builds and tests on all three.
   Published artifacts cover Windows and Linux.
 - **Testable**: core logic (version parsing, rule evaluation, argument assembly, auth protocols, mod
-  resolution, crash report parsing) lives in GUI-free Rust crates — 326 Rust tests + 139 frontend
+  resolution, crash report parsing) lives in GUI-free Rust crates — 334 Rust tests + 176 frontend
   tests in CI.
 - **Manifest-driven**: versions, libraries and JVM arguments are all derived from official manifests; no version list is hardcoded.
 
