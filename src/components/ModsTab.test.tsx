@@ -34,6 +34,7 @@ const HITS = [
 const searchMods = vi.fn();
 const installMod = vi.fn();
 const listMods = vi.fn();
+const modDependencies = vi.fn();
 
 /** 构造一条已装记录。默认没有来源（模拟手动扔进 mods/ 的 jar）。 */
 function installed(fileName: string, projectId: string | null = null) {
@@ -48,6 +49,7 @@ vi.mock("../api", () => ({
   searchMods: (...args: unknown[]) => searchMods(...args),
   installMod: (...args: unknown[]) => installMod(...args),
   listMods: () => listMods(),
+  modDependencies: (...args: unknown[]) => modDependencies(...args),
   removeMod: (...args: unknown[]) => removeMod(...args),
   listModCategories: () => listModCategories(),
   checkModUpdates: (...args: unknown[]) => checkModUpdates(...args),
@@ -58,6 +60,8 @@ beforeEach(() => {
   searchMods.mockReset();
   installMod.mockReset();
   listMods.mockReset();
+  modDependencies.mockReset();
+  modDependencies.mockResolvedValue([]);
   removeMod.mockReset();
   listModCategories.mockReset();
   checkModUpdates.mockReset();
@@ -440,5 +444,43 @@ describe("已安装标记来自后端清单", () => {
 
     expect(await screen.findByText("钠")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "已安装" })).toBeNull();
+  });
+});
+
+describe("依赖提示", () => {
+  it("点「依赖」才去查，并标出已经装了的", async () => {
+    searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
+    modDependencies.mockResolvedValue([
+      { projectId: "P7dR8mSH", title: "Fabric API", installed: true },
+      { projectId: "Ha28R6CL", title: null, installed: false },
+    ]);
+
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
+    await screen.findByText("钠");
+
+    // 列表渲染时不查——每个项目一次请求，塞进搜索会拖慢列表。
+    expect(modDependencies).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getAllByRole("button", { name: "依赖" })[0]);
+
+    expect(await screen.findByText(/Fabric API/)).toBeInTheDocument();
+    expect(screen.getByText(/Fabric API · 已装/)).toBeInTheDocument();
+    // 标题查不到时退回项目 id，不能空着。
+    expect(screen.getByText("Ha28R6CL")).toBeInTheDocument();
+    expect(modDependencies).toHaveBeenCalledWith("AANobbMI", "26.3", "fabric");
+  });
+
+  it("没有必需依赖时明说，而不是留空", async () => {
+    searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
+    modDependencies.mockResolvedValue([]);
+
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
+    await screen.findByText("钠");
+
+    await userEvent.click(screen.getAllByRole("button", { name: "依赖" })[0]);
+
+    expect(await screen.findByText("没有必需依赖")).toBeInTheDocument();
   });
 });

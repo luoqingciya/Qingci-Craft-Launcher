@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use qcl_mods::{ModError, install, resolve_file_from, search_from};
+use qcl_mods::{ModError, dependencies_from, install, resolve_file_from, search_from};
 use qcl_net::{HttpDownloader, hex_sha1};
 use tempfile::TempDir;
 use wiremock::matchers::{method, path};
@@ -617,4 +617,117 @@ async fn live_install_then_detect_update() {
     assert_eq!(updates[0].file_name, fake_old);
     assert_eq!(updates[0].current_version, "0.0.1");
     assert_ne!(updates[0].latest_file_name, fake_old);
+}
+
+/// 带必需依赖与可选依赖的版本响应。
+const VERSIONS_WITH_DEPS: &str = r#"[
+  {
+    "id": "abc123",
+    "version_number": "mc26.3-0.9.3-fabric",
+    "files": [
+      {
+        "url": "https://cdn.modrinth.com/sodium.jar",
+        "filename": "sodium-fabric-0.9.3+mc26.3.jar",
+        "primary": true,
+        "size": 1912496,
+        "hashes": { "sha1": "1e6aec741b4134258ba1d7d458bae96a2e8e187e" }
+      }
+    ],
+    "dependencies": [
+      { "project_id": "P7dR8mSH", "dependency_type": "required" },
+      { "project_id": "Ha28R6CL", "dependency_type": "optional" }
+    ]
+  }
+]"#;
+
+const PROJECTS_BODY: &str = r#"[
+  { "id": "P7dR8mSH", "title": "Fabric API" }
+]"#;
+
+#[tokio::test]
+async fn dependencies_keep_required_only_and_add_titles() {
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/project/AANobbMI/version"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(VERSIONS_WITH_DEPS))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/projects"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(PROJECTS_BODY))
+        .mount(&server)
+        .await;
+
+    let deps = dependencies_from(
+        &downloader(&dir),
+        &server.uri(),
+        "AANobbMI",
+        "26.3",
+        "fabric",
+    )
+    .await
+    .expect("应能查到依赖");
+
+    // 可选依赖不能出现：装上去反而可能冲突，安装流程也是这么筛的。
+    assert_eq!(deps.len(), 1);
+    assert_eq!(deps[0].project_id, "P7dR8mSH");
+    assert_eq!(deps[0].title.as_deref(), Some("Fabric API"));
+}
+
+#[tokio::test]
+async fn dependencies_survive_a_failing_title_lookup() {
+    // 标题只是锦上添花。查不到也必须告诉用户「有依赖、会被装」。
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/project/AANobbMI/version"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(VERSIONS_WITH_DEPS))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/projects"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+
+    let deps = dependencies_from(
+        &downloader(&dir),
+        &server.uri(),
+        "AANobbMI",
+        "26.3",
+        "fabric",
+    )
+    .await
+    .expect("标题失败不该让整个查询失败");
+
+    assert_eq!(deps.len(), 1);
+    assert_eq!(deps[0].project_id, "P7dR8mSH");
+    assert_eq!(deps[0].title, None);
+}
+
+#[tokio::test]
+async fn dependencies_are_empty_for_a_standalone_mod() {
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/project/AANobbMI/version"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(VERSIONS_BODY))
+        .mount(&server)
+        .await;
+
+    let deps = dependencies_from(
+        &downloader(&dir),
+        &server.uri(),
+        "AANobbMI",
+        "26.3",
+        "fabric",
+    )
+    .await
+    .expect("应能查到依赖");
+
+    assert!(deps.is_empty());
 }

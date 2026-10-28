@@ -728,6 +728,7 @@ pub fn run() {
             mods::list_mod_categories,
             mods::install_mod,
             mods::list_mods,
+            mods::mod_dependencies,
             mods::remove_mod,
             mods::check_mod_updates,
             mods::update_mod,

@@ -9,10 +9,12 @@ import {
   installMod,
   listModCategories,
   listMods,
+  modDependencies,
   removeMod,
   searchMods,
   updateMod,
   type InstalledMod,
+  type ModDependency,
   type ModCategory,
   type ModHit,
   type ModUpdate,
@@ -68,6 +70,11 @@ export function ModsTab({
   const [notice, setNotice] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [sort, setSort] = useState<"relevance" | "downloads">("relevance");
+  // 依赖是「点开才查」的：每个项目要一次 version 请求，塞进搜索会拖慢列表。
+  // 查过的结果留在 map 里，收起再展开不必重查。
+  const [depsOpen, setDepsOpen] = useState<string | null>(null);
+  const [depsLoading, setDepsLoading] = useState<string | null>(null);
+  const [deps, setDeps] = useState<Record<string, ModDependency[]>>({});
 
   const modLoader = loader ? "fabric" : "";
   // 后端在清单里记了「文件名 → Modrinth 项目 id」，据此判断搜索结果装没装过。
@@ -193,6 +200,33 @@ export function ModsTab({
       setError(String(cause));
     } finally {
       setSearching(false);
+    }
+  }
+
+/**
+   * 展开/收起依赖。
+   *
+   * 依赖是信息性的——安装时会自动装齐，所以这里只回答「会带上什么」，不做拦截。
+   * 查过一次就缓存，收起再展开不重复请求。
+   */
+  async function toggleDeps(hit: ModHit) {
+    if (depsOpen === hit.projectId) {
+      setDepsOpen(null);
+      return;
+    }
+    setDepsOpen(hit.projectId);
+    if (deps[hit.projectId] || !version) {
+      return;
+    }
+
+    setDepsLoading(hit.projectId);
+    try {
+      const list = await modDependencies(hit.projectId, version, modLoader);
+      setDeps((current) => ({ ...current, [hit.projectId]: list }));
+    } catch (cause: unknown) {
+      setError(String(cause));
+    } finally {
+      setDepsLoading(null);
     }
   }
 
@@ -414,7 +448,42 @@ export function ModsTab({
                   >
                     在 Modrinth 查看
                   </button>
+                  <button
+                    type="button"
+                    aria-expanded={depsOpen === hit.projectId}
+                    onClick={() => void toggleDeps(hit)}
+                    className="text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-accent-text)] hover:underline"
+                  >
+                    {depsOpen === hit.projectId ? "收起依赖" : "依赖"}
+                  </button>
                 </p>
+
+                {depsOpen === hit.projectId && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                    {depsLoading === hit.projectId ? (
+                      <span className="text-[var(--color-text-muted)]">读取依赖…</span>
+                    ) : (deps[hit.projectId] ?? []).length === 0 ? (
+                      <span className="text-[var(--color-text-muted)]">没有必需依赖</span>
+                    ) : (
+                      <>
+                        <span className="text-[var(--color-text-muted)]">安装时会一并装：</span>
+                        {(deps[hit.projectId] ?? []).map((dep) => (
+                          <span
+                            key={dep.projectId}
+                            className={`rounded px-1.5 py-0.5 ${
+                              dep.installed
+                                ? "bg-[var(--color-accent-soft)] text-[var(--color-accent-text)]"
+                                : "bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]"
+                            }`}
+                          >
+                            {dep.title ?? dep.projectId}
+                            {dep.installed && " · 已装"}
+                          </span>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               <button
