@@ -39,11 +39,11 @@ export function StatusStack({
   return (
     <div
       // 固定定位、不参与文档流：这是「不挤占页面组件」的实现方式。
-      className="pointer-events-none fixed bottom-4 right-4 z-40 flex w-[340px] flex-col gap-2"
+      className="pointer-events-none fixed bottom-4 right-4 z-40 flex w-[300px] flex-col gap-2"
       aria-live="polite"
     >
       {progress && (
-        <div className="status-enter pointer-events-none rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-3 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.45)]">
+        <div className="status-enter pointer-events-none rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-2.5 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.45)]">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-[12px] text-[var(--color-text-secondary)]">
               正在下载{phaseLabel(progress.phase)} {progress.completed}/{progress.total}
@@ -95,7 +95,7 @@ function StatusCard({
   const color = tone === "success" ? "var(--color-success)" : "var(--color-danger)";
   return (
     <div
-      className="status-enter pointer-events-none flex items-start gap-2.5 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-3 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.45)]"
+      className="status-enter pointer-events-none flex items-start gap-2.5 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-raised)] p-2.5 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.45)]"
       role={tone === "danger" ? "alert" : "status"}
     >
       <span
@@ -111,7 +111,7 @@ function StatusCard({
           )}
         </svg>
       </span>
-      <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-[var(--color-text-primary)]">
+      <p className="min-w-0 flex-1 break-words text-[12px] leading-relaxed text-[var(--color-text-primary)]">
         {children}
       </p>
       <button
