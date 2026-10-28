@@ -386,8 +386,24 @@ export interface ModUpdate {
 }
 
 /** 检查已安装模组是否有新版本。 */
-export function checkModUpdates(version: string, loader: string): Promise<ModUpdate[]> {
-  return invoke<ModUpdate[]>("check_mod_updates", { version, loader });
+/** 一个与当前版本/加载器不兼容的已装模组。 */
+export interface IncompatibleMod {
+  /** 已安装的文件名。 */
+  fileName: string;
+  /** Modrinth 项目 id。 */
+  projectId: string;
+}
+
+/** 一次更新检查的结果。两半对用户的意义不同，所以分开返回。 */
+export interface UpdateReport {
+  /** 有新版本的模组。 */
+  updates: ModUpdate[];
+  /** 当前版本/加载器下没有可用文件的模组。 */
+  incompatible: IncompatibleMod[];
+}
+
+export function checkModUpdates(version: string, loader: string): Promise<UpdateReport> {
+  return invoke<UpdateReport>("check_mod_updates", { version, loader });
 }
 
 /** 更新一个模组：装最新版本并删掉旧文件，返回本次落地的路径。 */

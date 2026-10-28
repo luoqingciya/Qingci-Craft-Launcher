@@ -107,7 +107,12 @@ if (!("__TAURI_INTERNALS__" in window)) {
               { projectId: "P7dR8mSH", title: "Fabric API", installed: true },
             ];
           case "check_mod_updates":
-            return [];
+            return {
+              updates: [],
+              incompatible: [
+                { fileName: "fabric-api-0.140.2+26.3.jar", projectId: "P7dR8mSH" },
+              ],
+            };
           default:
             return null;
         }
