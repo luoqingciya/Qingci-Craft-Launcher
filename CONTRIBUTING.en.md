@@ -159,7 +159,20 @@ affected.
 ## 10. Chinese name database
 
 Modrinth's search index is English-only (Chinese queries return 0 hits), so Chinese names come from
-a local database: `assets/data/mod-zh.json`, keyed by project **slug**.
+a name database.
+
+**The data does not live in this repository.** It is hosted in the `qcl-mod` folder of a private
+artifact registry, and the client fetches it into a local cache at startup. That way adding a
+translation does not require a release — change the site, and the client picks it up on the next
+launch (it does not refetch within 24 hours).
+
+| Package | Cache file | Purpose |
+|---|---|---|
+| `mod-zh` | `mod-zh.json` | slug → Chinese name (shown in results) |
+| `mod-search-aliases` | `mod-search-aliases.json` | Chinese query → English keywords (typing 钠 actually searches `sodium`) |
+| `mod-categories-zh` | `mod-categories-zh.json` | Modrinth category id → Chinese label (filter buttons) |
+
+The format is still plain key/value, keyed by project **slug**:
 
 ```json
 {
@@ -168,20 +181,42 @@ a local database: `assets/data/mod-zh.json`, keyed by project **slug**.
 }
 ```
 
-To add an entry:
+### Updating translations
 
 1. Confirm the slug matches the project at `https://modrinth.com/mod/<slug>`
-2. Add one line to the JSON (**one entry per line**, for review and merges)
-3. Run `cargo test -p qcl-mods` — it validates the JSON, rejects empty values and **duplicate keys**
+2. Publish a new version of the file in the registry (**all three together** — the client either
+   swaps all of them or none)
+3. The client picks it up on the next launch; to see it immediately, delete the local cache and
+   relaunch
 
-Conventions:
+The client validates what it downloads, and any failure discards the whole batch while keeping the
+old cache:
+
+- every file is checked against the **SHA-256** the registry publishes
+- a payload that parses to an empty table is rejected (usually a wrong file was uploaded)
+- a partial success is never written, which would leave "new names, stale aliases"
+
+### Local debugging
+
+The cache lives in `mod-data/` under the app data directory:
+
+- Windows, installed build: `%APPDATA%\cn.luoqingciya.qcl\mod-data\`
+- Portable build: `mod-data/` next to the executable
+
+Editing those JSON files and relaunching shows the result without touching the server.
+
+Token: `qcl-mods` ships a token with download-only access to the `qcl-mod` folder, so local builds
+need no extra setup. CI can override it with the `QCL_PYPI_TOKEN` environment variable.
+
+### Conventions
 
 - Translate **names only**, not descriptions. Descriptions are long and terminology-heavy; machine
   translation is unreliable there, so the UI links to the Modrinth page instead.
 - Proper nouns may stay in English (e.g. `Fabric API`, `Jade`).
 - Use a middle dot for qualifiers: `"iris": "铱 · 光影加载器"`.
-- The database ships with the binary and is not fetched at runtime, so changes take effect in the
-  next release.
+- There are exactly 19 categories (Modrinth's tag set). Do not add or remove ids; only adjust labels.
+- An alias entry takes effect immediately — Chinese input is resolved through this table first, and
+  left as-is when there is no match.
 
 ## 11. Releases
 

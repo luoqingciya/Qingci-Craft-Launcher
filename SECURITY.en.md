@@ -74,6 +74,24 @@ handing that trust to it**:
 
 The UI credits the mirror in **two** places: in Settings when it is selected, and next to the download progress bar. The latter is not optional — BMCLAPI's terms require the source to be shown "in the download UI or another visible part", and a note buried in Settings is invisible to anyone who never opens it.
 
+### Token for the name database
+
+Mod Chinese names are not shipped with the installer; they are fetched from a private artifact
+registry at startup (see section 10 of [CONTRIBUTING.en.md](CONTRIBUTING.en.md)). That leads to an
+uncomfortable fact: **the download token ships with the client**, and anyone can extract it from the
+binary.
+
+- Its scope is **only** download access to the `qcl-mod` folder, so the worst case is that someone
+  downloads three public translation files. Do not widen that scope, and do not use it to reach
+  anything else in the registry.
+- The token appears on exactly one request — the file download. It is **not** set as a default
+  header: the same client also talks to Mojang and Modrinth, and the token must not show up there
+  or in any log.
+- Downloaded data is checked against the SHA-256 the registry publishes. Note this is the same
+  situation as BMCLAPI below: **the digest also comes from the same server**, so it proves the
+  transfer was not corrupted, not that the content came from us. The real trust anchor is the
+  registry itself.
+
 ### Not yet implemented (current risk)
 
 1. **No protection beyond the OS keychain.** The refresh token is protected by the operating system;

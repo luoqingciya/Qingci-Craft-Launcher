@@ -26,4 +26,4 @@ pub use plan::{
 };
 pub use retry::{RetryPolicy, is_retryable_status};
 pub use source::DownloadSource;
-pub use verify::{Sha1Hasher, hex_sha1, verify_sha1};
+pub use verify::{Sha1Hasher, hex_sha1, hex_sha256, verify_sha1, verify_sha256};

@@ -272,6 +272,59 @@ impl HttpDownloader {
             .map_err(|error| DownloadError::Network(error.to_string()))
     }
 
+    /// 带额外请求头的文本请求。
+    ///
+    /// 用于私有制品仓库：它要求 `Authorization: Bearer <token>`。令牌只在这些请求里带，
+    /// **不设成客户端的默认头**——同一份客户端还发往 Mojang 与 Modrinth，令牌不该出现在
+    /// 那些请求里，也不该被任何日志打印出来。
+    pub async fn fetch_text_with_headers(
+        &self,
+        url: &str,
+        user_agent: &str,
+        headers: &[(&str, &str)],
+    ) -> Result<String, DownloadError> {
+        let bytes = self
+            .fetch_bytes_with_headers(url, user_agent, headers)
+            .await?;
+        String::from_utf8(bytes).map_err(|error| DownloadError::Other(error.to_string()))
+    }
+
+    /// 同上，但返回原始字节（下载文件用）。
+    pub async fn fetch_bytes_with_headers(
+        &self,
+        url: &str,
+        user_agent: &str,
+        headers: &[(&str, &str)],
+    ) -> Result<Vec<u8>, DownloadError> {
+        let response = self
+            .send_first_ok(url, |client, url| {
+                let mut request = client
+                    .get(url)
+                    .header(reqwest::header::USER_AGENT, user_agent);
+                for (name, value) in headers {
+                    request = request.header(*name, *value);
+                }
+                request
+            })
+            .await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let code = status.as_u16();
+            return Err(if is_retryable_status(code) {
+                DownloadError::Network(format!("HTTP {code}"))
+            } else {
+                DownloadError::Other(format!("HTTP {code}"))
+            });
+        }
+
+        response
+            .bytes()
+            .await
+            .map(|bytes| bytes.to_vec())
+            .map_err(|error| DownloadError::Network(error.to_string()))
+    }
+
     /// 主动校验磁盘上的文件是否与期望摘要一致。
     ///
     /// 与 [`DownloadOps::is_present`] 的区别：本方法**总是**做完整哈希，

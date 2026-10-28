@@ -16,6 +16,7 @@ workspace = true
 # 同时给出 version 与 path：只写 path 会被 cargo-deny 判为通配依赖（wildcard）。
 qcl-core = { version = "0.1.0", path = "../qcl-core" }
 sha1.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
