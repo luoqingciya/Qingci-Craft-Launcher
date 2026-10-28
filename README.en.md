@@ -35,7 +35,7 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 | Fabric loader | ✅ | Version → loader → install → launch; the merged profile is persisted |
 | Mod management | ✅ | Modrinth search / install / remove / update check; required dependencies installed automatically and previewable before install |
 | Mod status | ✅ | Installed projects are marked; update checks also report mods incompatible with the current version |
-| Chinese names & filters | ✅ | Local name database, Chinese keyword aliases, 19 localised categories |
+| Chinese names & filters | ✅ | Name database fetched from a registry and cached at startup; Chinese keyword aliases; 19 localised categories |
 | Log tools | ✅ | Filter by level, search, one-click copy (copies the filtered lines) |
 | Crash summary | ✅ | Non-zero exit produces a verdict; reads `crash-reports/` when present |
 | Auto-update | ✅ | Installed builds check automatically; nothing installs without a valid signature |

@@ -43,7 +43,7 @@ impl From<ModSummary> for ModHit {
             downloads: summary.downloads,
             author: summary.author,
             icon_url: summary.icon_url,
-            zh_name: qcl_mods::zh_names::zh_name(&summary.slug).map(str::to_owned),
+            zh_name: qcl_mods::zh_names::zh_name(&summary.slug),
             slug: summary.slug,
         }
     }
@@ -140,9 +140,7 @@ pub fn list_mod_categories() -> Vec<CategoryOption> {
     IDS.iter()
         .map(|id| CategoryOption {
             id: (*id).to_owned(),
-            label: qcl_mods::zh_names::category_label(id)
-                .unwrap_or(id)
-                .to_owned(),
+            label: qcl_mods::zh_names::category_label(id).unwrap_or_else(|| (*id).to_owned()),
         })
         .collect()
 }

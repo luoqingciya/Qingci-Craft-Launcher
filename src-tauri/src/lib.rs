@@ -697,7 +697,16 @@ pub fn run() {
 
             // 连回退目录都不可写时无路可走，明确失败好过后续每一步都报错。
             let game_dir = settings::ensure_writable(&game_dir)?;
-            let downloader = HttpDownloader::with_source(&game_dir, saved.download_source())?;
+            let downloader = Arc::new(HttpDownloader::with_source(
+                &game_dir,
+                saved.download_source(),
+            )?);
+
+            // 译名库缓存在配置目录旁边：它是全局数据，不跟着实例走。
+            let data_dir = config_path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| install_dir.clone());
 
             app.manage(AppState {
                 config_path,
@@ -707,7 +716,7 @@ pub fn run() {
                     settings: saved,
                     game_dir,
                     fallback_reason,
-                    downloader: Arc::new(downloader),
+                    downloader: Arc::clone(&downloader),
                 }),
                 game: Arc::new(Mutex::new(None)),
                 auth: auth::Auth::new(),
@@ -716,6 +725,29 @@ pub fn run() {
             // 用存下的刷新令牌恢复登录。失败静默——刚打开的启动器上不该因为
             // 「上次的令牌过期了」弹一条错误。
             auth::restore_session(app.handle().clone());
+
+            // 译名库：先用本地缓存（有就立刻可用），再在后台拉一次最新的。
+            // 启动路径上不等待网络——译名只是锦上添花，不该拖慢开窗。
+            qcl_mods::zh_names::load_cache(&data_dir);
+            if !qcl_mods::zh_names::cache_is_fresh(&data_dir) {
+                tauri::async_runtime::spawn(async move {
+                    let refreshed = qcl_mods::zh_names::refresh(
+                        &downloader,
+                        qcl_mods::zh_names::DEFAULT_BASE,
+                        &data_dir,
+                    )
+                    .await;
+
+                    match refreshed {
+                        Ok(outcome) => eprintln!(
+                            "译名库已更新：{} 条译名 / {} 条别名",
+                            outcome.names, outcome.aliases
+                        ),
+                        // 拉不到就继续用缓存：这是可接受的降级，不是错误弹窗的理由。
+                        Err(error) => eprintln!("译名库更新失败，继续用缓存：{error}"),
+                    }
+                });
+            }
 
             Ok(())
         })

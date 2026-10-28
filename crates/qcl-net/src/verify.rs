@@ -9,6 +9,7 @@
 //! 因此不涉及算法强度的取舍。
 
 use sha1::{Digest, Sha1};
+use sha2::Sha256;
 
 /// 计算字节内容的 SHA-1，返回小写十六进制字符串。
 #[must_use]
@@ -16,6 +17,27 @@ pub fn hex_sha1(bytes: &[u8]) -> String {
     let mut hasher = Sha1::new();
     hasher.update(bytes);
     to_hex(&hasher.finalize())
+}
+
+/// 计算字节内容的 SHA-256，返回小写十六进制字符串。
+///
+/// 用于我们自己的制品（译名库），不用于 Mojang 的文件——那些只提供 SHA-1。
+#[must_use]
+pub fn hex_sha256(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    to_hex(&hasher.finalize())
+}
+
+/// 校验字节内容是否匹配期望的 SHA-256（大小写不敏感）。
+///
+/// 期望值为空时返回 `false`，理由同 [`verify_sha1`]。
+#[must_use]
+pub fn verify_sha256(expected: &str, bytes: &[u8]) -> bool {
+    if expected.is_empty() {
+        return false;
+    }
+    hex_sha256(bytes).eq_ignore_ascii_case(expected)
 }
 
 /// 校验字节内容是否匹配期望的 SHA-1（大小写不敏感）。
@@ -80,4 +102,39 @@ fn to_hex(bytes: &[u8]) -> String {
         output.push(char::from(DIGITS[usize::from(byte & 0x0f)]));
     }
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{hex_sha1, hex_sha256, verify_sha256};
+
+    #[test]
+    fn sha256_matches_known_vector() {
+        // 空串的 SHA-256，公认值。
+        assert_eq!(
+            hex_sha256(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+    }
+
+    #[test]
+    fn sha256_differs_from_sha1_for_the_same_input() {
+        // 防止把两个函数接错：同样是空串，两种摘要完全不同。
+        assert_ne!(hex_sha256(b"qcl"), hex_sha1(b"qcl"));
+        assert_eq!(hex_sha256(b"qcl").len(), 64);
+    }
+
+    #[test]
+    fn verify_sha256_is_case_insensitive() {
+        let digest = hex_sha256(b"hello");
+        assert!(verify_sha256(&digest, b"hello"));
+        assert!(verify_sha256(&digest.to_uppercase(), b"hello"));
+        assert!(!verify_sha256(&digest, b"hellp"));
+    }
+
+    #[test]
+    fn empty_expectation_never_passes() {
+        // 空摘要不构成校验，不能当作通过。
+        assert!(!verify_sha256("", b"anything"));
+    }
 }
