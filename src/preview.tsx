@@ -196,6 +196,7 @@ function Preview() {
       onDismissError={() => {}}
       // 想看更新卡片时，把这里换成 { kind: "available", info: { version: "0.1.1", notes: "…" } }
       account={null}
+      restoring={false}
       msaLogin
       loginPhase={{ kind: "idle" }}
       onLogin={() => {}}

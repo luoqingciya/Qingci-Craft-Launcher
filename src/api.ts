@@ -451,9 +451,22 @@ export type LoginState =
   | { kind: "done"; account: Account }
   | { kind: "failed"; message: string };
 
-/** 取当前账号，未登录时为 `null`。 */
-export function currentAccount(): Promise<Account | null> {
-  return invoke<Account | null>("current_account");
+/** 界面看到的账号状态。 */
+export interface AccountState {
+  /** 当前账号，未登录为 `null`。 */
+  account: Account | null;
+  /**
+   * 是否仍在恢复上次的登录。
+   *
+   * 启动时会用存下的刷新令牌去换新令牌，这中间有一到几秒。没有这个字段的话，
+   * 界面只能先显示「离线账户」再跳成「正版账户」——用户看到的就是账号时有时无。
+   */
+  restoring: boolean;
+}
+
+/** 取当前账号状态。 */
+export function currentAccount(): Promise<AccountState> {
+  return invoke<AccountState>("current_account");
 }
 
 /** 开始设备码登录。结果通过 {@link LOGIN_EVENT} 推送。 */

@@ -46,6 +46,7 @@ function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {})
     logs: [],
     crash: null,
     account: null,
+    restoring: false,
     msaLogin: false,
     loginPhase: { kind: "idle" as const },
     update: { kind: "idle" as const },
@@ -315,5 +316,42 @@ describe("启动页信息区", () => {
     await userEvent.click(screen.getByTitle(SETTINGS.gameDir));
 
     expect(onOpen).toHaveBeenCalled();
+  });
+});
+
+describe("账号恢复中", () => {
+  it("恢复期间说「正在恢复登录」，不说「离线账户」", () => {
+    // 恢复要花一到几秒。这段时间说「离线账户」，等刷新回来再跳成「正版账户」，
+    // 用户看到的就是账号时有时无。
+    renderView({ restoring: true, account: null, msaLogin: true });
+
+    expect(screen.getByText("正在恢复登录…")).toBeInTheDocument();
+    expect(screen.queryByText("离线账户")).toBeNull();
+  });
+
+  it("恢复期间不显示登录/退出按钮", () => {
+    // 还不知道要不要登录，给个按钮只会让人点错。
+    renderView({ restoring: true, account: null, msaLogin: true });
+
+    expect(screen.queryByRole("button", { name: "登录" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "退出" })).toBeNull();
+  });
+
+  it("恢复结束后没有账号才说「离线账户」并给出登录入口", () => {
+    renderView({ restoring: false, account: null, msaLogin: true });
+
+    expect(screen.getByText("离线账户")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "登录" })).toBeInTheDocument();
+  });
+
+  it("恢复成功则显示账号名与正版账户", () => {
+    renderView({
+      restoring: false,
+      account: { name: "Steve", uuid: "069a79f444e94726a5befca90e38aaf5" },
+      msaLogin: true,
+    });
+
+    expect(screen.getByText("正版账户")).toBeInTheDocument();
+    expect(screen.getByText("Steve")).toBeInTheDocument();
   });
 });

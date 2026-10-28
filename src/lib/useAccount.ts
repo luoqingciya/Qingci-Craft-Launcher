@@ -26,6 +26,13 @@ export type LoginPhase =
 export interface AccountController {
   /** 当前账号，未登录为 `null`。 */
   account: Account | null;
+  /**
+   * 是否仍在恢复上次的登录。
+   *
+   * 这段时间里「没有账号」和「还没查完」看起来一样，界面必须能区分——
+   * 否则会先闪一下「离线账户」再跳成「正版账户」。
+   */
+  restoring: boolean;
   /** 登录对话框阶段。 */
   phase: LoginPhase;
   /** 打开登录对话框并开始设备码流程。 */
@@ -44,6 +51,8 @@ export interface AccountController {
  */
 export function useAccount(): AccountController {
   const [account, setAccount] = useState<Account | null>(null);
+  // 初值为 true：挂载时后端多半还在用刷新令牌换新令牌。
+  const [restoring, setRestoring] = useState(true);
   const [phase, setPhase] = useState<LoginPhase>({ kind: "idle" });
 
   useEffect(() => {
@@ -73,9 +82,12 @@ export function useAccount(): AccountController {
             break;
           case "done":
             setAccount(state.account);
+            setRestoring(false);
             setPhase({ kind: "idle" });
             break;
           case "failed":
+            // 恢复失败也意味着「查完了」：这时说离线账户才是对的。
+            setRestoring(false);
             setPhase({ kind: "failed", message: state.message });
             break;
         }
@@ -86,11 +98,15 @@ export function useAccount(): AccountController {
     void currentAccount()
       .then((value) => {
         if (!disposed) {
-          setAccount(value);
+          setAccount(value.account);
+          setRestoring(value.restoring);
         }
       })
       .catch(() => {
         // 取不到就按未登录处理，不该因此弹错误——启动器其余功能照常可用。
+        if (!disposed) {
+          setRestoring(false);
+        }
       });
 
     return () => {
@@ -102,6 +118,8 @@ export function useAccount(): AccountController {
   }, []);
 
   const start = useCallback(() => {
+    // 用户主动登录：恢复流程已经作废，别再显示「正在恢复」。
+    setRestoring(false);
     setPhase({ kind: "starting" });
     void beginLogin().catch((cause: unknown) => {
       setPhase({ kind: "failed", message: String(cause) });
@@ -123,5 +141,5 @@ export function useAccount(): AccountController {
       .catch(() => {});
   }, []);
 
-  return { account, phase, start, cancel, signOut };
+  return { account, restoring, phase, start, cancel, signOut };
 }

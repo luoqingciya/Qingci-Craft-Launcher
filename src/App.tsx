@@ -466,6 +466,7 @@ export default function App() {
       portable={portable}
       runtime={runtime}
       account={account.account}
+      restoring={account.restoring}
       msaLogin={msaLogin}
       loginPhase={account.phase}
       onLogin={account.start}
