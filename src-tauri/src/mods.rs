@@ -266,28 +266,61 @@ pub struct ModUpdateDto {
 }
 
 /// 检查已安装模组是否有新版本。
+/// 一个与当前版本/加载器不兼容的已装模组。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IncompatibleModDto {
+    /// 已安装的文件名。
+    pub file_name: String,
+    /// Modrinth 项目 id。
+    pub project_id: String,
+}
+
+/// 一次更新检查的结果。
+///
+/// 两半对用户的意义不同：`updates` 点一下就解决，`incompatible` 得自己换版本或换模组。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateReportDto {
+    /// 有新版本的模组。
+    pub updates: Vec<ModUpdateDto>,
+    /// 当前版本/加载器下没有可用文件的模组。
+    pub incompatible: Vec<IncompatibleModDto>,
+}
+
 #[tauri::command]
 pub async fn check_mod_updates(
     state: tauri::State<'_, AppState>,
     version: String,
     loader: String,
-) -> Result<Vec<ModUpdateDto>, String> {
+) -> Result<UpdateReportDto, String> {
     let (downloader, _game_dir) = state.context()?;
 
-    let updates = qcl_mods::check_updates(&downloader, &version, &loader)
+    let report = qcl_mods::check_updates(&downloader, &version, &loader)
         .await
         .map_err(|error| error.to_string())?;
 
-    Ok(updates
-        .into_iter()
-        .map(|update| ModUpdateDto {
-            file_name: update.file_name,
-            project_id: update.project_id,
-            current_version: update.current_version,
-            latest_version: update.latest_version,
-            latest_file_name: update.latest_file_name,
-        })
-        .collect())
+    Ok(UpdateReportDto {
+        updates: report
+            .updates
+            .into_iter()
+            .map(|update| ModUpdateDto {
+                file_name: update.file_name,
+                project_id: update.project_id,
+                current_version: update.current_version,
+                latest_version: update.latest_version,
+                latest_file_name: update.latest_file_name,
+            })
+            .collect(),
+        incompatible: report
+            .incompatible
+            .into_iter()
+            .map(|item| IncompatibleModDto {
+                file_name: item.file_name,
+                project_id: item.project_id,
+            })
+            .collect(),
+    })
 }
 
 /// 更新一个模组：装最新版本，再删掉旧文件。

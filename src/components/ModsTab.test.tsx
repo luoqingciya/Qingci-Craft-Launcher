@@ -65,7 +65,7 @@ beforeEach(() => {
   removeMod.mockReset();
   listModCategories.mockReset();
   checkModUpdates.mockReset();
-  checkModUpdates.mockResolvedValue([]);
+  checkModUpdates.mockResolvedValue({ updates: [], incompatible: [] });
   updateMod.mockReset();
   listModCategories.mockResolvedValue([]);
   listMods.mockResolvedValue([]);
@@ -320,7 +320,7 @@ describe("纯分类浏览", () => {
 describe("更新检查", () => {
   it("没有更新时给出明确结论", async () => {
     listMods.mockResolvedValue([installed("sodium.jar")]);
-    checkModUpdates.mockResolvedValue([]);
+    checkModUpdates.mockResolvedValue({ updates: [], incompatible: [] });
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
     await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
@@ -332,15 +332,18 @@ describe("更新检查", () => {
 
   it("有新版本时显示版本变化并可更新", async () => {
     listMods.mockResolvedValue([installed("sodium-old.jar")]);
-    checkModUpdates.mockResolvedValue([
-      {
-        fileName: "sodium-old.jar",
-        projectId: "AANobbMI",
-        currentVersion: "0.9.0",
-        latestVersion: "0.9.3",
-        latestFileName: "sodium-new.jar",
-      },
-    ]);
+    checkModUpdates.mockResolvedValue({
+      updates: [
+        {
+          fileName: "sodium-old.jar",
+          projectId: "AANobbMI",
+          currentVersion: "0.9.0",
+          latestVersion: "0.9.3",
+          latestFileName: "sodium-new.jar",
+        },
+      ],
+      incompatible: [],
+    });
     updateMod.mockResolvedValue(["mods/sodium-new.jar"]);
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
@@ -386,15 +389,18 @@ describe("布局密度", () => {
 
   it("有更新时在子标签上标出数量，不用切页也能看到", async () => {
     listMods.mockResolvedValue([installed("sodium-old.jar")]);
-    checkModUpdates.mockResolvedValue([
-      {
-        fileName: "sodium-old.jar",
-        projectId: "AANobbMI",
-        currentVersion: "0.9.0",
-        latestVersion: "0.9.3",
-        latestFileName: "sodium-new.jar",
-      },
-    ]);
+    checkModUpdates.mockResolvedValue({
+      updates: [
+        {
+          fileName: "sodium-old.jar",
+          projectId: "AANobbMI",
+          currentVersion: "0.9.0",
+          latestVersion: "0.9.3",
+          latestFileName: "sodium-new.jar",
+        },
+      ],
+      incompatible: [],
+    });
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
     await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
@@ -482,5 +488,61 @@ describe("依赖提示", () => {
     await userEvent.click(screen.getAllByRole("button", { name: "依赖" })[0]);
 
     expect(await screen.findByText("没有必需依赖")).toBeInTheDocument();
+  });
+});
+
+describe("不兼容提示", () => {
+  it("检查后列出不适配当前版本的模组", async () => {
+    listMods.mockResolvedValue([installed("old-mod.jar", "oldproject"), installed("sodium.jar")]);
+    checkModUpdates.mockResolvedValue({
+      updates: [],
+      incompatible: [{ fileName: "old-mod.jar", projectId: "oldproject" }],
+    });
+
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
+
+    expect(await screen.findByText(/1 个模组不适配 26\.3 · Fabric 0\.20\.1/)).toBeInTheDocument();
+    // 汇总块和列表行各出现一次：用户既看得到「有几个」，也看得到「是哪个」。
+    expect(screen.getAllByText("old-mod.jar")).toHaveLength(2);
+    // 行上也有标记。
+    expect(screen.getByText("不适配")).toBeInTheDocument();
+  });
+
+  it("全部兼容时不出现警告块", async () => {
+    listMods.mockResolvedValue([installed("sodium.jar")]);
+    checkModUpdates.mockResolvedValue({ updates: [], incompatible: [] });
+
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
+
+    expect(await screen.findByText("所有模组都是最新版本")).toBeInTheDocument();
+    expect(screen.queryByText(/不适配/)).toBeNull();
+  });
+
+  it("有更新又有不兼容时两件事都说", async () => {
+    listMods.mockResolvedValue([installed("sodium-old.jar"), installed("old-mod.jar")]);
+    checkModUpdates.mockResolvedValue({
+      updates: [
+        {
+          fileName: "sodium-old.jar",
+          projectId: "AANobbMI",
+          currentVersion: "0.9.0",
+          latestVersion: "0.9.3",
+          latestFileName: "sodium-new.jar",
+        },
+      ],
+      incompatible: [{ fileName: "old-mod.jar", projectId: "oldproject" }],
+    });
+
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
+
+    // 提示条只说更新（它是成功色）；不兼容由上面那块警告单独说。
+    expect(await screen.findByText("1 个模组有新版本")).toBeInTheDocument();
+    expect(screen.getByText(/1 个模组不适配/)).toBeInTheDocument();
   });
 });

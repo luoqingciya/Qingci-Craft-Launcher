@@ -13,6 +13,7 @@ import {
   removeMod,
   searchMods,
   updateMod,
+  type IncompatibleMod,
   type InstalledMod,
   type ModDependency,
   type ModCategory,
@@ -59,7 +60,13 @@ export function ModsTab({
   // 删除是两步的：先点「删除」进入待确认，再点「确认删除」才真的动文件。
   const [confirming, setConfirming] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
-  const [updates, setUpdates] = useState<ModUpdate[]>([]);
+  // 检查结果带上「是给哪个版本/加载器查的」：切了版本还显示上一次的结果，
+  // 会把「不适配 26.3」挂到 1.20.1 上，比不显示更糟。
+  const [report, setReport] = useState<{
+    scope: string;
+    updates: ModUpdate[];
+    incompatible: IncompatibleMod[];
+  }>({ scope: "", updates: [], incompatible: [] });
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [updatingFile, setUpdatingFile] = useState<string | null>(null);
   // 搜索与已装分成两页：挤在一页里，谁都不够用。
@@ -79,6 +86,9 @@ export function ModsTab({
   const modLoader = loader ? "fabric" : "";
   // 后端在清单里记了「文件名 → Modrinth 项目 id」，据此判断搜索结果装没装过。
   // 手动扔进 mods/ 的 jar 没有项目 id，就不参与判断。
+  const reportScope = `${version ?? ""}|${loader}`;
+  const updates = report.scope === reportScope ? report.updates : [];
+  const incompatible = report.scope === reportScope ? report.incompatible : [];
   const installedIds = new Set(
     installed.flatMap((item) => (item.projectId ? [item.projectId] : [])),
   );
@@ -144,8 +154,14 @@ export function ModsTab({
     setNotice(null);
     try {
       const found = await checkModUpdates(version, modLoader);
-      setUpdates(found);
-      setNotice(found.length === 0 ? "所有模组都是最新版本" : `${found.length} 个模组有新版本`);
+      setReport({ scope: reportScope, updates: found.updates, incompatible: found.incompatible });
+      // 提示条是成功色，不能拿来说「有模组不适配」——那是警告，上面单独有一块。
+      // 所以这里只说更新；两件事都没有时才说「都是最新」。
+      if (found.updates.length > 0) {
+        setNotice(`${found.updates.length} 个模组有新版本`);
+      } else if (found.incompatible.length === 0) {
+        setNotice("所有模组都是最新版本");
+      }
     } catch (cause: unknown) {
       setError(String(cause));
     } finally {
@@ -163,7 +179,11 @@ export function ModsTab({
     try {
       await updateMod(update.projectId, update.fileName, version, modLoader);
       setNotice(`已更新到 ${update.latestVersion}`);
-      setUpdates((current) => current.filter((item) => item.fileName !== update.fileName));
+      // 更新完这条就不再是「有新版本」，从报告里摘掉，按钮立刻恢复。
+      setReport((current) => ({
+        ...current,
+        updates: current.updates.filter((item) => item.fileName !== update.fileName),
+      }));
       await refreshInstalled();
     } catch (cause: unknown) {
       setError(String(cause));
@@ -521,6 +541,26 @@ export function ModsTab({
             {checkingUpdates ? "检查中…" : "检查更新"}
           </button>
         </div>
+
+        {/*
+          不兼容单独一块、用警告色：它和「有新版本」不是一回事——
+          更新点一下就好，这个得用户自己换版本或换模组。
+        */}
+        {incompatible.length > 0 && (
+          <div className="mt-2 rounded-lg bg-[var(--color-warning)]/10 p-2.5 ring-1 ring-inset ring-[var(--color-warning)]/30">
+            <p className="text-[12px] font-medium text-[var(--color-warning)]">
+              {incompatible.length} 个模组不适配 {version}
+              {loader ? ` · Fabric ${loader}` : ""}
+            </p>
+            <p className="mt-1 break-all font-mono text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+              {incompatible.map((item) => item.fileName).join("、")}
+            </p>
+            <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-text-muted)]">
+              这些模组在 Modrinth 上没有当前版本的文件，装上也不会被加载。
+              换回它们支持的版本，或在 Modrinth 上找替代品。
+            </p>
+          </div>
+        )}
         {installed.length === 0 ? (
           <p className="mt-2 text-[12px] text-[var(--color-text-muted)]">
             还没有安装任何模组。
@@ -535,6 +575,13 @@ export function ModsTab({
                 <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-[var(--color-text-secondary)]">
                   {name}
                 </span>
+
+                {/* 单行也标一下：不用回头翻上面那块汇总也知道是哪一个。 */}
+                {incompatible.some((entry) => entry.fileName === name) && (
+                  <span className="shrink-0 rounded bg-[var(--color-warning)]/15 px-1.5 py-0.5 text-[10px] text-[var(--color-warning)]">
+                    不适配
+                  </span>
+                )}
 
                 {update && (
                   <>

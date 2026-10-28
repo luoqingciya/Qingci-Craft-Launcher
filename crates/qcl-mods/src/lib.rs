@@ -600,9 +600,9 @@ pub struct ModUpdate {
     pub latest_file_name: String,
 }
 
-/// 检查已安装模组有没有新版本。
+/// 检查已安装模组的更新与兼容性。
 ///
-/// 判断依据是**文件名不同**：Modrinth 的每个版本文件名都带版本号，
+/// 判断「有新版本」的依据是**文件名不同**：Modrinth 的每个版本文件名都带版本号，
 /// 同名意味着同一个文件。这比解析版本号字符串可靠——各作者的命名格式差别很大。
 ///
 /// 清单里没有的（用户手动丢进 `mods/` 的 jar）不参与检查：无法可靠地反推项目 id。
@@ -610,8 +610,30 @@ pub async fn check_updates(
     downloader: &HttpDownloader,
     game_version: &str,
     loader: &str,
-) -> Result<Vec<ModUpdate>, ModError> {
+) -> Result<UpdateReport, ModError> {
     check_updates_from(downloader, MODRINTH_API, game_version, loader).await
+}
+
+/// 同 [`check_updates`]，但可指定 API 根地址。
+/// 一个与当前游戏版本/加载器不兼容的已装模组。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncompatibleMod {
+    /// 已安装的文件名。
+    pub file_name: String,
+    /// Modrinth 项目 id。
+    pub project_id: String,
+}
+
+/// 一次更新检查的结果。
+///
+/// 分成两半是因为它们对用户的意义完全不同：`updates` 是「有新版本，点一下就好」，
+/// `incompatible` 是「这个模组在当前版本下根本跑不起来，得自己想办法」。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct UpdateReport {
+    /// 有新版本的模组。
+    pub updates: Vec<ModUpdate>,
+    /// 当前版本/加载器下没有可用文件的模组。
+    pub incompatible: Vec<IncompatibleMod>,
 }
 
 /// 同 [`check_updates`]，但可指定 API 根地址。
@@ -620,30 +642,35 @@ pub async fn check_updates_from(
     api: &str,
     game_version: &str,
     loader: &str,
-) -> Result<Vec<ModUpdate>, ModError> {
+) -> Result<UpdateReport, ModError> {
     let mods_dir = downloader.game_dir().join("mods");
     let manifest = manifest::prune(&mods_dir, manifest::load(&mods_dir));
 
-    let mut updates = Vec::new();
+    let mut report = UpdateReport::default();
 
     for (file_name, installed) in manifest {
-        // 某个模组在新版本里没有适配文件时跳过，而不是让整次检查失败。
-        let Ok(latest) =
-            resolve_file_from(downloader, api, &installed.project_id, game_version, loader).await
-        else {
-            continue;
-        };
-
-        if latest.filename != file_name {
-            updates.push(ModUpdate {
+        match resolve_file_from(downloader, api, &installed.project_id, game_version, loader).await
+        {
+            Ok(latest) => {
+                if latest.filename != file_name {
+                    report.updates.push(ModUpdate {
+                        file_name,
+                        project_id: installed.project_id,
+                        current_version: installed.version_number,
+                        latest_version: latest.version_number,
+                        latest_file_name: latest.filename,
+                    });
+                }
+            }
+            // 只有「明确没有适配文件」才算不兼容。网络或解析错误不能算——
+            // 一次断网就说「你的模组全废了」，比不报更糟。
+            Err(ModError::NoCompatibleFile(_)) => report.incompatible.push(IncompatibleMod {
                 file_name,
                 project_id: installed.project_id,
-                current_version: installed.version_number,
-                latest_version: latest.version_number,
-                latest_file_name: latest.filename,
-            });
+            }),
+            Err(_) => {}
         }
     }
 
-    Ok(updates)
+    Ok(report)
 }

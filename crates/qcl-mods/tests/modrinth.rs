@@ -531,13 +531,17 @@ async fn check_updates_reports_newer_files_only() {
     mount_project(&server, "AANobbMI", "sodium-new.jar", b"new", &[]).await;
     mount_project(&server, "gvQqBUqZ", "lithium.jar", b"same", &[]).await;
 
-    let updates = qcl_mods::check_updates_from(&downloader(&dir), &server.uri(), "26.3", "fabric")
+    let report = qcl_mods::check_updates_from(&downloader(&dir), &server.uri(), "26.3", "fabric")
         .await
         .expect("应能检查");
 
-    assert_eq!(updates.len(), 1, "只有文件名变了才算更新：{updates:?}");
-    assert_eq!(updates[0].file_name, "sodium-old.jar");
-    assert_eq!(updates[0].latest_file_name, "sodium-new.jar");
+    assert_eq!(
+        report.updates.len(),
+        1,
+        "只有文件名变了才算更新：{report:?}"
+    );
+    assert_eq!(report.updates[0].file_name, "sodium-old.jar");
+    assert_eq!(report.updates[0].latest_file_name, "sodium-new.jar");
 }
 
 #[tokio::test]
@@ -550,15 +554,15 @@ async fn check_updates_ignores_mods_without_manifest_entry() {
     // 用户手动丢进来的 jar：没有清单条目，无从得知项目 id。
     std::fs::write(mods.join("manual.jar"), b"x").expect("应能写入");
 
-    let updates = qcl_mods::check_updates_from(&downloader(&dir), &server.uri(), "26.3", "fabric")
+    let report = qcl_mods::check_updates_from(&downloader(&dir), &server.uri(), "26.3", "fabric")
         .await
         .expect("应能检查");
 
-    assert!(updates.is_empty());
+    assert!(report.updates.is_empty() && report.incompatible.is_empty());
 }
 
 #[tokio::test]
-async fn check_updates_skips_projects_without_compatible_file() {
+async fn check_updates_reports_projects_without_compatible_file() {
     let dir = TempDir::new().expect("临时目录");
     let server = MockServer::start().await;
     let mods = dir.path().join("mods");
@@ -573,11 +577,13 @@ async fn check_updates_skips_projects_without_compatible_file() {
         .mount(&server)
         .await;
 
-    let updates = qcl_mods::check_updates_from(&downloader(&dir), &server.uri(), "26.3", "fabric")
+    let report = qcl_mods::check_updates_from(&downloader(&dir), &server.uri(), "26.3", "fabric")
         .await
         .expect("单个项目失败不该让整次检查失败");
 
-    assert!(updates.is_empty());
+    assert!(report.updates.is_empty(), "没有适配文件不是「有新版本」");
+    assert_eq!(report.incompatible.len(), 1);
+    assert_eq!(report.incompatible[0].file_name, "gone.jar");
 }
 
 #[tokio::test]
@@ -594,10 +600,13 @@ async fn live_install_then_detect_update() {
     assert!(!installed.is_empty());
 
     // 2) 刚装完就是最新，不该报更新。
-    let updates = qcl_mods::check_updates(&downloader, "26.3", "fabric")
+    let report = qcl_mods::check_updates(&downloader, "26.3", "fabric")
         .await
         .expect("应能检查");
-    assert!(updates.is_empty(), "刚装完不该有更新：{updates:?}");
+    assert!(
+        report.updates.is_empty() && report.incompatible.is_empty(),
+        "刚装完不该有更新：{report:?}"
+    );
 
     // 3) 把清单改成一个旧版本的文件名（模拟「装的是老版本」），应能识别出更新。
     let mods_dir = dir.path().join("mods");
@@ -609,14 +618,14 @@ async fn live_install_then_detect_update() {
         .expect("应能记下");
     qcl_mods::manifest::forget(&mods_dir, file_name).expect("应能忘掉旧名");
 
-    let updates = qcl_mods::check_updates(&downloader, "26.3", "fabric")
+    let report = qcl_mods::check_updates(&downloader, "26.3", "fabric")
         .await
         .expect("应能检查");
 
-    assert_eq!(updates.len(), 1, "应识别出一个更新：{updates:?}");
-    assert_eq!(updates[0].file_name, fake_old);
-    assert_eq!(updates[0].current_version, "0.0.1");
-    assert_ne!(updates[0].latest_file_name, fake_old);
+    assert_eq!(report.updates.len(), 1, "应识别出一个更新：{report:?}");
+    assert_eq!(report.updates[0].file_name, fake_old);
+    assert_eq!(report.updates[0].current_version, "0.0.1");
+    assert_ne!(report.updates[0].latest_file_name, fake_old);
 }
 
 /// 带必需依赖与可选依赖的版本响应。
@@ -730,4 +739,28 @@ async fn dependencies_are_empty_for_a_standalone_mod() {
     .expect("应能查到依赖");
 
     assert!(deps.is_empty());
+}
+
+#[tokio::test]
+async fn check_updates_does_not_call_network_errors_incompatible() {
+    // 一次断网就把用户的模组全标成「不兼容」，比不报还糟。
+    let dir = TempDir::new().expect("临时目录");
+    let server = MockServer::start().await;
+    let mods = dir.path().join("mods");
+    std::fs::create_dir_all(&mods).expect("应能建目录");
+    std::fs::write(mods.join("sodium.jar"), b"x").expect("应能写入");
+    qcl_mods::manifest::remember(&mods, "sodium.jar", "AANobbMI", "1.0").expect("应能记下");
+
+    Mock::given(method("GET"))
+        .and(path("/project/AANobbMI/version"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+
+    let report = qcl_mods::check_updates_from(&downloader(&dir), &server.uri(), "26.3", "fabric")
+        .await
+        .expect("应能检查");
+
+    assert!(report.updates.is_empty());
+    assert!(report.incompatible.is_empty(), "网络错误不是不兼容");
 }
