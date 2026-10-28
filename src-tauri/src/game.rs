@@ -343,6 +343,24 @@ pub fn reveal_crash_report(
         .map_err(|error| format!("打开文件管理器失败：{error}"))
 }
 
+/// 用系统文件管理器打开当前实例的游戏目录。
+///
+/// 路径从后端状态取，**不接受前端传入**：一旦接受路径，这个命令就成了
+/// 「让系统打开任意目录」的通道，而它本来只需要打开一个固定的地方。
+///
+/// 之前前端直接调 `plugin:opener|open_path`，而 `opener:default` 权限集
+/// 只含 open-url 与 reveal-item，点一下就是一句 ACL 拒绝。走自己的命令
+/// 既修掉了这个错，也不用为此放开一个 `**` 作用域的 open_path 权限。
+#[tauri::command]
+pub fn open_game_dir(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+
+    let (_, game_dir) = state.context()?;
+    app.opener()
+        .open_path(game_dir.display().to_string(), None::<&str>)
+        .map_err(|error| format!("打开游戏目录失败：{error}"))
+}
+
 /// 查询运行状态。界面重新挂载时用它同步。
 #[tauri::command]
 pub fn game_status(state: tauri::State<'_, AppState>) -> Result<GameStatus, String> {

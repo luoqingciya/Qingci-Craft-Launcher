@@ -19,6 +19,7 @@ import {
   deleteInstance,
   listMods,
   listVersions,
+  openGameDir as openDir,
   renameInstance,
   switchInstance,
   rememberSelection,
@@ -365,19 +366,20 @@ export default function App() {
     }
   }, []);
 
-  /** 用系统文件管理器打开当前实例的游戏目录。 */
+  /**
+   * 用系统文件管理器打开当前实例的游戏目录。
+   *
+   * 走自己的命令，而不是前端的 `plugin:opener|open_path`：后者需要单独放开一个
+   * 作用域权限，而 `opener:default` 只含 open-url 与 reveal-item，点一下就是
+   * 一句 ACL 拒绝。路径本来就在后端手里，也没必要让前端传。
+   */
   const openGameDir = useCallback(async () => {
-    const dir = settings?.gameDir;
-    if (!dir) {
-      return;
-    }
     try {
-      const { openPath } = await import("@tauri-apps/plugin-opener");
-      await openPath(dir);
+      await openDir();
     } catch (cause: unknown) {
       setError(`打开游戏目录失败：${String(cause)}`);
     }
-  }, [settings?.gameDir]);
+  }, []);
 
   const refreshJava = useCallback(async () => {
     try {
@@ -422,6 +424,9 @@ export default function App() {
     setExitCode(undefined);
     setCrashReport(null);
     setCrashDismissed(false);
+    // 启动前后端会补齐文件（幂等），有缺口时会发进度事件。
+    // 先把上一次的进度清掉，结束时无论成败都清——否则那个「100%」的浮层会一直挂着。
+    setProgress(null);
     try {
       await launchGame(selected, loader === "" ? null : loader);
       setStatus({ running: true, version: selected });
@@ -429,6 +434,7 @@ export default function App() {
       setError(String(cause));
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   }, [selected, loader, showMessage]);
 

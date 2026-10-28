@@ -779,7 +779,8 @@ pub fn run() {
             game::launch_game,
             game::stop_game,
             game::game_status,
-            game::reveal_crash_report
+            game::reveal_crash_report,
+            game::open_game_dir
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");

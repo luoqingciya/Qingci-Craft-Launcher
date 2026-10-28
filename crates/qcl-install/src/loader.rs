@@ -220,6 +220,18 @@ pub async fn resolve_libraries(
     Ok(libraries)
 }
 
+/// 合并后的版本 id，形如 `fabric-loader-0.20.1-26.3`。
+///
+/// Fabric 的 profile 自带这个 id，但**拿到它需要联网**。启动前要先看本地有没有
+/// 合并结果，就必须在不联网的情况下算出同一个值，所以单独抽出来。
+///
+/// 万一上游改了命名规则，这里算出来的 id 就找不到本地文件——退化成联网取一次，
+/// 结果依然正确，只是慢。这个失败方向是安全的。
+#[must_use]
+pub fn merged_version_id(game_version: &str, loader_version: &str) -> String {
+    format!("fabric-loader-{loader_version}-{game_version}")
+}
+
 /// 把加载器 profile 合并进原版元数据。
 ///
 /// 合并后的 `id` 用加载器 profile 的 id，因此版本目录、客户端 jar 与 classpath

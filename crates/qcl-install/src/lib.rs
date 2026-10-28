@@ -25,7 +25,7 @@ pub use assets::{AssetError, AssetInstallOptions, AssetInstallReport, install_as
 pub use loader::{
     FABRIC_MAVEN_BASE, FABRIC_META_BASE, FabricLibrary, FabricProfile, LoaderError, LoaderInfo,
     fetch_loader_list, fetch_loader_list_from, fetch_profile, fetch_profile_from, inherits_from,
-    merge, resolve_libraries,
+    merge, merged_version_id, resolve_libraries,
 };
 pub use manifest::{
     ManifestError, VERSION_MANIFEST_URL, fetch_manifest, fetch_manifest_from, fetch_meta,
