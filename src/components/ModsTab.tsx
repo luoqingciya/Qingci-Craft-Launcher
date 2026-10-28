@@ -12,6 +12,7 @@ import {
   removeMod,
   searchMods,
   updateMod,
+  type InstalledMod,
   type ModCategory,
   type ModHit,
   type ModUpdate,
@@ -36,9 +37,6 @@ const SORTS: { id: "relevance" | "downloads"; label: string }[] = [
   { id: "downloads", label: "下载量" },
 ];
 
-/** 空的「本次已装」集合：作用域不匹配时复用它，避免每次渲染都 new 一个。 */
-const EMPTY_IDS: ReadonlySet<string> = new Set();
-
 export function ModsTab({
   version,
   loader,
@@ -53,7 +51,7 @@ export function ModsTab({
   // 中文输入会被换成英文关键词，把实际用的词显示出来，避免「我明明搜的是钠」的困惑。
   const [resolvedQuery, setResolvedQuery] = useState<string | null>(null);
   const [results, setResults] = useState<ModHit[]>([]);
-  const [installed, setInstalled] = useState<string[]>([]);
+  const [installed, setInstalled] = useState<InstalledMod[]>([]);
   const [searching, setSearching] = useState(false);
   const [installingId, setInstallingId] = useState<string | null>(null);
   // 删除是两步的：先点「删除」进入待确认，再点「确认删除」才真的动文件。
@@ -70,17 +68,13 @@ export function ModsTab({
   const [notice, setNotice] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [sort, setSort] = useState<"relevance" | "downloads">("relevance");
-  // 本次会话装过哪些项目。真正的「已安装」需要后端把 jar 文件名映射回项目 id，
-  // 现在做不到；先只记本会话，至少避免同一个模组被连点两次。
-  const [installedHere, setInstalledHere] = useState<{ scope: string; ids: string[] }>({
-    scope: "",
-    ids: [],
-  });
 
   const modLoader = loader ? "fabric" : "";
-  // 版本或加载器一换，之前记下的「装过」就不再适用了。
-  const scope = `${version ?? ""}|${loader}`;
-  const installedIds = installedHere.scope === scope ? new Set(installedHere.ids) : EMPTY_IDS;
+  // 后端在清单里记了「文件名 → Modrinth 项目 id」，据此判断搜索结果装没装过。
+  // 手动扔进 mods/ 的 jar 没有项目 id，就不参与判断。
+  const installedIds = new Set(
+    installed.flatMap((item) => (item.projectId ? [item.projectId] : [])),
+  );
   // 用副本 + sort 而不是 `toSorted`：后者是 ES2023，macOS 12 上的 Safari 15 没有，
   // 而项目支持 macOS 12+。tsconfig 的 target 也是 ES2022。
   // oxlint-disable-next-line unicorn/no-array-sort
@@ -217,9 +211,6 @@ export function ModsTab({
           : `已安装到 ${paths[0] ?? "mods/"}`,
       );
       await refreshInstalled();
-      // 记下「这次装过」，让按钮变成不可重复点的「已安装」。
-      const known = installedHere.scope === scope ? installedHere.ids : [];
-      setInstalledHere({ scope, ids: [...known, hit.projectId] });
     } catch (cause: unknown) {
       setError(String(cause));
     } finally {
@@ -467,8 +458,9 @@ export function ModsTab({
           </p>
         ) : (
           <ul className="mt-2 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-            {installed.map((name) => {
-              const update = updates.find((item) => item.fileName === name);
+            {installed.map((item) => {
+              const name = item.fileName;
+              const update = updates.find((entry) => entry.fileName === name);
               return (
               <li key={name} className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-[var(--color-text-secondary)]">

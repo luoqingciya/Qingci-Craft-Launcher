@@ -34,6 +34,11 @@ const HITS = [
 const searchMods = vi.fn();
 const installMod = vi.fn();
 const listMods = vi.fn();
+
+/** 构造一条已装记录。默认没有来源（模拟手动扔进 mods/ 的 jar）。 */
+function installed(fileName: string, projectId: string | null = null) {
+  return { fileName, projectId, versionNumber: projectId ? "1.0" : null };
+}
 const removeMod = vi.fn();
 const listModCategories = vi.fn();
 const checkModUpdates = vi.fn();
@@ -92,7 +97,7 @@ describe("ModsTab", () => {
   it("安装后提示落地路径并刷新已装列表", async () => {
     searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
     installMod.mockResolvedValue(["mods/sodium.jar"]);
-    listMods.mockResolvedValueOnce([]).mockResolvedValueOnce(["sodium.jar"]);
+    listMods.mockResolvedValueOnce([]).mockResolvedValueOnce([installed("sodium.jar")]);
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
     await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
@@ -143,7 +148,7 @@ describe("formatDownloads", () => {
 
 describe("卸载", () => {
   it("删除是两步的：先确认，再真的删", async () => {
-    listMods.mockResolvedValue(["sodium.jar"]);
+    listMods.mockResolvedValue([installed("sodium.jar")]);
     removeMod.mockResolvedValue(undefined);
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
@@ -160,7 +165,7 @@ describe("卸载", () => {
   });
 
   it("可以取消删除", async () => {
-    listMods.mockResolvedValue(["sodium.jar"]);
+    listMods.mockResolvedValue([installed("sodium.jar")]);
     render(<ModsTab version="26.3" loader="0.20.1" />);
     await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
 
@@ -172,7 +177,7 @@ describe("卸载", () => {
   });
 
   it("删除失败时显示错误", async () => {
-    listMods.mockResolvedValue(["sodium.jar"]);
+    listMods.mockResolvedValue([installed("sodium.jar")]);
     removeMod.mockRejectedValue("文件被占用");
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
@@ -310,7 +315,7 @@ describe("纯分类浏览", () => {
 
 describe("更新检查", () => {
   it("没有更新时给出明确结论", async () => {
-    listMods.mockResolvedValue(["sodium.jar"]);
+    listMods.mockResolvedValue([installed("sodium.jar")]);
     checkModUpdates.mockResolvedValue([]);
 
     render(<ModsTab version="26.3" loader="0.20.1" />);
@@ -322,7 +327,7 @@ describe("更新检查", () => {
   });
 
   it("有新版本时显示版本变化并可更新", async () => {
-    listMods.mockResolvedValue(["sodium-old.jar"]);
+    listMods.mockResolvedValue([installed("sodium-old.jar")]);
     checkModUpdates.mockResolvedValue([
       {
         fileName: "sodium-old.jar",
@@ -361,7 +366,7 @@ describe("更新检查", () => {
 
 describe("布局密度", () => {
   it("默认停在搜索页，切到「已安装」才显示列表", async () => {
-    listMods.mockResolvedValue(["sodium.jar"]);
+    listMods.mockResolvedValue([installed("sodium.jar")]);
     render(<ModsTab version="26.3" loader="0.20.1" />);
 
     // 两页分开：搜索结果与已装列表不再争同一块高度。
@@ -376,7 +381,7 @@ describe("布局密度", () => {
   });
 
   it("有更新时在子标签上标出数量，不用切页也能看到", async () => {
-    listMods.mockResolvedValue(["sodium-old.jar"]);
+    listMods.mockResolvedValue([installed("sodium-old.jar")]);
     checkModUpdates.mockResolvedValue([
       {
         fileName: "sodium-old.jar",
@@ -408,5 +413,32 @@ describe("布局密度", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /更多 4/ }));
     expect(screen.getByRole("button", { name: "分类8" })).toBeInTheDocument();
+  });
+});
+
+describe("已安装标记来自后端清单", () => {
+  it("清单里有项目 id 的结果标成「已安装」，其余仍是「安装」", async () => {
+    // 关键点：判断依据是清单里的 projectId，不是文件名。
+    // 文件名格式各家都不一样，靠猜必然出错。
+    searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
+    listMods.mockResolvedValue([installed("sodium-fabric-0.6.13.jar", "AANobbMI")]);
+
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
+
+    expect(await screen.findByRole("button", { name: "已安装" })).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: "安装" })).toHaveLength(1);
+  });
+
+  it("手动放进 mods/ 的 jar 不影响搜索结果", async () => {
+    // 没有 projectId 的条目不该让任何结果变成「已安装」。
+    searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
+    listMods.mockResolvedValue([installed("whatever.jar")]);
+
+    render(<ModsTab version="26.3" loader="0.20.1" />);
+    await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
+
+    expect(await screen.findByText("钠")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "已安装" })).toBeNull();
   });
 });

@@ -310,9 +310,19 @@ export function installMod(
   return invoke<string[]>("install_mod", { projectId, version, loader });
 }
 
-/** 列出已安装的模组文件名。 */
-export function listMods(): Promise<string[]> {
-  return invoke<string[]>("list_mods");
+/** 一个已安装的模组。 */
+export interface InstalledMod {
+  /**  下的文件名。 */
+  fileName: string;
+  /** Modrinth 项目 id；手动放进 mods/ 的 jar 为 null。 */
+  projectId: string | null;
+  /** 安装时的版本号；未知来源时为 null。 */
+  versionNumber: string | null;
+}
+
+/** 列出已安装的模组。带来源信息，界面据此判断搜索结果装没装过。 */
+export function listMods(): Promise<InstalledMod[]> {
+  return invoke<InstalledMod[]>("list_mods");
 }
 
 /** 删除一个已安装的模组。只接受 mods/ 下的 .jar 文件名。 */
