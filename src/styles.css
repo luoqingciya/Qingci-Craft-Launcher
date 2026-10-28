@@ -133,3 +133,19 @@ body {
     animation: none;
   }
 }
+
+/*
+  内存滑块。
+  用 `accent-color` 而不是自绘轨道：自绘要分别处理 -webkit-slider-runnable-track
+  与 -moz-range-track，而这里只需要一条轨道加一个圆点，原生控件在三个 WebView 上
+  都够看。主色跟着主题变量走，深色模式下自动变亮。
+*/
+.memory-range {
+  cursor: pointer;
+  accent-color: var(--color-accent);
+}
+
+.memory-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
