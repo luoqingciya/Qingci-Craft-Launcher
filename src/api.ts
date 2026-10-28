@@ -248,6 +248,11 @@ export function runtimeInfo(): Promise<RuntimeInfo> {
   return invoke<RuntimeInfo>("runtime_info");
 }
 
+/** 用系统文件管理器打开当前实例的游戏目录。 */
+export function openGameDir(): Promise<void> {
+  return invoke<void>("open_game_dir");
+}
+
 /** 在文件管理器里选中崩溃报告。 */
 export function revealCrashReport(path: string): Promise<void> {
   return invoke<void>("reveal_crash_report", { path });

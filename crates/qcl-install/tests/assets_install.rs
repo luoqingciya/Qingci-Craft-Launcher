@@ -394,3 +394,52 @@ async fn progress_reaches_completion() {
         "进度应最终到达完成状态"
     );
 }
+
+#[tokio::test]
+async fn cached_index_is_used_when_the_network_is_unreachable() {
+    // 启动前会跑一次「补齐文件」，它是幂等的。装完之后断网也该能启动，
+    // 而不是卡在「重新下载资产索引」——索引有几 MB，每次重下既慢又没必要。
+    let dir = TempDir::new().expect("临时目录");
+    let (server, meta) = serve("34").await;
+
+    install_assets(downloader(&dir), &meta, &options(&server), |_| {})
+        .await
+        .expect("首次安装应成功");
+
+    let body = index_body();
+    // 把索引地址换成一个必然连不上的端口：真去联网这一步就会失败。
+    let offline = meta_with_index(
+        "34",
+        "http://127.0.0.1:1/indexes/34.json",
+        &hex_sha1(body.as_bytes()),
+        body.len() as u64,
+    );
+
+    let report = install_assets(downloader(&dir), &offline, &options(&server), |_| {})
+        .await
+        .expect("索引已在本地，断网也该能完成");
+
+    assert_eq!(report.downloaded, 0);
+    assert_eq!(report.skipped, 2);
+}
+
+#[tokio::test]
+async fn corrupted_cached_index_falls_back_to_the_network() {
+    // 缓存坏了要能自愈，而不是一直用坏的那份。
+    let dir = TempDir::new().expect("临时目录");
+    let (server, meta) = serve("34").await;
+
+    let index_file = dir.path().join("assets/indexes/34.json");
+    std::fs::create_dir_all(index_file.parent().expect("有父目录")).expect("建目录");
+    std::fs::write(&index_file, r#"{"objects":{}}"#).expect("写入坏索引");
+
+    let report = install_assets(downloader(&dir), &meta, &options(&server), |_| {})
+        .await
+        .expect("坏缓存应回落到联网");
+
+    assert_eq!(report.downloaded, 2);
+    assert_eq!(
+        std::fs::read_to_string(&index_file).expect("索引应被修好"),
+        index_body()
+    );
+}

@@ -122,6 +122,13 @@ pub(crate) async fn load_meta_with_loader(
         return Ok(parent);
     };
 
+    // 装过一次之后，合并结果就落在 `versions/<id>/<id>.json`。启动前先看本地：
+    // 每次启动都去上游取 profile 与库摘要，断网就等于拒绝启动——而文件其实早就齐了。
+    let merged_id = qcl_install::merged_version_id(&parent.id, loader_version);
+    if let Some(meta) = read_local_meta(downloader.game_dir(), &merged_id) {
+        return Ok(meta);
+    }
+
     let profile = fetch_profile(downloader, &parent.id, loader_version)
         .await
         .map_err(|error| format!("获取 Fabric profile 失败：{error}"))?;
@@ -185,8 +192,16 @@ pub(crate) async fn install_with_progress(
     // 进度事件按 1% 粒度节流：5147 个资产对象逐个 emit 会把 IPC 淹掉，
     // 而界面上的进度条只需要 1% 的精度。
     let last = Arc::new(Mutex::new((None::<InstallPhase>, u32::MAX)));
+    // 全部命中缓存时这次调用只持续几百毫秒（只是逐个 stat 一遍），进度条闪一下
+    // 比不显示更烦人——尤其是「启动前补齐文件」这条路径，每次启动都会走。
+    // 真有下载时会自然跨过这个窗口。
+    let started = std::time::Instant::now();
     let handle = app.clone();
     let progress = move |InstallProgress { phase, progress }| {
+        if started.elapsed() < std::time::Duration::from_millis(300) {
+            return;
+        }
+
         let percent = (progress.completed_files * 100)
             .checked_div(progress.total_files)
             .unwrap_or(100) as u32;
@@ -408,5 +423,56 @@ mod live_tests {
             read_local_meta(dir.path(), &merged.id).is_some(),
             "合并结果应已写入 versions/<id>/<id>.json"
         );
+    }
+}
+
+#[cfg(test)]
+mod offline_tests {
+    use super::{load_meta_with_loader, write_local_meta};
+    use qcl_core::version::VersionMeta;
+    use qcl_net::HttpDownloader;
+    use tempfile::TempDir;
+
+    fn meta(id: &str, main_class: &str) -> VersionMeta {
+        let raw = r#"{
+            "id": "__ID__",
+            "type": "release",
+            "mainClass": "__MAIN__",
+            "releaseTime": "2026-09-15T11:23:02+00:00",
+            "time": "2026-09-15T11:23:02+00:00",
+            "libraries": [],
+            "arguments": { "game": [], "jvm": [] }
+        }"#
+        .replace("__ID__", id)
+        .replace("__MAIN__", main_class);
+
+        serde_json::from_str(&raw).expect("夹具应可解析")
+    }
+
+    #[tokio::test]
+    async fn merged_meta_comes_from_disk_when_present() {
+        // 装过一次之后合并结果就在 `versions/<id>/<id>.json`。启动不该再去上游
+        // 取 profile 与库摘要——断网就等于拒绝启动，而文件其实早就齐了。
+        let dir = TempDir::new().expect("临时目录");
+        write_local_meta(dir.path(), &meta("26.3", "net.minecraft.client.main.Main"))
+            .expect("写入原版");
+
+        // 塞一个上游绝不可能产生的标记：返回它就证明走的是本地文件。
+        write_local_meta(
+            dir.path(),
+            &meta("fabric-loader-0.20.1-26.3", "qcl.test.LocalMarker"),
+        )
+        .expect("写入合并结果");
+
+        let downloader = HttpDownloader::new(dir.path()).expect("下载器");
+        let loaded = load_meta_with_loader(&downloader, "26.3", Some("0.20.1"))
+            .await
+            .expect("本地已有合并结果");
+
+        assert_eq!(
+            loaded.main_class, "qcl.test.LocalMarker",
+            "不该用上游结果覆盖本地的合并结果"
+        );
+        assert_eq!(loaded.id, "fabric-loader-0.20.1-26.3");
     }
 }

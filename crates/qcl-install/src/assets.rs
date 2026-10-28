@@ -103,25 +103,35 @@ where
     F: Fn(Progress) + Send + Sync + 'static,
 {
     let index_task = asset_index_task(meta, &options.assets_dir).ok_or(AssetError::MissingIndex)?;
+    let index_file = downloader.game_dir().join(&index_task.path);
 
     // 1. 索引本身也校验。它是后续所有文件的来源，不校验则逐对象校验形同虚设。
-    //    校验在写盘之前完成，失败时磁盘上不会留下任何东西。
-    let raw = downloader.fetch_text(&index_task.url).await?;
-    if !verify_sha1(&index_task.sha1, raw.as_bytes()) {
-        return Err(AssetError::IndexChecksum);
-    }
-    let index: AssetObjects = serde_json::from_str(&raw)?;
+    //
+    // 本地已有一份、且摘要对得上就不再联网：启动前补齐文件是幂等的，装完之后
+    // 断网也该能启动，而不是卡在「重新下载资产索引」这一步。索引有几 MB，
+    // 每次启动都重下既慢又毫无必要。
+    let raw = match std::fs::read_to_string(&index_file) {
+        Ok(cached) if verify_sha1(&index_task.sha1, cached.as_bytes()) => cached,
+        _ => {
+            let fetched = downloader.fetch_text(&index_task.url).await?;
+            if !verify_sha1(&index_task.sha1, fetched.as_bytes()) {
+                return Err(AssetError::IndexChecksum);
+            }
 
-    // 校验通过后把索引落盘到 `assets/indexes/<id>.json`，与官方启动器一致。
-    // 游戏不读它，但保留一份能让「对象目录被误删后重新校验」和离线排查有据可依；
-    // 端到端跑一次才发现此前只用了索引的 URL 与摘要，文件本身没有写出来。
-    let index_file = downloader.game_dir().join(&index_task.path);
-    if let Some(parent) = index_file.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| AssetError::Io(format!("{}: {error}", parent.display())))?;
-    }
-    std::fs::write(&index_file, &raw)
-        .map_err(|error| AssetError::Io(format!("{}: {error}", index_file.display())))?;
+            // 校验通过后才落盘，与官方启动器一致。游戏不读它，但留着能让
+            // 「对象目录被误删后重新校验」与离线排查有据可依。
+            if let Some(parent) = index_file.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|error| AssetError::Io(format!("{}: {error}", parent.display())))?;
+            }
+            std::fs::write(&index_file, &fetched)
+                .map_err(|error| AssetError::Io(format!("{}: {error}", index_file.display())))?;
+
+            fetched
+        }
+    };
+
+    let index: AssetObjects = serde_json::from_str(&raw)?;
 
     // 2. 生成对象计划并交给下载执行器。重试、并发、`.part` 原子落盘全部继承。
     let plan = plan_assets_with_base(&index, &options.assets_dir, &options.objects_base);
