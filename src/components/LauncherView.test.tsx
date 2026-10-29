@@ -25,6 +25,7 @@ const SETTINGS: SettingsView = {
   memoryRange: [512, 65536],
   selectedVersion: null,
   loaderVersion: null,
+  loaderKind: null,
   downloadSource: "official",
   instances: [{ name: "默认", gameDir: "C:\\games\\qcl", isDefaultDir: false, active: true, selectedVersion: null, loaderVersion: null, loaderKind: null }],
   activeInstance: "默认",
