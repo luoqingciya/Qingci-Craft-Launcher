@@ -135,9 +135,18 @@ fn 镜像启用时官方地址作为兜底排在后面() {
 }
 
 #[test]
-fn 官方源只有一个候选() {
-    let url = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
-    assert_eq!(DownloadSource::Official.candidates(url).len(), 1);
+fn 官方源也带镜像兜底() {
+    // 反过来同样要回落：`meta.fabricmc.net` 在部分网络下根本连不通，
+    // 只给官方地址等于把加载器安装卡死（用户实际遇到过）。
+    let url = "https://meta.fabricmc.net/v2/versions/loader/26.2/0.20.1/profile/json";
+    let candidates = DownloadSource::Official.candidates(url);
+
+    assert_eq!(candidates.len(), 2, "官方优先 + 镜像兜底");
+    assert_eq!(candidates[0], url, "首选必须是官方");
+    assert_eq!(
+        candidates[1],
+        "https://bmclapi2.bangbang93.com/fabric-meta/v2/versions/loader/26.2/0.20.1/profile/json"
+    );
 }
 
 #[test]

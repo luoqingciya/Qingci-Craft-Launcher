@@ -343,7 +343,11 @@ export function LauncherView({
 
       {tab === "mods" && (
         <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-br from-[var(--color-canvas-from)] to-[var(--color-canvas-to)]">
-          <ModsTab version={selected} loader={loader} />
+          <ModsTab
+            version={selected}
+            loader={loader}
+            instance={settings?.activeInstance ?? ""}
+          />
         </div>
       )}
 

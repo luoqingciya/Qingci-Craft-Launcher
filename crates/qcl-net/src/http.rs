@@ -13,7 +13,9 @@
 //! 3. **边下边算哈希**。避免为了校验把几十 MB 的文件再读一遍。
 
 use std::path::{Component, Path, PathBuf};
-use std::time::Duration;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use futures_util::StreamExt;
@@ -31,12 +33,60 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// 读取本地文件校验时的缓冲区大小。
 const VERIFY_BUFFER: usize = 64 * 1024;
 
+/// 镜像连续失败多少次后暂时不再尝试它。
+///
+/// 实测过一种情况：BMCLAPI 的**资产**端点在某个网络下 8 个请求里 7 个直接
+/// reset，而官方端点 8/8 成功。此时若每个文件都先试一次镜像，每个文件就多花
+/// 半秒左右，几千个资产叠加起来就是「下载很慢」。
+const MIRROR_FAILURE_THRESHOLD: u32 = 5;
+
+/// 熔断持续时间。到点后再给镜像一次机会——网络状况会变，不能永久拉黑。
+const MIRROR_OPEN_FOR: Duration = Duration::from_secs(60);
+
+/// 镜像熔断器：连续失败到阈值就暂时把镜像排到候选末尾。
+#[derive(Debug, Default)]
+struct MirrorBreaker {
+    failures: AtomicU32,
+    open_until: std::sync::Mutex<Option<Instant>>,
+}
+
+impl MirrorBreaker {
+    /// 是否处于熔断期。
+    fn is_open(&self) -> bool {
+        let guard = self
+            .open_until
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard.is_some_and(|until| Instant::now() < until)
+    }
+
+    /// 记一次镜像失败；到阈值就打开熔断。
+    fn record_failure(&self) {
+        let count = self.failures.fetch_add(1, Ordering::Relaxed) + 1;
+        if count >= MIRROR_FAILURE_THRESHOLD {
+            let mut guard = self
+                .open_until
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            *guard = Some(Instant::now() + MIRROR_OPEN_FOR);
+            self.failures.store(0, Ordering::Relaxed);
+        }
+    }
+
+    /// 镜像成功一次就清零：要的是**连续**失败，偶发一两次不该累积。
+    fn record_success(&self) {
+        self.failures.store(0, Ordering::Relaxed);
+    }
+}
+
 /// 基于 HTTP 与本地文件系统的下载器。
 #[derive(Debug, Clone)]
 pub struct HttpDownloader {
     client: reqwest::Client,
     game_dir: PathBuf,
     source: DownloadSource,
+    /// 熔断状态随 `Clone` 共享：同一个下载器的所有副本看的是同一份统计。
+    mirror: Arc<MirrorBreaker>,
 }
 
 impl HttpDownloader {
@@ -74,6 +124,19 @@ impl HttpDownloader {
         self.source
     }
 
+    /// 候选地址，附带镜像熔断。
+    ///
+    /// 熔断打开时把镜像排到末尾：仍然留作最后手段，但不再让每个文件都先陪它
+    /// 失败一次。实测镜像的资产端点整段不可用时，这一改动把每文件的固定开销
+    /// 从「一次失败的镜像请求」降到零。
+    fn candidates<'a>(&self, url: &'a str) -> Vec<std::borrow::Cow<'a, str>> {
+        let candidates = self.source.candidates(url);
+        if self.source == DownloadSource::Bmclapi && candidates.len() > 1 && self.mirror.is_open() {
+            return candidates.into_iter().rev().collect();
+        }
+        candidates
+    }
+
     /// 按下载源的顺序发请求，成功就返回。
     ///
     /// 镜像优先、官方兜底。**必须有兜底**：BMCLAPI 的元数据端点会 302 到
@@ -93,15 +156,29 @@ impl HttpDownloader {
         let mut last_response: Option<reqwest::Response> = None;
         let mut last_error: Option<DownloadError> = None;
 
-        for candidate in self.source.candidates(url) {
+        for candidate in self.candidates(url) {
+            let is_mirror = candidate.as_ref() != url;
             match build(&self.client, candidate.as_ref()).send().await {
-                Ok(response) if response.status().is_success() => return Ok(response),
+                Ok(response) if response.status().is_success() => {
+                    if is_mirror {
+                        self.mirror.record_success();
+                    }
+                    return Ok(response);
+                }
                 Ok(response) => {
+                    if is_mirror {
+                        self.mirror.record_failure();
+                    }
                     // 全部失败时把最后一个响应交回去，让调用方按原有逻辑报错，
                     // 这样错误信息里才有真实的状态码，而不是一句笼统的「都失败了」。
                     last_response = Some(response);
                 }
-                Err(error) => last_error = Some(DownloadError::Network(error.to_string())),
+                Err(error) => {
+                    if is_mirror {
+                        self.mirror.record_failure();
+                    }
+                    last_error = Some(DownloadError::Network(error.to_string()));
+                }
             }
         }
 
@@ -119,6 +196,7 @@ impl HttpDownloader {
             client,
             game_dir: game_dir.into(),
             source: DownloadSource::Official,
+            mirror: Arc::new(MirrorBreaker::default()),
         }
     }
 
@@ -352,15 +430,26 @@ impl HttpDownloader {
     ) -> Result<(), DownloadError> {
         let mut last_error: Option<DownloadError> = None;
 
-        for candidate in self.source.candidates(&task.url) {
+        for candidate in self.candidates(&task.url) {
+            let is_mirror = candidate.as_ref() != task.url;
             match self.download_one(&candidate, task, part).await {
-                Ok(()) => return Ok(()),
+                Ok(()) => {
+                    if is_mirror {
+                        self.mirror.record_success();
+                    }
+                    return Ok(());
+                }
                 // 本地问题换源也解决不了，立刻放弃。
                 Err(error @ (DownloadError::Io(_) | DownloadError::UnsafePath(_))) => {
                     return Err(error);
                 }
                 // 连接失败、失败状态码、摘要不符——都可能是这个源的问题，换下一个。
-                Err(error) => last_error = Some(error),
+                Err(error) => {
+                    if is_mirror {
+                        self.mirror.record_failure();
+                    }
+                    last_error = Some(error);
+                }
             }
         }
 
@@ -591,5 +680,36 @@ impl HttpDownloader {
             .map_err(|error| DownloadError::Network(error.to_string()))?;
 
         Ok(HttpResponse { status, body })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MIRROR_FAILURE_THRESHOLD, MirrorBreaker};
+
+    #[test]
+    fn 连续失败到阈值后熔断() {
+        let breaker = MirrorBreaker::default();
+        for _ in 0..MIRROR_FAILURE_THRESHOLD - 1 {
+            breaker.record_failure();
+        }
+        assert!(!breaker.is_open(), "还没到阈值，不该熔断");
+
+        breaker.record_failure();
+        assert!(breaker.is_open(), "到阈值应当熔断");
+    }
+
+    #[test]
+    fn 中途成功一次就不累计() {
+        // 要的是**连续**失败：偶发一两次不该把镜像拉黑。
+        let breaker = MirrorBreaker::default();
+        for _ in 0..MIRROR_FAILURE_THRESHOLD - 1 {
+            breaker.record_failure();
+        }
+        breaker.record_success();
+        for _ in 0..MIRROR_FAILURE_THRESHOLD - 1 {
+            breaker.record_failure();
+        }
+        assert!(!breaker.is_open());
     }
 }

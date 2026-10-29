@@ -73,6 +73,23 @@ const RULES: [(&str, &str); 11] = [
     ),
 ];
 
+/// 官方地址 → 镜像地址；不是已知官方主机、或镜像确实不提供的返回 `None`。
+///
+/// `.sha1` 单独排除：maven 的 `.sha1` 纯文本镜像不提供（实测 `maven.fabricmc.net`
+/// 有、`/maven` 下 404），改写过去只会多一次必然失败的请求。影响面很小——
+/// 只有 Fabric 的 `fabric-loader` 条目缺摘要时会取它，其余库条目自带摘要。
+fn mirror_of(url: &str) -> Option<String> {
+    if url.ends_with(".sha1") {
+        return None;
+    }
+    for (official, mirror) in RULES {
+        if let Some(rest) = url.strip_prefix(official) {
+            return Some(format!("{mirror}{rest}"));
+        }
+    }
+    None
+}
+
 /// 下载源。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum DownloadSource {
@@ -96,36 +113,27 @@ impl DownloadSource {
             return Cow::Borrowed(url);
         }
 
-        // maven 的 `.sha1` 纯文本镜像不提供（实测 `maven.fabricmc.net` 有、`/maven` 下 404）。
-        // 改写过去只会多一次必然失败的请求，所以这类地址始终走官方。
-        //
-        // 影响面很小：只有 Fabric 的 `fabric-loader` 条目缺 sha1 时会取它，
-        // 其余库条目自带摘要。
-        if url.ends_with(".sha1") {
-            return Cow::Borrowed(url);
+        match mirror_of(url) {
+            Some(mirror) => Cow::Owned(mirror),
+            None => Cow::Borrowed(url),
         }
-
-        for (official, mirror) in RULES {
-            if let Some(rest) = url.strip_prefix(official) {
-                return Cow::Owned(format!("{mirror}{rest}"));
-            }
-        }
-
-        Cow::Borrowed(url)
     }
 
-    /// 依次尝试的地址：镜像优先（若启用），官方兜底。
+    /// 依次尝试的地址：优先该源，失败再换另一个。
     ///
-    /// 返回一组而不是一个，是因为镜像可能整段不可用——实测 BMCLAPI 的**元数据**
-    /// 端点会 302 到 CDN 节点（`bmclapi*.sakura.sld.tw`），那些节点在某些网络下
-    /// 直接 reset。没有兜底的话，用户切到镜像反而连版本列表都拿不到，比不切更糟。
+    /// **两个方向都回落**：
+    /// - 选了镜像：先镜像、再官方——BMCLAPI 的元数据端点会 302 到 CDN 节点
+    ///   （`bmclapi*.sakura.sld.tw`），那些节点在某些网络下直接 reset。
+    /// - 选了官方：先官方、再镜像——`meta.fabricmc.net` 这类主机在部分网络下
+    ///   根本连不通，只给官方地址等于把加载器安装卡死在那里（用户实际遇到过）。
     ///
     /// 不是已知官方主机的地址只返回它自己——认证、Modrinth 这些不该被重试。
     #[must_use]
     pub fn candidates<'a>(self, url: &'a str) -> Vec<Cow<'a, str>> {
-        match self.rewrite(url) {
-            Cow::Borrowed(_) => vec![Cow::Borrowed(url)],
-            Cow::Owned(mirror) => vec![Cow::Owned(mirror), Cow::Borrowed(url)],
+        match (self, mirror_of(url)) {
+            (Self::Official, Some(mirror)) => vec![Cow::Borrowed(url), Cow::Owned(mirror)],
+            (Self::Bmclapi, Some(mirror)) => vec![Cow::Owned(mirror), Cow::Borrowed(url)],
+            (_, None) => vec![Cow::Borrowed(url)],
         }
     }
 

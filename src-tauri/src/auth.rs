@@ -94,6 +94,12 @@ pub enum LoginState {
         /// 给用户看的原因。
         message: String,
     },
+    /// 用户主动取消。
+    ///
+    /// 单独一个状态而不是复用 `Failed`：取消是**用户自己的操作**，
+    /// 不是错误。复用 `Failed` 会让「点关闭」之后对话框又带着「已取消登录」
+    /// 重新弹出来，看起来像关不掉。
+    Cancelled,
 }
 
 /// 界面看到的账号状态。
@@ -269,12 +275,8 @@ pub fn begin_login(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<
 pub fn cancel_login(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
     state.auth.abort();
     // 被 abort 的任务不会自己发事件，界面会一直停在「等待中」，所以这里补一条。
-    let _ = app.emit(
-        LOGIN_EVENT,
-        LoginState::Failed {
-            message: "已取消登录".to_owned(),
-        },
-    );
+    // 发 `Cancelled` 而不是 `Failed`：这是用户自己点的关闭，不是错误。
+    let _ = app.emit(LOGIN_EVENT, LoginState::Cancelled);
     Ok(())
 }
 

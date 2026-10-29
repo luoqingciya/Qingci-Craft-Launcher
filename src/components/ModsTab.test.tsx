@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -73,21 +73,21 @@ beforeEach(() => {
 
 describe("ModsTab", () => {
   it("原版（没有加载器）时提示先换加载器，而不是给一个装了也没用的入口", () => {
-    render(<ModsTab version="26.3" loader="" />);
+    render(<ModsTab version="26.3" loader="" instance="默认" />);
 
     expect(screen.getByText(/原版，模组不会被加载/)).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
   it("没选版本时提示先选版本", () => {
-    render(<ModsTab version={null} loader="0.20.1" />);
+    render(<ModsTab version={null} loader="0.20.1" instance="默认" />);
 
     expect(screen.getByText(/先选择一个版本/)).toBeInTheDocument();
   });
 
   it("搜索时带上游戏版本与 fabric 分类", async () => {
     searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
 
     await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
 
@@ -103,7 +103,7 @@ describe("ModsTab", () => {
     installMod.mockResolvedValue(["mods/sodium.jar"]);
     listMods.mockResolvedValueOnce([]).mockResolvedValueOnce([installed("sodium.jar")]);
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
     const buttons = await screen.findAllByRole("button", { name: "安装" });
     await userEvent.click(buttons[0]);
@@ -117,7 +117,7 @@ describe("ModsTab", () => {
 
   it("搜索失败时显示错误而不是空白", async () => {
     searchMods.mockRejectedValue("网络错误");
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
 
     await userEvent.type(screen.getByRole("textbox"), "x{Enter}");
 
@@ -126,7 +126,7 @@ describe("ModsTab", () => {
 
   it("没有结果时给出提示", async () => {
     searchMods.mockResolvedValue({ query: "zzz", hits: [] });
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
 
     await userEvent.type(screen.getByRole("textbox"), "zzz{Enter}");
 
@@ -134,7 +134,7 @@ describe("ModsTab", () => {
   });
 
   it("空查询不发请求", async () => {
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
 
     await userEvent.type(screen.getByRole("textbox"), "{Enter}");
 
@@ -155,7 +155,7 @@ describe("卸载", () => {
     listMods.mockResolvedValue([installed("sodium.jar")]);
     removeMod.mockResolvedValue(undefined);
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
     const deleteButton = await screen.findByRole("button", { name: "删除" });
 
@@ -170,7 +170,7 @@ describe("卸载", () => {
 
   it("可以取消删除", async () => {
     listMods.mockResolvedValue([installed("sodium.jar")]);
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
 
     await userEvent.click(await screen.findByRole("button", { name: "删除" }));
@@ -184,7 +184,7 @@ describe("卸载", () => {
     listMods.mockResolvedValue([installed("sodium.jar")]);
     removeMod.mockRejectedValue("文件被占用");
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
     await userEvent.click(await screen.findByRole("button", { name: "删除" }));
     await userEvent.click(screen.getByRole("button", { name: "确认删除" }));
@@ -199,7 +199,7 @@ describe("依赖", () => {
     // 主模组 + Fabric API 两个文件。
     installMod.mockResolvedValue(["mods/modmenu.jar", "mods/fabric-api.jar"]);
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.type(screen.getByRole("textbox"), "modmenu{Enter}");
     const buttons = await screen.findAllByRole("button", { name: "安装" });
     await userEvent.click(buttons[0]);
@@ -211,7 +211,7 @@ describe("依赖", () => {
 describe("中文译名", () => {
   it("有译名时中文优先，英文作为副标题", async () => {
     searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
 
     await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
 
@@ -222,7 +222,7 @@ describe("中文译名", () => {
 
   it("没有译名时只显示英文，不显示空的中文名", async () => {
     searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
 
     await userEvent.type(screen.getByRole("textbox"), "lithium{Enter}");
 
@@ -231,7 +231,7 @@ describe("中文译名", () => {
 
   it("提供在 Modrinth 查看原页的入口", async () => {
     searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
 
     await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
 
@@ -243,7 +243,7 @@ describe("中文译名", () => {
 describe("中文搜索与分类筛选", () => {
   it("中文输入被换成英文时给出提示", async () => {
     searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
 
     await userEvent.type(screen.getByRole("textbox"), "钠{Enter}");
 
@@ -254,7 +254,7 @@ describe("中文搜索与分类筛选", () => {
 
   it("输入本身就是英文时不做多余提示", async () => {
     searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
 
     await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
 
@@ -269,7 +269,7 @@ describe("中文搜索与分类筛选", () => {
     ]);
     searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
 
     const chip = await screen.findByRole("button", { name: "优化" });
     await userEvent.click(chip);
@@ -282,7 +282,7 @@ describe("中文搜索与分类筛选", () => {
 
   it("再点一次取消该分类", async () => {
     listModCategories.mockResolvedValue([{ id: "optimization", label: "优化" }]);
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
 
     const chip = await screen.findByRole("button", { name: "优化" });
     await userEvent.click(chip);
@@ -297,7 +297,7 @@ describe("纯分类浏览", () => {
     listModCategories.mockResolvedValue([{ id: "optimization", label: "优化" }]);
     searchMods.mockResolvedValue({ query: "", hits: HITS });
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
 
     const button = screen.getByRole("button", { name: "搜索" });
     expect(button).toBeDisabled();
@@ -310,7 +310,7 @@ describe("纯分类浏览", () => {
   });
 
   it("既没关键词也没分类时不发请求", async () => {
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
 
     expect(screen.getByRole("button", { name: "搜索" })).toBeDisabled();
     expect(searchMods).not.toHaveBeenCalled();
@@ -322,7 +322,7 @@ describe("更新检查", () => {
     listMods.mockResolvedValue([installed("sodium.jar")]);
     checkModUpdates.mockResolvedValue({ updates: [], incompatible: [] });
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
     await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
 
@@ -346,7 +346,7 @@ describe("更新检查", () => {
     });
     updateMod.mockResolvedValue(["mods/sodium-new.jar"]);
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
     await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
 
@@ -364,7 +364,7 @@ describe("更新检查", () => {
   });
 
   it("没有已装模组时不能点检查更新", async () => {
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
 
     expect(screen.getByRole("button", { name: "检查更新" })).toBeDisabled();
@@ -374,7 +374,7 @@ describe("更新检查", () => {
 describe("布局密度", () => {
   it("默认停在搜索页，切到「已安装」才显示列表", async () => {
     listMods.mockResolvedValue([installed("sodium.jar")]);
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
 
     // 两页分开：搜索结果与已装列表不再争同一块高度。
     expect(await screen.findByRole("tab", { name: /已安装 1/ })).toBeInTheDocument();
@@ -402,7 +402,7 @@ describe("布局密度", () => {
       incompatible: [],
     });
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
     await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
 
@@ -416,7 +416,7 @@ describe("布局密度", () => {
     }));
     listModCategories.mockResolvedValue(many);
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
 
     expect(await screen.findByRole("button", { name: "分类0" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "分类8" })).not.toBeInTheDocument();
@@ -433,7 +433,7 @@ describe("已安装标记来自后端清单", () => {
     searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
     listMods.mockResolvedValue([installed("sodium-fabric-0.6.13.jar", "AANobbMI")]);
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
 
     expect(await screen.findByRole("button", { name: "已安装" })).toBeDisabled();
@@ -445,7 +445,7 @@ describe("已安装标记来自后端清单", () => {
     searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
     listMods.mockResolvedValue([installed("whatever.jar")]);
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
 
     expect(await screen.findByText("钠")).toBeInTheDocument();
@@ -461,7 +461,7 @@ describe("依赖提示", () => {
       { projectId: "Ha28R6CL", title: null, installed: false },
     ]);
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
     await screen.findByText("钠");
 
@@ -481,7 +481,7 @@ describe("依赖提示", () => {
     searchMods.mockResolvedValue({ query: "sodium", hits: HITS });
     modDependencies.mockResolvedValue([]);
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
     await screen.findByText("钠");
 
@@ -499,7 +499,7 @@ describe("不兼容提示", () => {
       incompatible: [{ fileName: "old-mod.jar", projectId: "oldproject" }],
     });
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
     await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
 
@@ -514,7 +514,7 @@ describe("不兼容提示", () => {
     listMods.mockResolvedValue([installed("sodium.jar")]);
     checkModUpdates.mockResolvedValue({ updates: [], incompatible: [] });
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
     await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
 
@@ -537,12 +537,27 @@ describe("不兼容提示", () => {
       incompatible: [{ fileName: "old-mod.jar", projectId: "oldproject" }],
     });
 
-    render(<ModsTab version="26.3" loader="0.20.1" />);
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
     await userEvent.click(screen.getByRole("tab", { name: /已安装/ }));
     await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
 
     // 提示条只说更新（它是成功色）；不兼容由上面那块警告单独说。
     expect(await screen.findByText("1 个模组有新版本")).toBeInTheDocument();
     expect(screen.getByText(/1 个模组不适配/)).toBeInTheDocument();
+  });
+});
+
+describe("切换实例后已装列表", () => {
+  it("重新读一次，不会停在切换前的实例上", async () => {
+    // `mods/` 每个实例各一份。原来 effect 依赖为空数组，切实例后标题变了、
+    // 列表没变——看起来像「把所有实例的模组都列出来了」。
+    const { rerender } = render(
+      <ModsTab version="26.2" loader="0.20.1" instance="26-2-f" />
+    );
+    await waitFor(() => expect(listMods).toHaveBeenCalledTimes(1));
+
+    rerender(<ModsTab version="26.2" loader="0.20.1" instance="另一个实例" />);
+
+    await waitFor(() => expect(listMods).toHaveBeenCalledTimes(2));
   });
 });
