@@ -293,6 +293,14 @@ pub async fn install_game_version(
             },
         );
     };
+
+    // Forge / NeoForge 的 processor 要切分并给**原版 client jar** 打补丁，
+    // 而那个 jar 本来是由下面的 `install_with_progress` 下载的——顺序反了就会报
+    // 「缺少原版 client jar」。所以装加载器之前，先把原版文件备齐。
+    if matches!(kind, LoaderKind::Forge(_)) && loader.is_some() {
+        ensure_vanilla_ready(&app, &downloader, &version).await?;
+    }
+
     let meta = load_meta_with_loader(
         &downloader,
         &version,
@@ -320,6 +328,32 @@ pub async fn install_game_version(
 /// 安装并向前端推送进度。
 ///
 /// 启动前也要调它做「补齐」，所以抽出来而不是留在命令里。
+/// 确保原版文件已就绪——加载器安装的前置条件。
+///
+/// Forge / NeoForge 的 processor 要切分并给**原版 client jar** 打补丁。那个 jar 由
+/// [`install_with_progress`] 下载，而加载器安装排在它前面，于是第一次装加载器必然
+/// 报「缺少原版 client jar」，用户只能自己去点一次「安装/检查文件」再回来。
+/// 这里先补上这一步，幂等：原版已就绪时只做一次存在性检查。
+async fn ensure_vanilla_ready(
+    app: &AppHandle,
+    downloader: &Arc<HttpDownloader>,
+    version: &str,
+) -> Result<(), String> {
+    let jar = downloader
+        .game_dir()
+        .join("versions")
+        .join(version)
+        .join(format!("{version}.jar"));
+    if jar.is_file() {
+        return Ok(());
+    }
+
+    let meta = load_meta(downloader, version).await?;
+    let options = VersionInstallOptions::for_version(&meta.id);
+    install_with_progress(app, downloader, &meta, &options).await?;
+    Ok(())
+}
+
 pub(crate) async fn install_with_progress(
     app: &AppHandle,
     downloader: &Arc<HttpDownloader>,

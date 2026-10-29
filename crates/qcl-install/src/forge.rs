@@ -302,6 +302,20 @@ pub struct InstallHooks<'a> {
     pub on_step: crate::forge_processor::StepCallback<'a>,
 }
 
+/// 隐藏子进程的控制台窗口（仅 Windows 有效）。
+///
+/// 安装器与 processor 跑的都是 `java.exe` 而不是 `javaw.exe`，不隐藏就会弹出一个黑框，
+/// 看起来像启动器在偷偷跑命令行脚本。游戏进程那边（`qcl-runtime`）是同样的处理。
+#[cfg(windows)]
+pub(crate) fn hide_console(command: &mut tokio::process::Command) {
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+/// 非 Windows 平台不需要处理。
+#[cfg(not(windows))]
+pub(crate) fn hide_console(_command: &mut tokio::process::Command) {}
+
 /// 安装 Forge / NeoForge 到游戏目录。
 ///
 /// 两条路径，按 install_profile 的形态自动选：
@@ -359,6 +373,7 @@ pub async fn install(
 
     let output = {
         let mut command = tokio::process::Command::new(java);
+        hide_console(&mut command);
         // 安装器自己不走我们的下载器与镜像，要让它走代理只能给 JVM 设系统属性。
         for argument in proxy_args(proxy) {
             command.arg(argument);
