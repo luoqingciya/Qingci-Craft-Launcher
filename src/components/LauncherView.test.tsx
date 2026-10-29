@@ -26,7 +26,7 @@ const SETTINGS: SettingsView = {
   selectedVersion: null,
   loaderVersion: null,
   downloadSource: "official",
-  instances: [{ name: "默认", gameDir: "C:\\games\\qcl", isDefaultDir: false, active: true, selectedVersion: null, loaderVersion: null }],
+  instances: [{ name: "默认", gameDir: "C:\\games\\qcl", isDefaultDir: false, active: true, selectedVersion: null, loaderVersion: null, loaderKind: null }],
   activeInstance: "默认",
 };
 
@@ -38,6 +38,8 @@ function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {})
       { version: "0.20.1", stable: true },
       { version: "0.21.0-beta.1", stable: false },
     ],
+    loaderKind: "fabric" as const,
+    onLoaderKindChange: vi.fn(),
     loader: "",
     loaderBusy: false,
     busy: false,
@@ -178,10 +180,10 @@ describe("LauncherView", () => {
 
     // 左栏的加载器行与选择器里的「无（原版）」都会出现。
     expect(screen.getAllByText("无（原版）").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("Fabric 0.20.1")).toBeInTheDocument();
+    expect(screen.getByText("0.20.1")).toBeInTheDocument();
     expect(screen.getByText("测试版")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByText("Fabric 0.20.1"));
+    await userEvent.click(screen.getByText("0.20.1"));
     expect(props.onLoaderChange).toHaveBeenCalledWith("0.20.1");
   });
 
@@ -258,6 +260,7 @@ describe("实例切换器", () => {
       active: true,
       selectedVersion: null,
       loaderVersion: null,
+      loaderKind: null,
     },
     {
       name: "整合包",
@@ -266,6 +269,7 @@ describe("实例切换器", () => {
       active: false,
       selectedVersion: null,
       loaderVersion: null,
+      loaderKind: null,
     },
   ];
 

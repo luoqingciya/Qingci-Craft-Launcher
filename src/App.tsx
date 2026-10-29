@@ -33,6 +33,7 @@ import {
   type GameStatus,
   type InstallProgressEvent,
   type JavaOption,
+  type LoaderKind,
   type LoaderOption,
   type SettingsInput,
   type SettingsView,
@@ -57,6 +58,8 @@ export default function App() {
   const loaderRequest = useRef(0);
   const [loaders, setLoaders] = useState<LoaderOption[]>([]);
   const [loader, setLoader] = useState("");
+  // 加载器种类。切种类要清掉版本号，否则会拿 Fabric 的版本号去装 Forge。
+  const [loaderKind, setLoaderKind] = useState<LoaderKind>("fabric");
   const [loaderBusy, setLoaderBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<InstallProgressEvent | null>(null);
@@ -120,12 +123,12 @@ export default function App() {
   //
   // 刻意不用 useEffect：重置状态与发起请求都是由「用户点了某个版本」这一个事件引起的，
   // 放进 effect 会多一轮渲染，而且 effect 里同步 setState 本身就是反模式（lint 也会拦）。
-  const loadLoaders = useCallback(async (id: string) => {
+  const loadLoaders = useCallback(async (id: string, kind: LoaderKind) => {
     const request = ++loaderRequest.current;
     setLoaderBusy(true);
 
     try {
-      const options = await listLoaders(id);
+      const options = await listLoaders(id, kind);
       if (loaderRequest.current === request) {
         setLoaders(options);
       }
@@ -147,17 +150,17 @@ export default function App() {
       setLoader("");
       // 换版本意味着加载器也要重选，所以这里连同加载器一起清掉。
       void rememberSelection(id, null);
-      await loadLoaders(id);
+      await loadLoaders(id, loaderKind);
     },
-    [loadLoaders]
+    [loadLoaders, loaderKind]
   );
 
   const changeLoader = useCallback(
     (value: string) => {
       setLoader(value);
-      void rememberSelection(selected, value === "" ? null : value);
+      void rememberSelection(selected, value === "" ? null : value, loaderKind);
     },
-    [selected]
+    [selected, loaderKind]
   );
 
   // 初始数据：版本清单、设置、运行状态。
@@ -190,7 +193,7 @@ export default function App() {
         if (view.selectedVersion) {
           setSelected(view.selectedVersion);
           setLoader(view.loaderVersion ?? "");
-          void loadLoaders(view.selectedVersion);
+          void loadLoaders(view.selectedVersion, loaderKind);
         }
       })
       .catch((cause: unknown) => {
@@ -223,7 +226,7 @@ export default function App() {
       cancelled = true;
     };
     // loadLoaders 用 useCallback([]) 声明，引用稳定，不会让 effect 重跑。
-  }, [loadLoaders]);
+  }, [loadLoaders, loaderKind]);
 
   // 事件订阅。监听是异步注册的，因此要先判断是否已卸载再决定保留还是立刻注销。
   useEffect(() => {
@@ -310,7 +313,7 @@ export default function App() {
         setSelected(view.selectedVersion);
         setLoader(view.loaderVersion ?? "");
         if (view.selectedVersion) {
-          void loadLoaders(view.selectedVersion);
+          void loadLoaders(view.selectedVersion, loaderKind);
         } else {
           setLoaders([]);
         }
@@ -322,7 +325,7 @@ export default function App() {
         setSavingSettings(false);
       }
     },
-    [loadLoaders]
+    [loadLoaders, loaderKind]
   );
 
   const switchInstanceByName = useCallback(
@@ -399,7 +402,7 @@ export default function App() {
     showMessage(null);
     setProgress(null);
     try {
-      const summary = await installGameVersion(selected, loader === "" ? null : loader);
+      const summary = await installGameVersion(selected, loader === "" ? null : loader, loaderKind);
       showMessage(
         `${summary.version} 已就绪：版本文件 ${summary.downloaded} 个下载 / ${summary.skipped} 个跳过，` +
           `资产 ${summary.assets} 个，natives ${summary.natives} 个`,
@@ -410,7 +413,7 @@ export default function App() {
       setBusy(false);
       setProgress(null);
     }
-  }, [selected, loader, showMessage]);
+  }, [selected, loader, loaderKind, showMessage]);
 
   const launch = useCallback(async () => {
     if (!selected) {
@@ -452,6 +455,12 @@ export default function App() {
       versions={state}
       selected={selected}
       loaders={loaders}
+      loaderKind={loaderKind}
+      onLoaderKindChange={(kind) => {
+        setLoaderKind(kind);
+        setLoader("");
+        if (selected) void loadLoaders(selected, kind);
+      }}
       loader={loader}
       loaderBusy={loaderBusy}
       busy={busy}

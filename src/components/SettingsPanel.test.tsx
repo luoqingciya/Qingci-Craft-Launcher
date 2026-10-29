@@ -22,7 +22,7 @@ function settings(overrides: Partial<SettingsView> = {}): SettingsView {
     selectedVersion: null,
     loaderVersion: null,
     downloadSource: "official",
-    instances: [{ name: "默认", gameDir: "C:\\games\\qcl", isDefaultDir: false, active: true, selectedVersion: null, loaderVersion: null }],
+    instances: [{ name: "默认", gameDir: "C:\\games\\qcl", isDefaultDir: false, active: true, selectedVersion: null, loaderVersion: null, loaderKind: null }],
     activeInstance: "默认",
     ...overrides,
   };
@@ -268,6 +268,7 @@ describe("实例管理", () => {
       active: true,
       selectedVersion: null,
       loaderVersion: null,
+      loaderKind: null,
     },
     {
       name: "整合包",
@@ -276,6 +277,7 @@ describe("实例管理", () => {
       active: false,
       selectedVersion: null,
       loaderVersion: null,
+      loaderKind: null,
     },
   ];
 

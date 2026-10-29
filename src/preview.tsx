@@ -152,7 +152,7 @@ const SETTINGS: SettingsView = {
   selectedVersion: null,
   loaderVersion: null,
   downloadSource: "official",
-  instances: [{ name: "默认", gameDir: "C:\\games\\qcl", isDefaultDir: false, active: true, selectedVersion: null, loaderVersion: null }],
+  instances: [{ name: "默认", gameDir: "C:\\games\\qcl", isDefaultDir: false, active: true, selectedVersion: null, loaderVersion: null, loaderKind: null }],
   activeInstance: "默认",
 };
 
@@ -183,6 +183,8 @@ function Preview() {
       versions={{ status: "ready", versions: VERSIONS }}
       selected={selected}
       loaders={LOADERS}
+      loaderKind="fabric"
+      onLoaderKindChange={() => {}}
       loader={loader}
       loaderBusy={false}
       busy={false}
