@@ -43,6 +43,14 @@ export interface SettingsView {
   selectedVersion: string | null;
   /** 上次选择的加载器版本。 */
   loaderVersion: string | null;
+  /**
+   * 当前实例的加载器种类：`fabric` / `forge` / `neoforge`。
+   *
+   * 旧实例没有这个字段（为 `null`），按 Fabric 处理。前端必须用它恢复界面状态——
+   * 否则切到 Forge 实例后界面仍以为自己是 Fabric，安装时会拿 Forge 的版本号
+   * 去请求 Fabric 的 profile（HTTP 400）。
+   */
+  loaderKind: string | null;
   /** 下载源：`official` 或 `bmclapi`。 */
   downloadSource: string;
   /**

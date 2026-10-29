@@ -230,7 +230,11 @@ pub(crate) async fn load_meta_with_loader(
 
     let profile = fetch_profile(downloader, &parent.id, loader_version)
         .await
-        .map_err(|error| format!("获取 Fabric profile 失败：{error}"))?;
+        .map_err(|error| {
+            // 这条错误曾经真实发生过：界面没恢复加载器种类，于是拿 Forge 的版本号
+            // 去请求 Fabric 的 profile，上游回 400。提示一句比让用户猜有用。
+            format!("获取 Fabric profile 失败：{error}（如果这个版本号是 Forge / NeoForge 的，说明加载器类型没对上）")
+        })?;
 
     // 上游理论上只返回匹配的组合，但拿到不匹配的 profile 会合并出缺库的版本，
     // 那种错误要到启动时才暴露，不如在这里明确失败。

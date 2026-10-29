@@ -40,6 +40,7 @@ import {
 } from "./api";
 import { LauncherView, type VersionsState } from "./components/LauncherView";
 import { summarizeCrash } from "./lib/crash";
+import { parseLoaderKind } from "./lib/loader";
 import { appendLog, type LogEntry, type LogStreamKind } from "./lib/logs";
 import { useAccount } from "./lib/useAccount";
 import { useUpdate } from "./lib/useUpdate";
@@ -190,10 +191,14 @@ export default function App() {
         //
         // 刻意不走 selectVersion：它会把选择持久化成「版本 + 无加载器」，
         // 等于把刚读出来的加载器又抹掉。这里只设状态并拉一次加载器列表。
+        // **种类也必须一起恢复**：否则切到 Forge 实例后界面仍以为自己是 Fabric，
+        // 装的时候会拿 Forge 的版本号去请求 Fabric 的 profile（HTTP 400）。
+        const kind = parseLoaderKind(view.loaderKind);
+        setLoaderKind(kind);
         if (view.selectedVersion) {
           setSelected(view.selectedVersion);
           setLoader(view.loaderVersion ?? "");
-          void loadLoaders(view.selectedVersion, loaderKind);
+          void loadLoaders(view.selectedVersion, kind);
         }
       })
       .catch((cause: unknown) => {
@@ -226,7 +231,7 @@ export default function App() {
       cancelled = true;
     };
     // loadLoaders 用 useCallback([]) 声明，引用稳定，不会让 effect 重跑。
-  }, [loadLoaders, loaderKind]);
+  }, [loadLoaders]);
 
   // 事件订阅。监听是异步注册的，因此要先判断是否已卸载再决定保留还是立刻注销。
   useEffect(() => {
@@ -310,10 +315,13 @@ export default function App() {
         const view = await apply();
         setSettings(view);
 
+        // 与首次加载同样的同步：实例换了，版本、加载器、种类都要跟着换。
+        const kind = parseLoaderKind(view.loaderKind);
+        setLoaderKind(kind);
         setSelected(view.selectedVersion);
         setLoader(view.loaderVersion ?? "");
         if (view.selectedVersion) {
-          void loadLoaders(view.selectedVersion, loaderKind);
+          void loadLoaders(view.selectedVersion, kind);
         } else {
           setLoaders([]);
         }
@@ -325,7 +333,7 @@ export default function App() {
         setSavingSettings(false);
       }
     },
-    [loadLoaders, loaderKind]
+    [loadLoaders]
   );
 
   const switchInstanceByName = useCallback(
@@ -459,7 +467,12 @@ export default function App() {
       onLoaderKindChange={(kind) => {
         setLoaderKind(kind);
         setLoader("");
-        if (selected) void loadLoaders(selected, kind);
+        if (selected) {
+          void loadLoaders(selected, kind);
+          // 种类要立刻落盘：只改界面状态的话，切走实例或重启就丢了，
+          // 下次安装又会拿 Forge 的版本号去问 Fabric。
+          void rememberSelection(selected, null, kind);
+        }
       }}
       loader={loader}
       loaderBusy={loaderBusy}
