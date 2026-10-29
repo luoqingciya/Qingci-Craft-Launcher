@@ -132,9 +132,10 @@ impl LoaderKind {
     }
 }
 
-/// 安装器要用的代理（`host:port`），来自设置里的「安装器代理」。
+/// 加载器安装要用的代理（`host:port`），来自设置里的「安装器代理」。
 ///
-/// 安装器是独立 JVM，不走我们的下载器与镜像，只能靠 JVM 属性。
+/// 现在只有 1.12.2 及更早的官方安装器真的需要它：1.13 起的 Forge / NeoForge
+/// 走自研 processor 链，联网那一步（Mojang mappings）已经改走下载器与镜像。
 pub(crate) fn install_proxy(settings: &crate::settings::Settings) -> Option<String> {
     settings
         .installer_proxy

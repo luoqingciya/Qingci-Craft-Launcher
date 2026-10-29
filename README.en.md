@@ -14,10 +14,12 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 > Status: **it installs, launches, manages mods and updates itself.** The full path for vanilla
 > versions (26.3, plus older releases such as 1.7.10 with the legacy asset layout) works end to end:
 > fetch manifest → download ~598 MB → pick Java → assemble command → launch → stream logs → stop.
-> Fabric is selectable per version; the mods tab supports search, install (required dependencies
-> pulled in automatically), removal and update checks. Installed projects are marked, the
-> dependencies to be pulled in are visible before installing, and update checks also report mods
-> with no build for the current version. The log panel filters by level, searches, and copies.
+> Fabric, Forge and NeoForge are selectable per version (Forge installs through our own
+> processor pipeline rather than the official installer); the mods tab supports search, install
+> (required dependencies pulled in automatically), removal and update checks. Installed projects
+> are marked, the dependencies to be pulled in are visible before installing, and update checks
+> also report mods with no build for the current version. The log panel filters by level, searches,
+> and copies.
 > Abnormal exits produce a crash summary that also reads the game's own `crash-reports/`.
 > Installed builds update in place: check, download, verify the signature, install silently,
 > relaunch.
@@ -42,7 +44,7 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 | Microsoft login | ✅ | Device code flow (the launcher never sees the password); tokens live in the OS keychain and refresh silently at startup |
 | Instances | ✅ | Multiple independent game directories, each with its own version selection; the launch panel opens the directory and shows the installed mod count |
 | Runtime info | ✅ | The about tab shows version, OS/arch, Tauri and WebView, copyable as a bug-report block |
-| Forge / NeoForge | ⬜ | See roadmap |
+| Forge / NeoForge | 🟡 | Installed through our own processor pipeline, byte-identical to the official installer; the launch path is wired, a full launch test with assets is still pending |
 
 ## Design principles
 

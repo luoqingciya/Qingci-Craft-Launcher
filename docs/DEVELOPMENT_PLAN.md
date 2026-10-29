@@ -344,20 +344,22 @@ Qingci-Craft-Launcher/
 Mojang 审核通过后一次性落地（#71 客户端 ID 注入 → #73 后端 → #74 界面 → #75 令牌持久化），
 随 0.1.3 发布。
 
-### Phase 4 · 模组加载器 🟡 Fabric 已接入；Forge / NeoForge 未开始（可行性已调研，见下）
+### Phase 4 · 模组加载器 🟢 Fabric 与 Forge / NeoForge 均已接入；Quilt 未开始
 
 | PR | 内容 | 验收标准 |
 |---|---|---|
 | #16 | `feat(loader): Fabric / Quilt`（meta profile 合并到 version.json） | 启动 Fabric 0.20.1 + 26.3 成功 |
-| #17 | `feat(loader): Forge / NeoForge`（安装器流程 + 库合并） | 至少覆盖一个 LTS 版本；失败时有明确错误码 |
+| #17 | `feat(loader): Forge / NeoForge`（自研 processor 链 + 库合并） | 至少覆盖一个 LTS 版本；失败时有明确错误码 |
 | #18 | `feat(mods): Modrinth 搜索与安装` | 依赖解析不破坏现有实例（安装前快照） |
 
 Fabric 的界面（选版本 → 选加载器 → 安装 → 启动）已在后续 PR 中接入；#18 也已落地，
-并额外做了卸载、更新检查、依赖补全与中文译名库。Quilt 与 Forge 仍未开始。
+并额外做了卸载、更新检查、依赖补全与中文译名库。Forge / NeoForge 已按自研 processor
+链接入（见下节「最终实现」），Quilt 仍未开始。
 
-#### Forge / NeoForge 可行性调研（2026-10-27）
+#### Forge / NeoForge 可行性调研（2026-10-27，当时的结论）
 
 结论：**技术上可行，且不必自己重写 processors**——但国内网络下有三个必须处理的坑。
+（当时的判断是「调官方安装器」；最终实现改成了自研执行链，见本节末尾。）
 
 现代 Forge 安装器的命令行契约（**已用真实 installer 实测**，`1.20.1-47.2.0`，
 经 BMCLAPI 下载，`java -jar forge-installer.jar --help` 输出）：
@@ -407,6 +409,30 @@ BMCLAPI 有多个后端，路由随机：Forge maven 稳定落到 `mirrors.cerne
 
 未完成：`--installClient` 的完整流程（要准备 `launcher_profiles.json` 与 vanilla jar）。
 CLI 契约与下载链路已实测，安装流程本身还没跑过。
+
+#### 最终实现（2026-10-29）：自研 processor 执行链
+
+上面的三个坑全部来自**官方安装器**这个中间层。`install_profile.json` 已经把每一步的参数
+写清楚了，所以最终没有走安装器，而是自己编排：
+
+| 步骤 | 谁来跑 |
+|---|---|
+| `MCP_DATA` / `MERGE_MAPPING` / `jarsplitter` / `AutoRenamingTool` / `binarypatcher` | 原样跑官方 processor（`java -cp … Main-Class …`），**不重写实现** |
+| `DOWNLOAD_MOJMAPS` | 换成本项目下载器：地址取自本地 `versions/<mc>/<mc>.json` 的 `downloads.client_mappings`，可走镜像、校验 SHA-1 |
+| `EXTRACT_FILES` / `BUNDLER_EXTRACT` | `sides` 里没有 client，客户端跳过 |
+
+于是那三个坑自然消失：不需要 `launcher_profiles.json`、不需要从 `launchermeta` 取 MC 本体、
+不需要为证书探测配代理。`--offline` 也不再需要——它本来也关不掉 processor 的网络
+（processor 是独立 JVM，`DOWNLOAD_MOJMAPS` 把 `launchermeta` 写死且先删输出再下载）。
+
+产物与官方安装器**逐字节一致**：Forge 1.20.1-47.2.0 的 `MC_SLIM` / `MC_EXTRA` / `PATCHED`
+三个 SHA-1 与 profile 声明值完全相同。
+
+1.12.2 及更早的 profile 没有 `processors`（只有一个 `install` 段，由安装器把内嵌 jar 复制成
+`versions/<id>/<id>.jar`），那部分仍走官方安装器，按 `has_processors` 自动分流。
+
+实现见 `crates/qcl-install/src/forge_processor.rs`。剩余未做：带完整资产的启动验证
+（产物 SHA-1 已对齐，风险有界）。
 
 ### Phase 5 · 发布工程 🟡 在线更新已完成，其余未开始
 
@@ -570,7 +596,7 @@ Gatekeeper 拦下。
 | R2 | Windows 未签名 exe 被 Defender/SmartScreen 拦截 | 用户流失 | 尽早接入代码签名（SignPath 开源免费额度 / Azure Trusted Signing） |
 | R3 | macOS 公证需要付费开发者账号 | 无法分发 | Phase 0 即确认账号状态；未就绪则先发未签名 dmg 并在 README 说明 `xattr` 处理 |
 | R4 | WebView2 在旧版 Win10 缺失 | 启动白屏 | 使用 Tauri 的 `downloadBootstrapper` 安装模式 |
-| R5 | Forge/NeoForge 安装器流程复杂（需先起 JVM 跑 installer） | 工期不可控 | **已决策支持（D1）**：拆为独立 PR 置于 Phase 4 末尾，Fabric/Quilt 先行交付；若显著超期则先发布不含 Forge 的版本 |
+| R5 | Forge/NeoForge 安装流程复杂 | 工期不可控 | **已解除**：改为自研 processor 执行链（不再依赖官方安装器），产物 SHA-1 与上游声明一致；≤1.12.2 仍走安装器 |
 | R6 | 微软 OAuth 需要注册 Azure 应用（client_id） | 阻塞登录 | 立即注册（`consumers` 租户、允许公共客户端流、无需 secret） |
 | R7 | 中文/空格路径导致 JVM 参数解析失败 | 区域性高频问题 | 全程参数数组传参；CI 增加含空格与中文的路径用例 |
 | R8 | 首次下载 500 MB 体验差 | 留存 | 分阶段进度 + 可中断续传 + 复用已有 `.minecraft` 资源（去重校验） |
@@ -588,8 +614,8 @@ Phase 0–3 已完成（含正版登录与实例管理），Fabric 与模组管�
 
 接下来按优先级：
 
-1. **Forge / NeoForge**（Phase 4 剩余项，风险 R5）：可行性已调研，路径是调用官方 installer
-   而非自研 processors；但仍受「安装器会探测 Mojang 主机并校验证书」的限制。
+1. **Forge / NeoForge 收尾**（Phase 4 剩余项，R5 已解除）：自研 processor 链已落地，
+   产物与官方安装器逐字节一致；剩余是带完整资产的启动验证，以及 Quilt。
 2. **macOS 签名与公证**（R3）：未签名的通用 dmg 已经在 0.1.8 发布，用户需右键打开；
    要消掉这个门槛得买 Apple 开发者账号。updater 的 `zip` 特性也要先恢复才谈得上自动更新。
 3. **代码签名**（R2）：Windows Authenticode / macOS 公证，缓解 SmartScreen 拦截。
