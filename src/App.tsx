@@ -302,6 +302,25 @@ export default function App() {
   }, [showMessage]);
 
   /**
+   * 重新数一遍当前实例的模组。
+   *
+   * 失败时置 `null` 而不是 0：0 会被读成「一个都没装」，那是错误信息。
+   */
+  const refreshModCount = useCallback(async () => {
+    try {
+      setModCount((await listMods()).length);
+    } catch {
+      setModCount(null);
+    }
+  }, []);
+
+  // 传下去的必须是稳定引用：内联箭头每次渲染都换身份，会让 LauncherView 里
+  // 「回启动页就刷新」的 effect 每渲染一次都跑一遍（白白扫一次 mods 目录）。
+  const refreshModCountNow = useCallback(() => {
+    void refreshModCount();
+  }, [refreshModCount]);
+
+  /**
    * 切换/新建/删除实例后的统一收尾。
    *
    * 不能只 setSettings：版本清单来自游戏目录，换了实例就是另一份清单；
@@ -320,11 +339,16 @@ export default function App() {
         setLoaderKind(kind);
         setSelected(view.selectedVersion);
         setLoader(view.loaderVersion ?? "");
+        // 上一个实例的退出码与崩溃摘要不属于新实例，留着会让人以为新实例崩过。
+        setExitCode(null);
+        setCrashReport(null);
         if (view.selectedVersion) {
           void loadLoaders(view.selectedVersion, kind);
         } else {
           setLoaders([]);
         }
+        // `mods/` 每个实例各一份：不重数就会显示上一个实例的数字。
+        void refreshModCount();
 
         setState({ status: "ready", versions: await listVersions() });
       } catch (cause: unknown) {
@@ -333,7 +357,7 @@ export default function App() {
         setSavingSettings(false);
       }
     },
-    [loadLoaders]
+    [loadLoaders, refreshModCount]
   );
 
   const switchInstanceByName = useCallback(
@@ -363,19 +387,6 @@ export default function App() {
     },
     [adoptInstance]
   );
-
-  /**
-   * 刷新「已装模组」数量。
-   *
-   * 失败时置 `null` 而不是 0：0 会被读成「一个都没装」，那是错误信息。
-   */
-  const refreshModCount = useCallback(async () => {
-    try {
-      setModCount((await listMods()).length);
-    } catch {
-      setModCount(null);
-    }
-  }, []);
 
   /**
    * 用系统文件管理器打开当前实例的游戏目录。
@@ -513,7 +524,7 @@ export default function App() {
       onSwitchInstance={switchInstanceByName}
       modCount={modCount}
       onOpenGameDir={() => void openGameDir()}
-      onRefreshModCount={() => void refreshModCount()}
+      onRefreshModCount={refreshModCountNow}
       onCreateInstance={createInstanceByName}
       onRenameInstance={renameInstanceByNames}
       onDeleteInstance={deleteInstanceByName}
