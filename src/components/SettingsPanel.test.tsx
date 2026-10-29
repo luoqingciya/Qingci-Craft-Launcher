@@ -84,6 +84,7 @@ describe("SettingsPanel", () => {
       memoryMb: null,
       javaPath: null,
       downloadSource: null,
+      installerProxy: null,
     });
   });
 

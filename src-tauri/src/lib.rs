@@ -105,6 +105,8 @@ struct SettingsView {
     loader_kind: Option<String>,
     /// 下载源：`official` / `bmclapi`。
     download_source: String,
+    /// 安装器代理，空串表示不使用。
+    installer_proxy: String,
     /// 已知实例，按添加顺序排列。
     instances: Vec<InstanceView>,
     /// 当前实例名。
@@ -148,6 +150,9 @@ struct SettingsInput {
     java_path: Option<String>,
     /// 下载源：`official` / `bmclapi`，空或缺失表示官方。
     download_source: Option<String>,
+    /// 安装器代理（`host:port`）。空串或未传表示直连。
+    #[serde(default)]
+    installer_proxy: Option<String>,
 }
 
 /// 一个可用的 Java 安装，供设置页下拉选择。
@@ -231,6 +236,7 @@ impl AppState {
             loader_version: active.and_then(|instance| instance.loader_version.clone()),
             loader_kind: active.and_then(|instance| instance.loader_kind.clone()),
             download_source: inner.settings.download_source().as_str().to_owned(),
+            installer_proxy: inner.settings.installer_proxy.clone().unwrap_or_default(),
             instances: inner
                 .settings
                 .instances
@@ -317,6 +323,10 @@ async fn save_settings(
     saved.memory_mb = input.memory_mb;
     saved.java_path = normalize(input.java_path).map(PathBuf::from);
     saved.download_source = normalize(input.download_source);
+    saved.installer_proxy = input
+        .installer_proxy
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty());
     if let Some(active) = saved.active_mut() {
         active.dir = requested_dir;
     }

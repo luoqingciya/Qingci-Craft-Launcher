@@ -158,6 +158,8 @@ pub async fn launch_game(
                 .active()
                 .and_then(|instance| instance.loader_kind.as_deref()),
         ),
+        // 启动路径不会跑安装器，不需要代理。
+        None,
         None,
     )
     .await?;
