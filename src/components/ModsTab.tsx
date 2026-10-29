@@ -43,10 +43,13 @@ const SORTS: { id: "relevance" | "downloads"; label: string }[] = [
 export function ModsTab({
   version,
   loader,
+  instance,
 }: {
   version: string | null;
   /** 加载器版本；空串表示原版。 */
   loader: string;
+  /** 当前实例名：切换实例后「已安装」必须重新读，否则会显示上一个实例的模组。 */
+  instance: string;
 }) {
   const [query, setQuery] = useState("");
   const [categories, setCategories] = useState<ModCategory[]>([]);
@@ -127,6 +130,8 @@ export function ModsTab({
     };
   }, []);
 
+  // 依赖 `instance`：`mods/` 是**每个实例各一份**，切换实例后必须重新读，
+  // 否则列表会停在切换前的那个实例上（标题已经跟着变了，列表没变，最难发现）。
   useEffect(() => {
     let cancelled = false;
     listMods()
@@ -143,7 +148,7 @@ export function ModsTab({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [instance]);
 
   async function checkUpdates() {
     if (!version) {
