@@ -536,7 +536,9 @@ export function InstallProgressBar({
     <div className="mt-2">
       <div className="flex items-center justify-between text-[12px] text-[var(--color-text-secondary)]">
         <span>
-          正在下载{phaseLabel(progress.phase)} {progress.completed}/{progress.total}
+          {`${
+            progress.phase === "loader" ? "正在安装" : "正在下载"
+          }${phaseLabel(progress.phase)} ${progress.completed}/${progress.total}`}
         </span>
         <span>{progress.percent}%</span>
       </div>

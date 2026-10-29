@@ -159,8 +159,8 @@ pub(crate) fn install_proxy(settings: &crate::settings::Settings) -> Option<Stri
         .map(str::to_owned)
 }
 
-/// 安装器用的 Java。它只要求 Java 8+，与游戏本身的 Java 版本无关，
-/// 所以不去复用启动路径那套「按版本选 Java」的逻辑。
+/// 安装器用的 Java。它要求 Java 8+（processor 也是独立 JVM），与游戏本身的 Java
+/// 版本无关，所以不去复用启动路径那套「按版本选 Java」的逻辑。
 fn resolve_installer_java(game_dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
     let installations = qcl_java::detect(&[], Some(&game_dir.join("runtime")));
     qcl_java::select(&installations, 8)
@@ -177,6 +177,7 @@ pub(crate) async fn load_meta_with_loader(
     kind: LoaderKind,
     java: Option<&std::path::Path>,
     proxy: Option<&str>,
+    loader_progress: Option<qcl_install::StepCallback<'_>>,
 ) -> Result<VersionMeta, String> {
     let parent = load_meta(downloader, version).await?;
 
@@ -199,6 +200,7 @@ pub(crate) async fn load_meta_with_loader(
             ));
         };
 
+        let noop = |_: usize, _: usize| {};
         qcl_install::install_forge(
             downloader,
             kind,
@@ -206,7 +208,10 @@ pub(crate) async fn load_meta_with_loader(
             &parent.id,
             loader_version,
             downloader.game_dir(),
-            proxy,
+            qcl_install::InstallHooks {
+                proxy,
+                on_step: loader_progress.unwrap_or(&noop),
+            },
         )
         .await
         .map_err(|error| format!("安装 {} 失败：{error}", kind.display()))?;
@@ -274,6 +279,20 @@ pub async fn install_game_version(
             .map_err(|_| "内部状态锁已中毒".to_owned())?;
         install_proxy(&inner.settings)
     };
+    // 加载器安装要跑 processor（独立 JVM，一步几秒到几十秒），没有反馈用户只能干等。
+    // 单独一个 `loader` 阶段，按步骤数报百分比。
+    let on_loader_step = |completed: usize, total: usize| {
+        let percent = u32::try_from(completed * 100 / total.max(1)).unwrap_or(100);
+        let _ = app.emit(
+            INSTALL_PROGRESS_EVENT,
+            InstallProgressEvent {
+                phase: "loader",
+                completed,
+                total,
+                percent,
+            },
+        );
+    };
     let meta = load_meta_with_loader(
         &downloader,
         &version,
@@ -281,6 +300,7 @@ pub async fn install_game_version(
         kind,
         java.as_deref(),
         proxy.as_deref(),
+        Some(&on_loader_step),
     )
     .await?;
     let options = VersionInstallOptions::for_version(&meta.id);
@@ -501,6 +521,7 @@ mod live_tests {
             super::LoaderKind::Fabric,
             None,
             None,
+            None,
         )
         .await
         .expect("应能合并出加载器版本");
@@ -600,6 +621,7 @@ mod offline_tests {
             "26.3",
             Some("0.20.1"),
             super::LoaderKind::Fabric,
+            None,
             None,
             None,
         )

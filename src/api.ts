@@ -116,8 +116,13 @@ export interface InstallSummary {
 
 /** 安装进度事件。 */
 export interface InstallProgressEvent {
-  /** `versionFiles` 或 `assets`。 */
-  phase: "versionFiles" | "assets";
+  /**
+   * `versionFiles`、`assets` 或 `loader`。
+   *
+   * `loader` 是 Forge / NeoForge 的安装步骤：跑的是 processor（独立 JVM），
+   * 按步骤数而不是文件数计进度。
+   */
+  phase: "versionFiles" | "assets" | "loader";
   completed: number;
   total: number;
   percent: number;
