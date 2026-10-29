@@ -208,7 +208,7 @@ fn mirror_urls(path: &str) -> Vec<String> {
 }
 
 /// Maven 坐标 → 仓库内路径。`g:a:v[:classifier][@ext]`
-fn coordinate_path(coordinate: &str) -> Result<String, ForgeError> {
+pub(crate) fn coordinate_path(coordinate: &str) -> Result<String, ForgeError> {
     let (main, ext) = match coordinate.split_once('@') {
         Some((main, ext)) => (main, ext),
         None => (coordinate, "jar"),

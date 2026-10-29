@@ -294,8 +294,15 @@ pub fn version_id(kind: ForgeKind, game_version: &str, loader_version: &str) -> 
 
 /// 安装 Forge / NeoForge 到游戏目录。
 ///
-/// 流程：下安装器 → 铺 `launcher_profiles.json` → 跑 `--installClient` → 确认版本
-/// JSON 落地。安装器自己负责 vanilla jar、libraries 与 processors。
+/// 两条路径，按 install_profile 的形态自动选：
+///
+/// - **有 processors**（1.13 以后）：走 [`crate::forge_processor::install_client`]，
+///   备料 + 自研执行链 + 写版本 JSON。除 Mojang mappings 一步（改走镜像）外纯本地，
+///   不需要官方安装器，也不依赖 `launchermeta.mojang.com`。
+/// - **没有 processors**（1.12.2 及更早）：那套 profile 只有一个 `install` 段，
+///   由安装器把内嵌的 universal jar 复制成 `versions/<id>/<id>.jar`，交给官方安装器。
+///
+/// 调用方必须**先装好原版**：processor 要切分并打补丁的就是原版 client jar。
 pub async fn install(
     downloader: &HttpDownloader,
     kind: ForgeKind,
@@ -305,16 +312,36 @@ pub async fn install(
     game_dir: &Path,
     proxy: Option<&str>,
 ) -> Result<ForgeInstallReport, ForgeError> {
-    ensure_launcher_profiles(game_dir)?;
-
     let jar = download_installer(downloader, kind, game_version, loader_version, game_dir).await?;
 
-    // 安装器会切到 `current_dir` 再解析参数里的相对路径，所以这两个都必须是绝对路径，
-    // 否则 `--installClient game` 会变成 `game/game`。
+    // 参数里要放绝对路径：安装器与 processor 都会切到 `current_dir` 再解析相对路径。
     // 用 `dunce` 而不是 `std::fs::canonicalize`：后者在 Windows 上会带上
-    // `\\?\` 前缀，进了安装器日志就没法看了。
+    // `\\?\` 前缀，进了日志与 processor 参数就没法看了。
     let jar = dunce::canonicalize(&jar)?;
     let game_dir = dunce::canonicalize(game_dir)?;
+
+    let expected = version_id(kind, game_version, loader_version);
+
+    if crate::forge_processor::has_processors(&jar)? {
+        let report =
+            crate::forge_processor::install_client(downloader, java, &jar, &game_dir, proxy)
+                .await?;
+        // 版本 id 是应用层定位 `versions/<id>/` 的依据，与约定不一致必须当场失败，
+        // 否则会写出一个永远读不到的实例目录。
+        if report.version_id != expected {
+            return Err(ForgeError::Installer(format!(
+                "上游版本 id 是 {}，与约定的 {expected} 不一致",
+                report.version_id
+            )));
+        }
+        return Ok(ForgeInstallReport {
+            version_id: expected,
+            log_tail: report.log_tail,
+        });
+    }
+
+    // 老版本：没有 processors，只有内嵌 jar 复制，直接跑官方安装器。
+    ensure_launcher_profiles(&game_dir)?;
 
     let output = {
         let mut command = tokio::process::Command::new(java);
@@ -343,7 +370,6 @@ pub async fn install(
         )));
     }
 
-    let expected = version_id(kind, game_version, loader_version);
     let json = game_dir
         .join("versions")
         .join(&expected)
@@ -401,12 +427,12 @@ async fn download_installer(
 }
 
 /// 下载器要求的 UA。
-fn user_agent() -> String {
+pub(crate) fn user_agent() -> String {
     format!("QingciCraftLauncher/{}", env!("CARGO_PKG_VERSION"))
 }
 
 /// 取输出的最后若干行，失败时给人看。
-fn tail_lines(output: &std::process::Output) -> Vec<String> {
+pub(crate) fn tail_lines(output: &std::process::Output) -> Vec<String> {
     let mut lines: Vec<String> = String::from_utf8_lossy(&output.stdout)
         .lines()
         .chain(String::from_utf8_lossy(&output.stderr).lines())
@@ -496,7 +522,7 @@ fn compare_versions(left: &str, right: &str) -> std::cmp::Ordering {
 /// 这一组属性（SOCKS 的 `socksProxyHost` 对 HTTPS 支持不稳）。
 /// 只给 `host:port`，不支持 `http://` 前缀与认证——这两样在本地代理里用不到，
 /// 多写的解析分支反而是没人测的代码。
-fn proxy_args(proxy: Option<&str>) -> Vec<String> {
+pub(crate) fn proxy_args(proxy: Option<&str>) -> Vec<String> {
     let Some(proxy) = proxy.map(str::trim).filter(|value| !value.is_empty()) else {
         return Vec::new();
     };

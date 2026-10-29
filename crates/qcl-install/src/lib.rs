@@ -17,6 +17,7 @@
 
 pub mod assets;
 pub mod forge;
+pub mod forge_processor;
 pub mod forge_stage;
 pub mod loader;
 pub mod manifest;
@@ -28,6 +29,9 @@ pub use forge::{
     BMCLAPI_FORGE_API, FORGE_MAVEN_BASE, ForgeError, ForgeInstallReport, ForgeKind,
     NEOFORGE_MAVEN_BASE, fetch_versions as fetch_forge_versions, install as install_forge,
     installer_url, neoforge_prefix, version_id as forge_version_id,
+};
+pub use forge_processor::{
+    ProcessorReport, has_processors, install_client as install_forge_client,
 };
 pub use forge_stage::{
     MAVEN_CENTRAL_BASE, StageReport, StagedArtifact, plan_from_profile, read_install_profile,
