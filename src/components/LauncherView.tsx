@@ -9,6 +9,7 @@ import type {
   GameStatus,
   InstallProgressEvent,
   JavaOption,
+  LoaderKind,
   LoaderOption,
   RuntimeInfo,
   SettingsInput,
@@ -16,6 +17,13 @@ import type {
   VersionSummary,
 } from "../api";
 import type { Account } from "../api";
+
+/** 可选的加载器类型。id 与后端设置里的 loaderKind 一致。 */
+const KIND_OPTIONS: { id: LoaderKind; label: string }[] = [
+  { id: "fabric", label: "Fabric" },
+  { id: "forge", label: "Forge" },
+  { id: "neoforge", label: "NeoForge" },
+];
 import type { CrashSummary } from "../lib/crash";
 import type { LogEntry } from "../lib/logs";
 import { applyTheme, loadTheme, type Theme } from "../lib/theme";
@@ -59,6 +67,8 @@ export function LauncherView({
   versions,
   selected,
   loaders,
+  loaderKind,
+  onLoaderKindChange,
   loader,
   loaderBusy,
   busy,
@@ -106,6 +116,8 @@ export function LauncherView({
   versions: VersionsState;
   selected: string | null;
   loaders: LoaderOption[];
+  loaderKind: LoaderKind;
+  onLoaderKindChange: (kind: LoaderKind) => void;
   loader: string;
   loaderBusy: boolean;
   busy: boolean;
@@ -200,16 +212,26 @@ export function LauncherView({
   const loaderItems: PickerItem[] = useMemo(
     () => [
       { id: "", label: "无（原版）", meta: "不加载任何加载器", accent: true },
+      // 加载器类型与版本放在同一个对话框里：这一行再加一个按钮就挤不下了。
+      ...KIND_OPTIONS.map((option) => ({
+        id: `kind:${option.id}`,
+        label: option.label,
+        meta: option.id === loaderKind ? "当前加载器" : "切换加载器类型",
+        accent: true,
+      })),
       ...loaders.map((option) => ({
         id: option.version,
-        label: `Fabric ${option.version}`,
-        meta: option.stable ? "稳定版" : "测试版",
+        label: option.version,
+        // Forge / NeoForge 的数据源没有稳定/测试之分，标「官方构建」而不是编一个「测试版」。
+        meta: option.stable ? "稳定版" : loaderKind === "fabric" ? "测试版" : "官方构建",
       })),
     ],
-    [loaders]
+    [loaders, loaderKind]
   );
 
-  const loaderLabel = loader ? `Fabric ${loader}` : "无（原版）";
+  const kindLabel =
+    KIND_OPTIONS.find((option) => option.id === loaderKind)?.label ?? "Fabric";
+  const loaderLabel = loader ? `${kindLabel} ${loader}` : "无（原版）";
 
   function toggleTheme() {
     const next: Theme = theme === "dark" ? "light" : "dark";
@@ -375,6 +397,12 @@ export function LauncherView({
           selectedId={loader}
           emptyHint="这个版本没有可用的 Fabric 加载器"
           onPick={(value) => {
+            // `kind:` 前缀表示「切换加载器类型」，不是版本号。
+            if (value.startsWith("kind:")) {
+              onLoaderKindChange(value.slice(5) as LoaderKind);
+              setPicker(null);
+              return;
+            }
             onLoaderChange(value);
             setPicker(null);
           }}

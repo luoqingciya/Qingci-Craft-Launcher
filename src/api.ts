@@ -65,6 +65,8 @@ export interface InstanceView {
   selectedVersion: string | null;
   /** 该实例上次选择的加载器版本。 */
   loaderVersion: string | null;
+  /** 加载器种类：fabric / forge / neoforge。旧实例为 null，按 fabric 处理。 */
+  loaderKind: string | null;
 }
 
 /** 提交给 Rust 的设置。空字符串表示「用默认值」。 */
@@ -197,14 +199,24 @@ export interface LoaderOption {
   stable: boolean;
 }
 
+/** 加载器种类。缺省即 Fabric——这个字段是后加的，旧配置里没有。 */
+export type LoaderKind = "fabric" | "forge" | "neoforge";
+
 /** 安装指定版本。幂等，可重复调用。`loader` 为 `null` 时安装原版。 */
-export function installGameVersion(version: string, loader: string | null): Promise<InstallSummary> {
-  return invoke<InstallSummary>("install_game_version", { version, loader });
+export function installGameVersion(
+  version: string,
+  loader: string | null,
+  loaderKind: LoaderKind = "fabric"
+): Promise<InstallSummary> {
+  return invoke<InstallSummary>("install_game_version", { version, loader, loaderKind });
 }
 
-/** 列出某个游戏版本可用的 Fabric 加载器版本。 */
-export function listLoaders(version: string): Promise<LoaderOption[]> {
-  return invoke<LoaderOption[]>("list_loaders", { version });
+/** 列出某个游戏版本可用的加载器版本。 */
+export function listLoaders(
+  version: string,
+  loaderKind: LoaderKind = "fabric"
+): Promise<LoaderOption[]> {
+  return invoke<LoaderOption[]>("list_loaders", { version, loaderKind });
 }
 
 /**
@@ -372,8 +384,12 @@ export function removeMod(filename: string): Promise<void> {
  * 与 `saveSettings` 分开：切换版本是高频操作，不该连带把设置表单里
  * 还没提交的改动写进去。
  */
-export function rememberSelection(version: string | null, loader: string | null): Promise<void> {
-  return invoke<void>("remember_selection", { version, loader });
+export function rememberSelection(
+  version: string | null,
+  loader: string | null,
+  loaderKind: LoaderKind = "fabric"
+): Promise<void> {
+  return invoke<void>("remember_selection", { version, loader, loaderKind });
 }
 
 /** 一个可更新的模组。 */
