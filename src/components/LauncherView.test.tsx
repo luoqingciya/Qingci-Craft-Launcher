@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -173,18 +173,38 @@ describe("LauncherView", () => {
     expect(screen.getByRole("status")).toHaveTextContent("26.3");
   });
 
-  it("加载器选择器默认含「无（原版）」并列出 Fabric 版本", async () => {
+  it("加载器分两步：先选类型，再选版本", async () => {
     const props = renderView({ selected: "26.3" });
 
     await userEvent.click(screen.getByRole("button", { name: "更换加载器" }));
 
-    // 左栏的加载器行与选择器里的「无（原版）」都会出现。
-    expect(screen.getAllByText("无（原版）").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("0.20.1")).toBeInTheDocument();
-    expect(screen.getByText("测试版")).toBeInTheDocument();
+    // 第一步只有类型，不混入版本号——挤在一个列表里读不出层次。
+    const kinds = within(screen.getByRole("dialog"));
+    expect(kinds.getByText("选择加载器类型")).toBeInTheDocument();
+    expect(kinds.getByText("无（原版）")).toBeInTheDocument();
+    expect(kinds.getByText("Forge")).toBeInTheDocument();
+    expect(kinds.queryByText("0.20.1")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByText("0.20.1"));
+    await userEvent.click(kinds.getByText("Fabric"));
+
+    // 第二步才是版本列表。
+    const versions = within(screen.getByRole("dialog"));
+    expect(versions.getByText("0.20.1")).toBeInTheDocument();
+    expect(versions.getByText("测试版")).toBeInTheDocument();
+
+    await userEvent.click(versions.getByText("0.20.1"));
     expect(props.onLoaderChange).toHaveBeenCalledWith("0.20.1");
+  });
+
+  it("选「无（原版）」时清空加载器", async () => {
+    const props = renderView({ selected: "26.3", loader: "" });
+
+    await userEvent.click(screen.getByRole("button", { name: "更换加载器" }));
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByText("无（原版）")
+    );
+
+    expect(props.onLoaderChange).toHaveBeenCalledWith("");
   });
 
   it("选中加载器后主按钮副标题带上 Fabric", () => {
@@ -197,6 +217,36 @@ describe("LauncherView", () => {
     renderView();
 
     expect(screen.getByRole("button", { name: "更换加载器" })).toBeDisabled();
+  });
+
+  it("选定版本后版本行锁定，不再是可点入口", () => {
+    // 换版本会让这个实例里已装的模组与文件对不上，所以选定即固定。
+    renderView({ selected: "26.3" });
+
+    expect(
+      screen.queryByRole("button", { name: "更换版本" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "版本已固定" })
+    ).toBeInTheDocument();
+  });
+
+  it("装了加载器后加载器行也锁定", () => {
+    renderView({ selected: "26.3", loader: "0.20.1" });
+
+    expect(
+      screen.getByRole("button", { name: "加载器已固定" })
+    ).toBeInTheDocument();
+  });
+
+  it("启动页可以直接新建实例，不用绕去设置页", async () => {
+    const props = renderView();
+
+    await userEvent.click(screen.getByRole("button", { name: "新建实例" }));
+    await userEvent.type(screen.getByLabelText("新实例名"), "冒险");
+    await userEvent.click(screen.getByRole("button", { name: "创建" }));
+
+    expect(props.onCreateInstance).toHaveBeenCalledWith("冒险");
   });
 
   it("设置页与关于页各自渲染对应内容", async () => {

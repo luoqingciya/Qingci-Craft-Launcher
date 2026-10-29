@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_LINES,
   appendLog,
+  explainNoise,
   filterLogs,
   levelOf,
   type LogEntry,
@@ -100,5 +101,24 @@ describe("日志级别与筛选", () => {
     const lines = [rawLine("[1] [main/WARN]: mods 有问题"), rawLine("[2] [main/INFO]: mods 正常")];
     expect(filterLogs(lines, "warn", "mods").length).toBe(1);
     expect(filterLogs(lines, "error", "mods").length).toBe(0);
+  });
+});
+
+describe("已知无害提示的解释", () => {
+  it("解释 Java 的本地库访问提示", () => {
+    // 玩家看到 WARNING 会以为坏了，界面上给一句人话。
+    const text =
+      "WARNING: A restricted method in java.lang.System has been called";
+    expect(explainNoise(text)).toContain("不影响游戏");
+  });
+
+  it("解释 Forge 首次运行的配置补全", () => {
+    const text =
+      "[main/INFO] [ne.mi.fm.lo.FMLConfig/CORE]: Incorrect key [earlyWindowSquir] was corrected from null to false";
+    expect(explainNoise(text)).toContain("首次运行");
+  });
+
+  it("认不出来的警告不假装能解释", () => {
+    expect(explainNoise("[main/ERROR] Something exploded")).toBeNull();
   });
 });

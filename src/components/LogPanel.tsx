@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { copyText } from "../lib/clipboard";
 import {
   MAX_LINES,
+  explainNoise,
   filterLogs,
   levelOf,
   type LogEntry,
@@ -166,20 +167,35 @@ export function LogPanel({ logs, onClear }: { logs: LogEntry[]; onClear: () => v
           <p className="text-[12px] text-[var(--color-text-muted)]">没有符合条件的日志。</p>
         ) : (
           <pre className="whitespace-pre-wrap break-all font-mono text-[12px] leading-[1.6]">
-            {visible.map((log) => (
-              <div
-                key={log.id}
-                className={STREAM_STYLES[log.stream]}
-                // 警告行左侧加一道竖线，扫一眼就能定位，不必逐行读级别。
-                style={
-                  levelOf(log) === "warn"
-                    ? { boxShadow: "inset 2px 0 0 var(--color-warning)" , paddingLeft: 6 }
-                    : undefined
-                }
-              >
-                {log.text}
-              </div>
-            ))}
+            {visible.map((log) => {
+              // 已知无害的提示单独标一下：玩家看到 WARNING 会以为坏了。
+              const noise = explainNoise(log.text);
+              return (
+                <div
+                  key={log.id}
+                  className={STREAM_STYLES[log.stream]}
+                  // 警告行左侧加一道竖线，扫一眼就能定位，不必逐行读级别。
+                  style={
+                    levelOf(log) === "warn"
+                      ? {
+                          boxShadow: "inset 2px 0 0 var(--color-warning)",
+                          paddingLeft: 6,
+                        }
+                      : undefined
+                  }
+                >
+                  {noise && (
+                    <span
+                      title={noise}
+                      className="mr-1.5 inline-block cursor-help rounded bg-[var(--color-surface-hover)] px-1 text-[10px] text-[var(--color-text-muted)] align-middle"
+                    >
+                      可忽略
+                    </span>
+                  )}
+                  {log.text}
+                </div>
+              );
+            })}
           </pre>
         )}
       </div>
