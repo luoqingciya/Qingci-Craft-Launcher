@@ -13,12 +13,14 @@
 //!
 //! - **身份类字段**取子版本：`id`、`mainClass`、`type`、发布时间
 //! - **文件类字段**子版本没写就继承父版本：`assetIndex`、`downloads`、`javaVersion`、`logging`
-//! - **库**：父在前、子在后，同名只留一份（子覆盖父）。两个版本各带一份 asm 时都要保留，
-//!   Forge 靠 `-p` 模块路径与 `-DignoreList` 自己处理，去重反而会破坏它
+//! - **库**：父在前、子在后，同 `group:artifact` 的以子为准（父版本那条删掉）。
+//!   这是**替换**而不是并存：Forge 1.16.5 用 log4j 2.15.0 顶掉原版 2.8.1，
+//!   两份都留在 classpath 上时旧版先命中，游戏起不来
 //! - **参数**：父在前、子追加在后。Forge 的 `--launchTarget forgeclient` 必须排在
 //!   原版的 `--username` 之后
 //! - **1.12.2 及更早**：只有 `minecraftArguments` 字符串，同样父在前、子追加
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use qcl_core::version::VersionMeta;
@@ -83,17 +85,23 @@ pub fn merge_inherited(parent: &VersionMeta, child: &VersionMeta) -> VersionMeta
         merged.compliance_level = child.compliance_level;
     }
 
-    // 库：父在前、子在后；同名只留一份（子覆盖父）。
-    let mut libraries = parent.libraries.clone();
-    for library in &child.libraries {
-        match libraries
-            .iter_mut()
-            .find(|existing| existing.name == library.name)
-        {
-            Some(existing) => *existing = library.clone(),
-            None => libraries.push(library.clone()),
+    // 库：父在前、子在后，**同 `group:artifact` 的以子为准**（父版本那条要删掉，
+    // 不是两份都留）。Forge 就靠这个机制把 log4j 2.8.1 换成 2.15.0（Log4Shell 修复）：
+    // 两份都留在 classpath 上时，排在前面的 2.8.1 先命中，`%tEx` 与
+    // `%minecraftFormatting` 直接抛 `NoSuchMethodError`，游戏起不来。
+    let overridden: BTreeSet<String> = child
+        .libraries
+        .iter()
+        .map(|library| artifact_key(&library.name))
+        .collect();
+    let mut libraries: Vec<qcl_core::version::Library> =
+        Vec::with_capacity(parent.libraries.len() + child.libraries.len());
+    for library in &parent.libraries {
+        if !overridden.contains(&artifact_key(&library.name)) {
+            libraries.push(library.clone());
         }
     }
+    libraries.extend(child.libraries.iter().cloned());
     merged.libraries = libraries;
 
     // 参数：父在前、子追加在后。两边都没有 `arguments` 时保持 `None`，
@@ -115,6 +123,16 @@ pub fn merge_inherited(parent: &VersionMeta, child: &VersionMeta) -> VersionMeta
     };
 
     merged
+}
+
+/// 库的「身份」：`group:artifact`。版本与 classifier 都不参与比较——
+/// 同一构件的不同版本是**替换**关系，不是并存关系。
+fn artifact_key(name: &str) -> String {
+    let mut parts = name.split(':');
+    match (parts.next(), parts.next()) {
+        (Some(group), Some(artifact)) => format!("{group}:{artifact}"),
+        _ => name.to_owned(),
+    }
 }
 
 /// 如果本地版本 JSON 声明了 `inheritsFrom`，就把父版本合并进来；否则原样返回。
@@ -259,20 +277,51 @@ mod tests {
     }
 
     #[test]
-    fn libraries_keep_both_asm_versions() {
+    fn libraries_override_by_group_and_artifact() {
         let merged = merge_inherited(&parse(PARENT), &parse(CHILD));
         let names: Vec<&str> = merged
             .libraries
             .iter()
             .map(|library| library.name.as_str())
             .collect();
-        // 父在前、子在后
+        // 同一个 group:artifact 只留子版本那条：父的 asm 9.3 被 9.5 顶掉，
+        // 两份都留着会让旧版在 classpath 上先命中。
+        assert_eq!(
+            names,
+            vec!["org.ow2.asm:asm:9.5", "com.google.guava:guava:31.1-jre"]
+        );
+    }
+
+    #[test]
+    fn parent_library_is_dropped_when_child_ships_another_version() {
+        // Forge 1.16.5 用 2.15.0 覆盖原版的 log4j 2.8.1（Log4Shell 修复）。
+        // 两份同时出现在 classpath 上时旧版先命中，`%tEx` 直接 NoSuchMethodError。
+        let parent = parse(
+            r#"{ "id": "1.16.5", "type": "release", "mainClass": "net.minecraft.client.main.Main",
+                 "releaseTime": "", "time": "",
+                 "libraries": [
+                   { "name": "org.apache.logging.log4j:log4j-core:2.8.1" },
+                   { "name": "org.apache.logging.log4j:log4j-api:2.8.1" } ] }"#,
+        );
+        let child = parse(
+            r#"{ "id": "1.16.5-forge-36.2.39", "type": "release", "mainClass": "x",
+                 "releaseTime": "", "time": "",
+                 "libraries": [
+                   { "name": "org.apache.logging.log4j:log4j-core:2.15.0" },
+                   { "name": "org.apache.logging.log4j:log4j-api:2.15.0" } ] }"#,
+        );
+
+        let merged = merge_inherited(&parent, &child);
+        let names: Vec<&str> = merged
+            .libraries
+            .iter()
+            .map(|library| library.name.as_str())
+            .collect();
         assert_eq!(
             names,
             vec![
-                "com.google.guava:guava:31.1-jre",
-                "org.ow2.asm:asm:9.3",
-                "org.ow2.asm:asm:9.5",
+                "org.apache.logging.log4j:log4j-core:2.15.0",
+                "org.apache.logging.log4j:log4j-api:2.15.0",
             ]
         );
     }

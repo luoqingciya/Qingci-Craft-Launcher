@@ -126,6 +126,12 @@ pub fn has_processors(installer: &Path) -> Result<bool, ForgeError> {
     Ok(!probe.processors.is_empty())
 }
 
+/// 步骤进度回调：`(已完成步骤数, 总步骤数)`。
+///
+/// processor 是独立 JVM，一步几秒到几十秒，界面没有反馈就只能干等。
+/// 只报计数、不报步骤名：名字是 `MCP_DATA` 这类术语，对用户没有意义。
+pub type StepCallback<'a> = &'a (dyn Fn(usize, usize) + Send + Sync);
+
 /// 客户端安装：备料 → 跑 processor → 写出版本 JSON。
 ///
 /// 调用方必须**先装好原版**（`versions/<mc>/<mc>.jar` 与同名 JSON），
@@ -136,6 +142,7 @@ pub async fn install_client(
     installer: &Path,
     game_dir: &Path,
     proxy: Option<&str>,
+    on_step: StepCallback<'_>,
 ) -> Result<ProcessorReport, ForgeError> {
     // processor 会以游戏目录为 `current_dir` 启动，classpath 与参数里必须是绝对路径，
     // 否则相对路径会变成「游戏目录/游戏目录/…」。用 `dunce` 避免 Windows 的 `\\?\` 前缀。
@@ -147,6 +154,8 @@ pub async fn install_client(
 
     // 库先备齐：processor 的 classpath 与 `[...]` 输入都在 `libraries/` 下。
     stage_prerequisites(downloader, installer, game_dir).await?;
+    // 安装器内嵌的 maven 树（1.13–1.16 才有）补上 `"url": ""` 的本地构件。
+    extract_embedded_maven(installer, game_dir)?;
 
     let data = resolve_data(&profile, installer, game_dir)?;
     // processor 的输出目录不一定会自己建，先统一建好。
@@ -176,13 +185,18 @@ pub async fn install_client(
         ..ProcessorReport::default()
     };
 
-    for processor in profile
+    // 先收集再遍历：回调需要总数，而 `filter` 出来的迭代器不告诉你有几个。
+    let steps: Vec<&Processor> = profile
         .processors
         .iter()
         .filter(|item| item.runs_on_client())
-    {
+        .collect();
+    let total = steps.len();
+
+    for (index, processor) in steps.iter().enumerate() {
         let args = resolved_args(processor, &data, &builtins, game_dir)?;
         let task = task_name(&args).unwrap_or_else(|| processor.jar.clone());
+        on_step(index + 1, total);
 
         if task == TASK_DOWNLOAD_MOJMAPS {
             let output = flag_value(&args, "--output").ok_or_else(|| {
@@ -209,6 +223,48 @@ pub async fn install_client(
 
     write_version_json(installer, game_dir, &profile)?;
     Ok(report)
+}
+
+/// 把安装器内嵌的 `maven/` 树铺到 `libraries/`。
+///
+/// 1.13–1.16 的安装器把 Forge 自己的 jar 塞在 `maven/net/minecraftforge/...` 下，
+/// 而 `version.json` 里对应条目是 `"url": ""`——意思是「本地提供，不要下载」。
+/// 官方安装器就是靠解这块满足它的。不解会缺 `forge-<v>.jar`，启动时报
+/// `Cannot find launch target`：那个 jar 提供 modlauncher 的 launch handler。
+///
+/// 1.20.1 的安装器里没有这棵树（只有 `META-INF/maven/`），本函数自然什么都不做。
+fn extract_embedded_maven(installer: &Path, game_dir: &Path) -> Result<usize, ForgeError> {
+    let mut archive = open_zip(installer)?;
+    let libraries = game_dir.join("libraries");
+    let mut extracted = 0;
+
+    for index in 0..archive.len() {
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|error| ForgeError::Installer(format!("读取安装器条目失败：{error}")))?;
+        // `enclosed_name` 会挡掉 `..` 与绝对路径，不会写到 libraries/ 之外。
+        let Some(path) = entry.enclosed_name() else {
+            continue;
+        };
+        // 用 Path 的组件比较，不要转字符串：Windows 上分隔符是反斜杠，
+        // `strip_prefix("maven/")` 永远匹配不上。
+        let Ok(relative) = path.strip_prefix("maven") else {
+            continue;
+        };
+        if entry.is_dir() {
+            continue;
+        }
+
+        let target = libraries.join(relative);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut file = std::fs::File::create(&target)?;
+        std::io::copy(&mut entry, &mut file)?;
+        extracted += 1;
+    }
+
+    Ok(extracted)
 }
 
 /// 固定参数：不是 `data` 里的键，但 processor 参数里会出现。

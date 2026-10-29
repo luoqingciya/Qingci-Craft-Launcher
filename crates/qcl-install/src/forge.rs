@@ -292,6 +292,16 @@ pub fn version_id(kind: ForgeKind, game_version: &str, loader_version: &str) -> 
     }
 }
 
+/// 安装过程中可选的「钩子」。
+///
+/// 两样都不是必需信息，但都得从应用层一路传进来；合成一个结构比再加两个参数清楚。
+pub struct InstallHooks<'a> {
+    /// 官方安装器 JVM 的代理（`host:port`）。自研 processor 链用不到。
+    pub proxy: Option<&'a str>,
+    /// 步骤进度回调（自研链按 processor 步骤数报，老版本只报一次）。
+    pub on_step: crate::forge_processor::StepCallback<'a>,
+}
+
 /// 安装 Forge / NeoForge 到游戏目录。
 ///
 /// 两条路径，按 install_profile 的形态自动选：
@@ -310,8 +320,9 @@ pub async fn install(
     game_version: &str,
     loader_version: &str,
     game_dir: &Path,
-    proxy: Option<&str>,
+    hooks: InstallHooks<'_>,
 ) -> Result<ForgeInstallReport, ForgeError> {
+    let InstallHooks { proxy, on_step } = hooks;
     let jar = download_installer(downloader, kind, game_version, loader_version, game_dir).await?;
 
     // 参数里要放绝对路径：安装器与 processor 都会切到 `current_dir` 再解析相对路径。
@@ -323,9 +334,10 @@ pub async fn install(
     let expected = version_id(kind, game_version, loader_version);
 
     if crate::forge_processor::has_processors(&jar)? {
-        let report =
-            crate::forge_processor::install_client(downloader, java, &jar, &game_dir, proxy)
-                .await?;
+        let report = crate::forge_processor::install_client(
+            downloader, java, &jar, &game_dir, proxy, on_step,
+        )
+        .await?;
         // 版本 id 是应用层定位 `versions/<id>/` 的依据，与约定不一致必须当场失败，
         // 否则会写出一个永远读不到的实例目录。
         if report.version_id != expected {
@@ -341,6 +353,8 @@ pub async fn install(
     }
 
     // 老版本：没有 processors，只有内嵌 jar 复制，直接跑官方安装器。
+    // 这一趟没有中间步骤可报，只给一个「进行中」，免得界面一直停在零。
+    on_step(1, 1);
     ensure_launcher_profiles(&game_dir)?;
 
     let output = {
