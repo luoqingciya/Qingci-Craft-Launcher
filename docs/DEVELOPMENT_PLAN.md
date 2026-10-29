@@ -1,6 +1,6 @@
 # Qingci Craft Launcher 开发规划
 
-> 文档状态：Draft v0.1 ｜ 最后更新：2026-10-26 ｜ 仓库：`luoqingciya/Qingci-Craft-Launcher`
+> 文档状态：Draft v0.1 ｜ 最后更新：2026-10-29 ｜ 仓库：`luoqingciya/Qingci-Craft-Launcher`
 > 本文档为项目立项基线。所有技术决策以本文为准；变更须走 PR 并同步更新本文件。
 > 各 Phase 的实际完成情况见第 7 节；发布流程的现状见 8.2。
 
@@ -662,3 +662,4 @@ Phase 0–3 已完成（含正版登录与实例管理），Fabric 与模组管�
 | ADR-0002 | 前端选用 React 19 | [已撰写](adr/0002-react-19.md) |
 | ADR-0003 | 配置用 JSON 而非 SQLite | [已撰写](adr/0003-json-config.md) |
 | ADR-0004 | 认证采用设备码流程 | [已撰写](adr/0004-device-code-flow.md) |
+| ADR-0005 | 加载器安装走自研 processor 链 | [已撰写](adr/0005-loader-install-pipeline.md) |

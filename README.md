@@ -31,7 +31,7 @@
 | Java 选择 | ✅ | 按版本要求自动挑选；也可手动指定，低于要求会直接拒绝 |
 | 启动与日志 | ✅ | 实时转发 stdout/stderr，「停止」能真正终止进程 |
 | 设置 | ✅ | 游戏目录、离线玩家名、最大内存、Java 运行时、下载源 |
-| Fabric 加载器 | ✅ | 选版本 → 选加载器 → 安装 → 启动；合并结果落盘，重启后仍可用 |
+| 模组加载器 | ✅ | Fabric / Forge / NeoForge 三选一；Forge 侧走自研 processor 链，不需要官方安装器。已验证 Forge 1.16.5、1.20.1 与 NeoForge 21.1.72 都能进主菜单 |
 | 模组管理 | ✅ | Modrinth 搜索 / 安装 / 卸载 / 更新检查；安装时自动补必需依赖，装前可预览依赖 |
 | 模组状态 | ✅ | 已装的项目直接标出；检查更新时同时报出不适配当前版本的模组 |
 | 中文译名与筛选 | ✅ | 译名库远端托管、启动时拉取并缓存；中文关键词别名 + 19 个分类中文化 |
@@ -41,13 +41,12 @@
 | 微软正版登录 | ✅ | 设备码流程（启动器碰不到密码）；令牌存系统凭据库，启动时静默刷新 |
 | 实例管理 | ✅ | 多份独立游戏目录，各自的版本选择互不干扰；启动页可直接打开目录、看到已装模组数 |
 | 运行环境 | ✅ | 关于页显示版本 / 系统架构 / Tauri / WebView，一键复制成反馈文本 |
-| Forge / NeoForge | ✅ | 自研 processor 链安装，合并 `inheritsFrom` 后直接启动；Forge 1.16.5 / 1.20.1 与 NeoForge 21.1.72 已实测进入主菜单 |
 
 ## 设计取向
 
 - **轻量**：复用系统 WebView。便携版可执行文件 12.7 MB，NSIS 安装包 3.8 MB。
 - **跨平台**：Windows 10+ / macOS 12+ / Linux（glibc 2.31+），三平台 CI 构建与测试。发布产物覆盖 Windows、macOS 与 Linux。
-- **可验证**：核心逻辑（版本解析、依赖求值、参数组装、认证协议、模组解析、崩溃报告解析）放在不依赖 GUI 的 Rust crate 中，CI 里 340 个 Rust 测试 + 183 个前端测试全量覆盖。
+- **可验证**：核心逻辑（版本解析、依赖求值、参数组装、认证协议、模组解析、崩溃报告解析）放在不依赖 GUI 的 Rust crate 中，CI 里 380 个 Rust 测试 + 184 个前端测试全量覆盖。
 - **清单驱动**：版本、依赖库、JVM 参数全部从官方清单推导，不硬编码任何版本列表。
 
 ## 技术栈
@@ -70,7 +69,8 @@
 crates/          Rust 领域层（全部可在无 GUI 环境测试）
   qcl-core       版本解析、规则求值、启动命令组装（纯逻辑，无 IO）
   qcl-net        下载计划、执行器、HTTP 下载与 SHA-1 校验
-  qcl-install    安装编排：版本文件、资产、natives、Fabric profile 合并
+  qcl-install    安装编排：版本文件、资产、natives、Fabric profile 合并、
+                 Forge / NeoForge 的 processor 链与 `inheritsFrom` 合并
   qcl-java       Java 探测与按需安装
   qcl-runtime    游戏进程启动、日志转发、停止，以及 crash-reports 解析
   qcl-platform   本机平台探测（系统版本决定 GC 参数）
@@ -154,6 +154,21 @@ JavaScriptCore + GTK3 才能在任意发行版上直接跑——那套东西本�
 - **Linux**：安装包（AppImage / deb）不上 COS，只在 GitHub Releases 提供
 
 配置与密钥管理见 [docs/RELEASE.md](docs/RELEASE.md)。
+
+## 模组加载器
+
+选好游戏版本后，可以在同一个对话框里选加载器：**Fabric / Forge / NeoForge**（Quilt 尚未支持）。
+可选的加载器版本从上游清单实时拉取，不硬编码。
+
+- **Fabric** 只需合并一份 profile，安装是秒级的。
+- **Forge / NeoForge** 要真的跑一遍安装步骤（切分原版 jar、合并 mappings、打二进制补丁），
+  全程 20–60 秒，界面会显示「正在安装加载器 3/6」的步骤进度。这些步骤全部在本机执行，
+  其中唯一需要联网的（Mojang mappings）也走下载源镜像，**不访问 Mojang 官方主机**。
+- 安装加载器需要一个 **Java 8+** 运行时（与游戏本身要求的 Java 版本无关），启动器会自动挑选。
+- 每个「游戏版本 + 加载器版本」组合有独立的版本目录，换加载器版本不会覆盖已有的安装。
+
+> 加载器能装上不等于游戏能跑：Forge / NeoForge 对 Java 版本比原版更敏感。
+> 例如 1.20.1 的 Forge 跑不了 Java 26（ASM 版本不够），需要用该版本对应的 Java。
 
 ## 本地开发
 
