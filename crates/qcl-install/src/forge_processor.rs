@@ -529,6 +529,8 @@ async fn run_java(
     proxy: Option<&str>,
 ) -> Result<Vec<String>, ForgeError> {
     let mut command = tokio::process::Command::new(java);
+    // processor 是 java.exe，不隐藏会弹黑框。
+    crate::forge::hide_console(&mut command);
     // 现在只有极少数 processor 会联网（Mojang mappings 那步已被我们接管），
     // 代理属性留着是为了上游改结构时不至于直接卡死。
     for argument in proxy_args(proxy) {

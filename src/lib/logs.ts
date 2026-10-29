@@ -85,3 +85,26 @@ export function filterLogs(
     return needle === "" || line.text.toLowerCase().includes(needle);
   });
 }
+
+/**
+ * 已知无害的提示：返回一句人话解释，`null` 表示不认识。
+ *
+ * 玩家看到「WARNING」「Incorrect key」「restricted method」会以为出了问题。
+ * 这几类都是环境或首次运行的正常输出，解释一句比让人去搜论坛有用。
+ * 只匹配**确定的**几条——认不出来的警告一律原样留着，不要假装都能解释。
+ */
+export function explainNoise(text: string): string | null {
+  if (text.includes("A restricted method in java.lang.System has been called")) {
+    return "Java 新版本收紧了本地库访问；LWJGL 还没跟上。只是提示，不影响游戏。";
+  }
+  if (text.includes("Unsupported JNI version detected")) {
+    return "LWJGL 检测到比它预期更新的 Java。能跑就说明没问题。";
+  }
+  if (/Incorrect key .* was corrected from/.test(text)) {
+    return "Forge 首次运行在补全自己的配置文件，下次启动就不会再出现。";
+  }
+  if (text.includes("could not find sampler named")) {
+    return "原版着色器缺一个可选采样器，1.20 系列常见，不影响画面。";
+  }
+  return null;
+}

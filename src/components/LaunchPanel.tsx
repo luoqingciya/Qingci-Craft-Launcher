@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // 附加条款（第 7 条）：见 ADDITIONAL-TERMS.md
 
+import { useState } from "react";
+
 import type { Account, GameStatus, VersionSummary } from "../api";
 import type { InstanceView } from "../api";
 
@@ -23,6 +25,7 @@ export function LaunchPanel({
   selected,
   selectedVersion,
   loaderLabel,
+  hasLoader,
   busy,
   status,
   canAct,
@@ -34,6 +37,7 @@ export function LaunchPanel({
   onLogin,
   onSignOut,
   onSwitchInstance,
+  onCreateInstance,
   gameDir,
   modCount,
   onOpenGameDir,
@@ -53,6 +57,8 @@ export function LaunchPanel({
   selectedVersion: VersionSummary | undefined;
   /** 当前加载器的显示文案，如「无（原版）」或「Fabric 0.20.1」。 */
   loaderLabel: string;
+  /** 当前实例是否已经装了加载器。加载器选定后同样不允许再改。 */
+  hasLoader: boolean;
   busy: boolean;
   status: GameStatus;
   canAct: boolean;
@@ -65,6 +71,8 @@ export function LaunchPanel({
   onSignOut: () => void;
   /** 切换实例：整套游戏目录跟着换。 */
   onSwitchInstance: (name: string) => void;
+  /** 在当前实例旁边直接新建一个实例，不必绕去设置页。 */
+  onCreateInstance: (name: string) => void;
   /** 当前实例的游戏目录，点一下用系统文件管理器打开。 */
   gameDir: string;
   /** 已安装的模组数量；`null` 表示还没读出来。 */
@@ -74,6 +82,22 @@ export function LaunchPanel({
   const running = status.running;
   const displayName = account?.name ?? playerName;
   const initial = displayName.trim().charAt(0) || "?";
+  // 版本一旦选定就锁住，加载器装过也锁住：这两样决定了这个实例里装着哪套文件，
+  // 事后改动会让已装的模组与版本对不上（用户实际踩到过）。
+  const versionLocked = selected !== null;
+  const loaderLocked = hasLoader;
+  const [creatingInstance, setCreatingInstance] = useState(false);
+  const [newInstanceName, setNewInstanceName] = useState("");
+
+  function submitInstance() {
+    const name = newInstanceName.trim();
+    if (!name) {
+      return;
+    }
+    onCreateInstance(name);
+    setNewInstanceName("");
+    setCreatingInstance(false);
+  }
   // 恢复期间「还没有账号」和「还没查完」看起来一样，必须分开说：
   // 直接说「离线账户」再跳成「正版账户」，用户看到的就是账号时有时无。
   const accountLabel = restoring
@@ -135,42 +159,88 @@ export function LaunchPanel({
 
         <div className="h-px bg-[var(--color-border-subtle)]" />
 
-        {/* 当前版本 + 加载器：两行都是「可点击的选择入口」 */}
-        {/* 只有一个实例时不显示切换器：多一行没得选的东西只是噪音。 */}
-        {instances.length > 1 && (
-          <>
-            <label className="flex items-center gap-3 px-4 py-3">
-              <span className="min-w-0 flex-1 text-[12px] text-[var(--color-text-muted)]">
-                实例
-              </span>
-              {/* 原生 select 的下拉箭头在各平台长得都不一样，且与这套圆角对不上，
-                  所以关掉原生外观自己画一个。 */}
-              <span className="relative">
-                <select
-                  value={activeInstance}
-                  onChange={(event) => onSwitchInstance(event.target.value)}
-                  disabled={running}
-                  aria-label="切换实例"
-                  className="max-w-[180px] appearance-none rounded-lg bg-[var(--color-surface)] py-1.5 pl-2.5 pr-7 text-[13px] text-[var(--color-text-primary)] ring-1 ring-inset ring-[var(--color-border-subtle)] transition-colors hover:ring-[var(--color-border-strong)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] disabled:opacity-60"
-                >
-                  {instances.map((instance) => (
-                    <option key={instance.name} value={instance.name}>
-                      {instance.name}
-                    </option>
-                  ))}
-                </select>
-                <Chevron className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
-              </span>
-            </label>
-            <div className="h-px bg-[var(--color-border-subtle)]" />
-          </>
-        )}
+        {/* 实例行常驻：即使只有一个实例，也要有地方新建——否则新建实例只能去设置页，
+            而「换个版本玩」的正常操作是新建一个实例，不是改当前实例。 */}
+        <div className="flex items-center gap-3 px-4 py-3">
+          <span className="min-w-0 flex-1 text-[12px] text-[var(--color-text-muted)]">
+            实例
+          </span>
+          {creatingInstance ? (
+            <span className="flex items-center gap-1.5">
+              <input
+                autoFocus
+                value={newInstanceName}
+                onChange={(event) => setNewInstanceName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    submitInstance();
+                  }
+                  if (event.key === "Escape") {
+                    setCreatingInstance(false);
+                  }
+                }}
+                placeholder="实例名"
+                aria-label="新实例名"
+                className="w-28 rounded-lg bg-[var(--color-surface)] px-2.5 py-1.5 text-[13px] text-[var(--color-text-primary)] ring-1 ring-inset ring-[var(--color-border-subtle)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+              />
+              <button
+                type="button"
+                onClick={submitInstance}
+                disabled={!newInstanceName.trim()}
+                className="rounded-lg px-2 py-1.5 text-[13px] text-[var(--color-accent-text)] transition-colors hover:bg-[var(--color-surface-hover)] disabled:opacity-50"
+              >
+                创建
+              </button>
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5">
+              {instances.length > 1 ? (
+                <span className="relative">
+                  <select
+                    value={activeInstance}
+                    onChange={(event) => onSwitchInstance(event.target.value)}
+                    disabled={running}
+                    aria-label="切换实例"
+                    className="max-w-[150px] appearance-none rounded-lg bg-[var(--color-surface)] py-1.5 pl-2.5 pr-7 text-[13px] text-[var(--color-text-primary)] ring-1 ring-inset ring-[var(--color-border-subtle)] transition-colors hover:ring-[var(--color-border-strong)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] disabled:opacity-60"
+                  >
+                    {instances.map((instance) => (
+                      <option key={instance.name} value={instance.name}>
+                        {instance.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Chevron className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
+                </span>
+              ) : (
+                <span className="max-w-[150px] truncate text-[13px] text-[var(--color-text-primary)]">
+                  {activeInstance}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setCreatingInstance(true)}
+                disabled={running}
+                aria-label="新建实例"
+                title="新建实例"
+                className="rounded-lg px-1.5 py-1 text-[15px] leading-none text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-accent-text)] disabled:opacity-60"
+              >
+                ＋
+              </button>
+            </span>
+          )}
+        </div>
         <button
           type="button"
-          onClick={onPickVersion}
+          onClick={versionLocked ? undefined : onPickVersion}
           disabled={running}
-          aria-label="更换版本"
-          className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--color-surface-hover)] disabled:opacity-60"
+          aria-disabled={versionLocked}
+          aria-label={versionLocked ? "版本已固定" : "更换版本"}
+          title={versionLocked ? LOCK_HINT : undefined}
+          className={`flex w-full items-center gap-3 px-4 py-3 text-left disabled:opacity-60 ${
+            versionLocked
+              ? "cursor-default"
+              : "group transition-colors hover:bg-[var(--color-surface-hover)]"
+          }`}
         >
           <div className="min-w-0 flex-1">
             <div className="text-[12px] text-[var(--color-text-muted)]">版本</div>
@@ -184,17 +254,27 @@ export function LaunchPanel({
               </div>
             )}
           </div>
-          <Chevron className="shrink-0 text-[var(--color-text-muted)] transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[var(--color-accent-text)]" />
+          {versionLocked ? (
+            <Lock className="shrink-0 text-[var(--color-text-muted)]" />
+          ) : (
+            <Chevron className="shrink-0 text-[var(--color-text-muted)] transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[var(--color-accent-text)]" />
+          )}
         </button>
 
         <div className="h-px bg-[var(--color-border-subtle)]" />
 
         <button
           type="button"
-          onClick={onPickLoader}
+          onClick={loaderLocked ? undefined : onPickLoader}
           disabled={running || !selected}
-          aria-label="更换加载器"
-          className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--color-surface-hover)] disabled:opacity-60"
+          aria-disabled={loaderLocked}
+          aria-label={loaderLocked ? "加载器已固定" : "更换加载器"}
+          title={loaderLocked ? LOCK_HINT : undefined}
+          className={`flex w-full items-center gap-3 px-4 py-3 text-left disabled:opacity-60 ${
+            loaderLocked
+              ? "cursor-default"
+              : "group transition-colors hover:bg-[var(--color-surface-hover)]"
+          }`}
         >
           <div className="min-w-0 flex-1">
             <div className="text-[12px] text-[var(--color-text-muted)]">加载器</div>
@@ -202,7 +282,11 @@ export function LaunchPanel({
               {selected ? loaderLabel : "先选择版本"}
             </div>
           </div>
-          <Chevron className="shrink-0 text-[var(--color-text-muted)] transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[var(--color-accent-text)]" />
+          {loaderLocked ? (
+            <Lock className="shrink-0 text-[var(--color-text-muted)]" />
+          ) : (
+            <Chevron className="shrink-0 text-[var(--color-text-muted)] transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[var(--color-accent-text)]" />
+          )}
         </button>
 
         {/* 把信息行推到底部：中段的空档留在卡内，读起来是留白而不是空洞。 */}
@@ -278,6 +362,31 @@ export function LaunchPanel({
         </div>
       </div>
     </div>
+  );
+}
+
+/** 版本 / 加载器锁定后的说明：告诉用户为什么点不动，以及该怎么做。 */
+const LOCK_HINT = "实例的版本与加载器选定后不再更改；要换一套请新建实例";
+
+/**
+ * 锁图标：表示这一行已固定。
+ *
+ * 不用「置灰 + 禁止点击」：置灰看起来像加载失败或没有权限，
+ * 而这里的意思是「已经定好了」——锁比灰更准确。
+ */
+function Lock({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden
+      className={`h-3.5 w-3.5 ${className}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    >
+      <rect x="3.5" y="7" width="9" height="6" rx="1.5" />
+      <path d="M5.8 7V5.4a2.2 2.2 0 0 1 4.4 0V7" strokeLinecap="round" />
+    </svg>
   );
 }
 

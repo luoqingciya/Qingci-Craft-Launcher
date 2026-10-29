@@ -101,7 +101,12 @@ export function PickerDialog({
         className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"
       />
 
-      <div className="relative flex max-h-[62vh] w-[560px] max-w-[92%] flex-col overflow-hidden rounded-2xl bg-[var(--color-surface-raised)] shadow-2xl ring-1 ring-[var(--color-border-strong)]">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="relative flex max-h-[62vh] w-[560px] max-w-[92%] flex-col overflow-hidden rounded-2xl bg-[var(--color-surface-raised)] shadow-2xl ring-1 ring-[var(--color-border-strong)]"
+      >
         <div className="flex items-center gap-2 border-b border-[var(--color-border-subtle)] px-4 py-3">
           <span className="text-[13px] font-medium text-[var(--color-text-secondary)]">
             {title}

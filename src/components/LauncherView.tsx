@@ -184,7 +184,7 @@ export function LauncherView({
     }
   }, [tab, onRefreshModCount]);
   const [theme, setTheme] = useState<Theme>(loadTheme);
-  const [picker, setPicker] = useState<"version" | "loader" | null>(null);
+  const [picker, setPicker] = useState<"version" | "loader-kind" | "loader" | null>(null);
 
   const ready = versions.status === "ready";
   const canAct = ready && selected !== null && !busy;
@@ -209,23 +209,34 @@ export function LauncherView({
     }));
   }, [ready, versions]);
 
-  const loaderItems: PickerItem[] = useMemo(
+  // 第一步：选加载器类型（含「原版」）。类型与版本分两步，是因为塞进同一个列表后
+  // 「原版 / Fabric / Forge / NeoForge / 三十个 Fabric 版本」混在一起，读不出层次。
+  const kindItems: PickerItem[] = useMemo(
     () => [
-      { id: "", label: "无（原版）", meta: "不加载任何加载器", accent: true },
-      // 加载器类型与版本放在同一个对话框里：这一行再加一个按钮就挤不下了。
+      {
+        id: "",
+        label: "无（原版）",
+        meta: "不加载任何加载器",
+        badge: loader === null ? "当前" : undefined,
+      },
       ...KIND_OPTIONS.map((option) => ({
-        id: `kind:${option.id}`,
+        id: option.id,
         label: option.label,
         meta: option.id === loaderKind ? "当前加载器" : "切换加载器类型",
-        accent: true,
       })),
-      ...loaders.map((option) => ({
+    ],
+    [loader, loaderKind]
+  );
+
+  // 第二步：该类型下的版本。只剩版本号，不再混入类型行。
+  const loaderItems: PickerItem[] = useMemo(
+    () =>
+      loaders.map((option) => ({
         id: option.version,
         label: option.version,
         // Forge / NeoForge 的数据源没有稳定/测试之分，标「官方构建」而不是编一个「测试版」。
         meta: option.stable ? "稳定版" : loaderKind === "fabric" ? "测试版" : "官方构建",
       })),
-    ],
     [loaders, loaderKind]
   );
 
@@ -302,17 +313,19 @@ export function LauncherView({
               instances={settings?.instances ?? []}
               activeInstance={settings?.activeInstance ?? ""}
               onSwitchInstance={onSwitchInstance}
+              onCreateInstance={onCreateInstance}
               gameDir={settings?.gameDir ?? ""}
               modCount={modCount}
               onOpenGameDir={onOpenGameDir}
               selected={selected}
               selectedVersion={selectedVersion}
               loaderLabel={loaderLabel}
+              hasLoader={Boolean(loader)}
               busy={busy}
               status={status}
               canAct={canAct}
               onPickVersion={() => setPicker("version")}
-              onPickLoader={() => setPicker("loader")}
+              onPickLoader={() => setPicker("loader-kind")}
               onLaunch={onLaunch}
               onInstall={onInstall}
               onStop={onStop}
@@ -389,20 +402,36 @@ export function LauncherView({
         />
       )}
 
-      {picker === "loader" && (
+      {picker === "loader-kind" && (
         <PickerDialog
-          title={loaderBusy ? "加载器（正在读取…）" : "选择加载器"}
-          placeholder="搜索 Fabric 版本"
-          items={loaderItems}
-          selectedId={loader}
-          emptyHint="这个版本没有可用的 Fabric 加载器"
+          title="选择加载器类型"
+          placeholder="搜索 Fabric / Forge / NeoForge"
+          items={kindItems}
+          selectedId={loader === null ? "" : loaderKind}
+          emptyHint="没有匹配的加载器"
           onPick={(value) => {
-            // `kind:` 前缀表示「切换加载器类型」，不是版本号。
-            if (value.startsWith("kind:")) {
-              onLoaderKindChange(value.slice(5) as LoaderKind);
+            if (value === "") {
+              // 空串表示「原版」：App 那边会把它归一成 null。
+              onLoaderChange("");
               setPicker(null);
               return;
             }
+            // 选定类型后直接进版本列表：分两步是为了不把类型和三十个版本混在一起。
+            onLoaderKindChange(value as LoaderKind);
+            setPicker("loader");
+          }}
+          onClose={() => setPicker(null)}
+        />
+      )}
+
+      {picker === "loader" && (
+        <PickerDialog
+          title={loaderBusy ? `${kindLabel}（正在读取…）` : `选择 ${kindLabel} 版本`}
+          placeholder={`搜索 ${kindLabel} 版本`}
+          items={loaderItems}
+          selectedId={loader}
+          emptyHint={`${selected ?? "这个版本"} 没有可用的 ${kindLabel} 加载器`}
+          onPick={(value) => {
             onLoaderChange(value);
             setPicker(null);
           }}
