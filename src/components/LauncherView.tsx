@@ -178,6 +178,7 @@ export function LauncherView({
   const [tab, setTab] = useState<Tab>("home");
 
   // 回到启动页时刷新模组数量：在模组页装完/删完，这里应该立刻反映出来。
+  // 切换实例由 App 那边负责刷新——实例是它的状态，放在这里只能靠「依赖它」硬触发。
   useEffect(() => {
     if (tab === "home") {
       onRefreshModCount();
