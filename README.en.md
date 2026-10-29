@@ -44,7 +44,7 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 | Microsoft login | ✅ | Device code flow (the launcher never sees the password); tokens live in the OS keychain and refresh silently at startup |
 | Instances | ✅ | Multiple independent game directories, each with its own version selection; the launch panel opens the directory and shows the installed mod count |
 | Runtime info | ✅ | The about tab shows version, OS/arch, Tauri and WebView, copyable as a bug-report block |
-| Forge / NeoForge | 🟡 | Installed through our own processor pipeline, byte-identical to the official installer; the launch path is wired, a full launch test with assets is still pending |
+| Forge / NeoForge | ✅ | Installed through our own processor pipeline; after merging `inheritsFrom` it launches directly — Forge 1.20.1 verified into the main menu |
 
 ## Design principles
 

@@ -431,8 +431,20 @@ CLI 契约与下载链路已实测，安装流程本身还没跑过。
 1.12.2 及更早的 profile 没有 `processors`（只有一个 `install` 段，由安装器把内嵌 jar 复制成
 `versions/<id>/<id>.jar`），那部分仍走官方安装器，按 `has_processors` 自动分流。
 
-实现见 `crates/qcl-install/src/forge_processor.rs`。剩余未做：带完整资产的启动验证
-（产物 SHA-1 已对齐，风险有界）。
+实现见 `crates/qcl-install/src/forge_processor.rs`。
+
+**启动验证（2026-10-29 已完成，Forge 1.20.1）**：装齐 94 个版本文件与 3575 个资产
+（651 MB）后启动，游戏日志里出现 `Forge mod loading, version 47.2.0, for MC 1.20.1`
+与 `Setting user` / `Sound engine started`，即进入主菜单。过程中修掉两个真实缺陷：
+
+1. **`inheritsFrom` 没合并**：安装器写出的 JSON 只有 29 个库、没有 `assetIndex`、
+   没有 `downloads`，游戏参数里也没有 `--username`。不合并直接启动必然失败，
+   现由 `crates/qcl-install/src/inherit.rs` 处理（父在前、子追加）。
+2. **缺 `${library_directory}` / `${classpath_separator}` 变量**：Forge 的模块路径
+   靠这两个变量拼，原版 JSON 里不出现，命令组装直接报 `UnknownVariable`。
+
+另外记一笔：**MC 1.20.1 跑不了 Java 26**（`Unsupported class file major version 70`，
+ASM 9.5 只支持到 Java 21），验证时用的是 JRE 17。
 
 ### Phase 5 · 发布工程 🟡 在线更新已完成，其余未开始
 
