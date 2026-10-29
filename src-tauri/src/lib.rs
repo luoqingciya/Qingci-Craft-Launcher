@@ -101,6 +101,8 @@ struct SettingsView {
     selected_version: Option<String>,
     /// 上次选择的加载器版本。
     loader_version: Option<String>,
+    /// 加载器种类：fabric / forge / neoforge。
+    loader_kind: Option<String>,
     /// 下载源：`official` / `bmclapi`。
     download_source: String,
     /// 已知实例，按添加顺序排列。
@@ -125,6 +127,8 @@ struct InstanceView {
     selected_version: Option<String>,
     /// 该实例上次选择的加载器版本。
     loader_version: Option<String>,
+    /// 加载器种类：fabric / forge / neoforge。
+    loader_kind: Option<String>,
 }
 
 /// 前端提交的设置。
@@ -225,6 +229,7 @@ impl AppState {
             memory_range: [settings::MIN_MEMORY_MB, settings::MAX_MEMORY_MB],
             selected_version: active.and_then(|instance| instance.selected_version.clone()),
             loader_version: active.and_then(|instance| instance.loader_version.clone()),
+            loader_kind: active.and_then(|instance| instance.loader_kind.clone()),
             download_source: inner.settings.download_source().as_str().to_owned(),
             instances: inner
                 .settings
@@ -240,6 +245,7 @@ impl AppState {
                         == Some(instance.name.as_str()),
                     selected_version: instance.selected_version.clone(),
                     loader_version: instance.loader_version.clone(),
+                    loader_kind: instance.loader_kind.clone(),
                 })
                 .collect(),
             active_instance: inner.settings.active_instance.clone().unwrap_or_default(),
@@ -331,13 +337,14 @@ fn remember_selection(
     state: tauri::State<'_, AppState>,
     version: Option<String>,
     loader: Option<String>,
+    loader_kind: Option<String>,
 ) -> Result<(), String> {
     let mut inner = state
         .inner
         .write()
         .map_err(|_| "内部状态锁已中毒".to_owned())?;
 
-    let saved = inner.settings.with_selection(version, loader);
+    let saved = inner.settings.with_selection(version, loader, loader_kind);
     settings::save(&state.config_path, &saved).map_err(|error| format!("保存选择失败：{error}"))?;
     inner.settings = saved;
 
@@ -427,6 +434,7 @@ fn create_instance(
         dir: Some(dir),
         selected_version: None,
         loader_version: None,
+        loader_kind: None,
     });
     next.active_instance = Some(name);
 

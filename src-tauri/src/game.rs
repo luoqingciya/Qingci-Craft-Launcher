@@ -149,8 +149,18 @@ pub async fn launch_game(
     // 目标版本由「版本 + 加载器」确定性推导，不依赖界面上的临时状态：
     // 选了 Fabric 却启动原版，模组就白装了，而界面上完全看不出来。
     let loader = loader.filter(|value| !value.trim().is_empty());
-    let meta =
-        crate::install::load_meta_with_loader(&downloader, &version, loader.as_deref()).await?;
+    let meta = crate::install::load_meta_with_loader(
+        &downloader,
+        &version,
+        loader.as_deref(),
+        crate::install::LoaderKind::parse(
+            settings
+                .active()
+                .and_then(|instance| instance.loader_kind.as_deref()),
+        ),
+        None,
+    )
+    .await?;
 
     // 启动前补齐文件。幂等，已就绪时几乎不花时间；
     // 缺文件时直接启动只会得到一句「找不到主类」，用户无从判断缺什么。

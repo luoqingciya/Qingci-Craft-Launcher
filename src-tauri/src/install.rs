@@ -111,16 +111,93 @@ fn meta_path(game_dir: &Path, version: &str) -> PathBuf {
 ///
 /// `loader` 为 `None` 时就是原版。加载器版本会先拉取 Fabric 的增量 profile、
 /// 补齐构件信息，再与原版合并，并把合并结果落盘——这样下次启动不必重新请求。
+/// 加载器种类。IPC 传字符串，缺省（或无法识别）按 Fabric 处理——
+/// 这个字段是后加的，之前的调用方只传版本号，含义就是 Fabric。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LoaderKind {
+    Fabric,
+    Forge(qcl_install::ForgeKind),
+}
+
+impl LoaderKind {
+    pub(crate) fn parse(value: Option<&str>) -> Self {
+        match value.map(str::trim).unwrap_or_default() {
+            "" | "fabric" => Self::Fabric,
+            other => match qcl_install::ForgeKind::parse(other) {
+                Some(kind) => Self::Forge(kind),
+                // 认不出来时退回 Fabric 而不是报错：旧客户端不传这个字段。
+                None => Self::Fabric,
+            },
+        }
+    }
+}
+
+/// 安装器要用的代理（`host:port`）。
+///
+/// 安装器是独立 JVM，不走我们的下载器与镜像，只能靠 JVM 属性；
+/// 而给它配代理需要一个用户可见的设置项，这一步还没做。
+/// 先用环境变量过渡：`QCL_INSTALLER_PROXY=127.0.0.1:10808`。
+pub(crate) fn install_proxy() -> Option<String> {
+    std::env::var("QCL_INSTALLER_PROXY")
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+/// 安装器用的 Java。它只要求 Java 8+，与游戏本身的 Java 版本无关，
+/// 所以不去复用启动路径那套「按版本选 Java」的逻辑。
+fn resolve_installer_java(game_dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let installations = qcl_java::detect(&[], Some(&game_dir.join("runtime")));
+    qcl_java::select(&installations, 8)
+        .map(|installation| installation.executable.clone())
+        .ok_or_else(|| {
+            "安装 Forge / NeoForge 需要一个 Java 运行时，但没有检测到。请先安装 Java。".to_owned()
+        })
+}
+
 pub(crate) async fn load_meta_with_loader(
     downloader: &HttpDownloader,
     version: &str,
     loader: Option<&str>,
+    kind: LoaderKind,
+    java: Option<&std::path::Path>,
 ) -> Result<VersionMeta, String> {
     let parent = load_meta(downloader, version).await?;
 
     let Some(loader_version) = loader else {
         return Ok(parent);
     };
+
+    // Forge / NeoForge 的版本 JSON 是**安装器生成的**，不是我们从上游合并出来的。
+    // 装过一次之后它就在 `versions/<id>/` 里，直接读。
+    if let LoaderKind::Forge(kind) = kind {
+        let id = qcl_install::forge_version_id(kind, &parent.id, loader_version);
+        if let Some(meta) = read_local_meta(downloader.game_dir(), &id) {
+            return Ok(meta);
+        }
+
+        let Some(java) = java else {
+            return Err(format!(
+                "{} {loader_version} 还没有安装，请先安装该加载器",
+                kind.display()
+            ));
+        };
+
+        qcl_install::install_forge(
+            downloader,
+            kind,
+            java,
+            &parent.id,
+            loader_version,
+            downloader.game_dir(),
+            install_proxy().as_deref(),
+        )
+        .await
+        .map_err(|error| format!("安装 {} 失败：{error}", kind.display()))?;
+
+        return read_local_meta(downloader.game_dir(), &id)
+            .ok_or_else(|| format!("{} 安装器没有生成版本文件", kind.display()));
+    }
 
     // 装过一次之后，合并结果就落在 `versions/<id>/<id>.json`。启动前先看本地：
     // 每次启动都去上游取 profile 与库摘要，断网就等于拒绝启动——而文件其实早就齐了。
@@ -161,11 +238,25 @@ pub async fn install_game_version(
     state: tauri::State<'_, AppState>,
     version: String,
     loader: Option<String>,
+    loader_kind: Option<String>,
 ) -> Result<InstallSummary, String> {
-    let (downloader, _game_dir) = state.context()?;
+    let (downloader, game_dir) = state.context()?;
 
     let loader = loader.filter(|value| !value.trim().is_empty());
-    let meta = load_meta_with_loader(&downloader, &version, loader.as_deref()).await?;
+    let kind = LoaderKind::parse(loader_kind.as_deref());
+    // 只有 Forge / NeoForge 需要跑安装器，才需要 Java。
+    let java = match kind {
+        LoaderKind::Fabric => None,
+        LoaderKind::Forge(_) => Some(resolve_installer_java(&game_dir)?),
+    };
+    let meta = load_meta_with_loader(
+        &downloader,
+        &version,
+        loader.as_deref(),
+        kind,
+        java.as_deref(),
+    )
+    .await?;
     let options = VersionInstallOptions::for_version(&meta.id);
 
     let report = install_with_progress(&app, &downloader, &meta, &options).await?;
@@ -267,12 +358,18 @@ const MAX_LOADER_OPTIONS: usize = 30;
 pub async fn list_loaders(
     state: tauri::State<'_, AppState>,
     version: String,
+    loader_kind: Option<String>,
 ) -> Result<Vec<LoaderOption>, String> {
     let (downloader, _game_dir) = state.context()?;
 
-    let loaders = fetch_loader_list(&downloader, &version)
-        .await
-        .map_err(|error| format!("获取加载器列表失败：{error}"))?;
+    let loaders = match LoaderKind::parse(loader_kind.as_deref()) {
+        LoaderKind::Fabric => fetch_loader_list(&downloader, &version)
+            .await
+            .map_err(|error| format!("获取 Fabric 列表失败：{error}"))?,
+        LoaderKind::Forge(kind) => qcl_install::fetch_forge_versions(&downloader, kind, &version)
+            .await
+            .map_err(|error| format!("获取 {} 列表失败：{error}", kind.display()))?,
+    };
 
     Ok(loaders
         .into_iter()
@@ -371,9 +468,15 @@ mod live_tests {
         let dir = TempDir::new().expect("临时目录");
         let downloader = HttpDownloader::new(dir.path()).expect("应能创建下载器");
 
-        let merged = load_meta_with_loader(&downloader, "26.3", Some("0.20.1"))
-            .await
-            .expect("应能合并出加载器版本");
+        let merged = load_meta_with_loader(
+            &downloader,
+            "26.3",
+            Some("0.20.1"),
+            super::LoaderKind::Fabric,
+            None,
+        )
+        .await
+        .expect("应能合并出加载器版本");
 
         // 主类必须换成加载器入口，否则游戏起来还是原版。
         assert_eq!(
@@ -465,9 +568,15 @@ mod offline_tests {
         .expect("写入合并结果");
 
         let downloader = HttpDownloader::new(dir.path()).expect("下载器");
-        let loaded = load_meta_with_loader(&downloader, "26.3", Some("0.20.1"))
-            .await
-            .expect("本地已有合并结果");
+        let loaded = load_meta_with_loader(
+            &downloader,
+            "26.3",
+            Some("0.20.1"),
+            super::LoaderKind::Fabric,
+            None,
+        )
+        .await
+        .expect("本地已有合并结果");
 
         assert_eq!(
             loaded.main_class, "qcl.test.LocalMarker",

@@ -3298,6 +3298,7 @@ dependencies = [
 name = "qcl-install"
 version = "0.1.8"
 dependencies = [
+ "dunce",
  "qcl-core",
  "qcl-net",
  "serde",
