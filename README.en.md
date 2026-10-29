@@ -34,7 +34,7 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 | Java selection | ✅ | Picks by version requirement; manual override is validated, not trusted blindly |
 | Launch & logs | ✅ | Streams stdout/stderr live; "Stop" really terminates the process |
 | Settings | ✅ | Game directory, offline player name, max heap, Java runtime, download source |
-| Fabric loader | ✅ | Version → loader → install → launch; the merged profile is persisted |
+| Loaders | ✅ | Fabric / Forge / NeoForge; Forge installs through our own processor pipeline instead of the official installer. Forge 1.16.5, 1.20.1 and NeoForge 21.1.72 verified into the main menu |
 | Mod management | ✅ | Modrinth search / install / remove / update check; required dependencies installed automatically and previewable before install |
 | Mod status | ✅ | Installed projects are marked; update checks also report mods incompatible with the current version |
 | Chinese names & filters | ✅ | Name database fetched from a registry and cached at startup; Chinese keyword aliases; 19 localised categories |
@@ -44,7 +44,6 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 | Microsoft login | ✅ | Device code flow (the launcher never sees the password); tokens live in the OS keychain and refresh silently at startup |
 | Instances | ✅ | Multiple independent game directories, each with its own version selection; the launch panel opens the directory and shows the installed mod count |
 | Runtime info | ✅ | The about tab shows version, OS/arch, Tauri and WebView, copyable as a bug-report block |
-| Forge / NeoForge | ✅ | Installed through our own processor pipeline; after merging `inheritsFrom` it launches directly — Forge 1.16.5 / 1.20.1 and NeoForge 21.1.72 verified into the main menu |
 
 ## Design principles
 
@@ -52,7 +51,7 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 - **Cross-platform**: Windows 10+ / macOS 12+ / Linux (glibc 2.31+); CI builds and tests on all three.
   Published artifacts cover Windows, macOS and Linux.
 - **Testable**: core logic (version parsing, rule evaluation, argument assembly, auth protocols, mod
-  resolution, crash report parsing) lives in GUI-free Rust crates — 340 Rust tests + 183 frontend
+  resolution, crash report parsing) lives in GUI-free Rust crates — 380 Rust tests + 184 frontend
   tests in CI.
 - **Manifest-driven**: versions, libraries and JVM arguments are all derived from official manifests; no version list is hardcoded.
 
@@ -77,7 +76,8 @@ A cross-platform, lightweight Minecraft: Java Edition launcher built with **Taur
 crates/          Rust domain layer (all testable without a GUI)
   qcl-core       Version parsing, rule evaluation, launch command assembly (pure logic)
   qcl-net        Download planning, executor, HTTP download with SHA-1 verification
-  qcl-install    Install orchestration: version files, assets, natives, Fabric merging
+  qcl-install    Install orchestration: version files, assets, natives, Fabric merging,
+                 and the Forge / NeoForge processor chain with `inheritsFrom` merging
   qcl-java       Java detection and on-demand installation
   qcl-runtime    Game process launch, log forwarding, termination, crash-report parsing
   qcl-platform   Host platform probing (OS version determines GC flags)
@@ -167,6 +167,26 @@ Portable builds have no uninstaller, and Windows will not let a running exe repl
 are pointed at the download page instead.
 
 Setup and key management: [docs/RELEASE.en.md](docs/RELEASE.en.md).
+
+## Mod loaders
+
+Once a game version is selected, pick a loader in the same dialog: **Fabric / Forge / NeoForge**
+(Quilt is not supported yet). Available loader versions are fetched live from upstream manifests;
+nothing is hardcoded.
+
+- **Fabric** only needs a profile merge, so installing takes a second.
+- **Forge / NeoForge** actually run the install steps (splitting the vanilla jar, merging mappings,
+  applying binary patches) — 20–60 seconds, with a "installing loader 3/6" step indicator.
+  Every step runs locally; the one that may need the network (Mojang mappings) goes through the
+  configured download source, **never to Mojang's own hosts**.
+- Installing a loader needs a **Java 8+** runtime (independent of the Java the game itself requires);
+  the launcher picks one automatically.
+- Each "game version + loader version" pair gets its own version directory, so installing another
+  loader version never overwrites an existing one.
+
+> Installing a loader is not the same as the game running: Forge / NeoForge are stricter about the
+> Java version than vanilla. Forge on 1.20.1, for example, cannot run on Java 26 (its ASM is too old)
+> and needs the Java that version targets.
 
 ## Development
 

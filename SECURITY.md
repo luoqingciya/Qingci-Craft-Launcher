@@ -25,7 +25,7 @@
 
 1. **下载完整性**：从 Mojang 端点获取的每个文件都校验官方提供的 SHA-1，摘要为空或校验失败的文件不会被使用。
 2. **路径穿越防护**：资产与 natives 的解压路径会拦截 `..`、前导 `/`、盘符与反斜杠，不会写到游戏目录之外。新建实例时由实例名派生的目录名同样只保留字母数字与 `-` `_`，名字里的 `../` 不会把目录带出 `instances/`。
-3. **不执行未校验内容**：启动游戏只使用官方产物；加载器的库同样逐个校验摘要——Fabric 用 meta profile 里的摘要，Forge / NeoForge 用 `install_profile` 里每个库自带的 SHA-1（实测 1.20.1 的 46 个、21.1.72 的 88 个全部带摘要），不符就换源重试。Forge 的 processor 产物（`-slim.jar`、`-client.jar` 等）由上游工具在本地生成，不涉及下载，因此不校验摘要。
+3. **不执行未校验内容**：启动游戏只使用官方产物；加载器的库同样逐个校验摘要——Fabric 用 meta profile 里的摘要，Forge / NeoForge 用 `install_profile` 里每个库自带的 SHA-1（实测 1.20.1 的 46 个、21.1.72 的 88 个全部带摘要），不符就换源重试。安装加载器时会执行上游的 processor jar（`installertools` / `jarsplitter` / `AutoRenamingTool` / `SpecialSource` / `binarypatcher`），这些 jar 同样来自 `libraries`、同样逐个校验 SHA-1 之后才运行，参数由本项目按 `install_profile` 组装。Forge 的 processor 产物（`-slim.jar`、`-client.jar` 等）由上游工具在本地生成，不涉及下载，因此不校验摘要。
 4. **模组下载校验**：从 Modrinth 安装的模组必须有有效 SHA-1 才会下载；文件名来自远端，会拦截路径分隔符与 `..`，不会写到 `mods/` 之外。**自动补装的依赖走同一条校验路径**——依赖不是「因为方便所以放宽」的例外，同样是先校验再落盘。
 5. **更新包签名**：在线更新只从 `https://qcl.luoqingciya.cn/releases/latest.json` 读清单，下载后用**编译进二进制的公钥**校验 minisign 签名，签名不匹配就拒绝安装。清单里公布的版本号还必须与签名里记录的版本号一致，否则同样拒绝——否则攻击者可以用一份合法签名的旧版本配合伪造的版本号把用户降级。
 6. **令牌只进系统凭据库**：认证层（`qcl-auth`）不打印任何令牌。要持久化的只有**微软的刷新令牌**（Minecraft 访问令牌活不过一小时，存它没有意义），它写进系统凭据库（Windows Credential Manager / macOS Keychain / Linux Secret Service），**不写配置文件**——配置文件是明文。凭据库不可用时退化成不持久化，登录本身仍然可用，只是下次要重新登录。

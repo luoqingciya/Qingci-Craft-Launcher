@@ -35,6 +35,9 @@ risk, not as an empty promise on a wishlist.
    libraries are verified the same way — Fabric against the digests in its meta profile,
    Forge / NeoForge against the per-library SHA-1 in `install_profile` (all 46 libraries for
    1.20.1 and all 88 for 21.1.72 carry one), falling back to another mirror on mismatch.
+   Installing a loader also executes upstream processor jars (`installertools`, `jarsplitter`,
+   `AutoRenamingTool`, `SpecialSource`, `binarypatcher`); they come from `libraries` too and are
+   SHA-1 verified before they run, with arguments assembled by us from `install_profile`.
    Forge processor outputs (`-slim.jar`, `-client.jar`, …) are produced locally by upstream
    tooling rather than downloaded, so they are not digest-checked.
 4. **Mod download verification**: mods from Modrinth must carry a valid SHA-1 before anything is
