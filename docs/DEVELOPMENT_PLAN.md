@@ -446,6 +446,24 @@ CLI 契约与下载链路已实测，安装流程本身还没跑过。
 另外记一笔：**MC 1.20.1 跑不了 Java 26**（`Unsupported class file major version 70`，
 ASM 9.5 只支持到 Java 21），验证时用的是 JRE 17。
 
+**1.16.5 交叉验证（同日补做）**：同一套链在 Forge 1.16.5-36.2.39 上又挂了四次，
+暴露的都是跨版本兼容性缺陷，且**前两条连原版都受影响**：
+
+| 缺陷 | 后果 |
+| --- | --- |
+| 规则动作只认 `allow` / `deny` | 1.16.5 的 `version.json` 用 `disallow`，整份 JSON 解析失败 |
+| 规则求值取「第一条命中」 | 官方是后面的推翻前面的，否则 `[allow, disallow@osx]` 里的排除永远不生效 |
+| `url: ""` 的构件仍排进下载计划 | 拿空地址建请求，`builder error` |
+| 没解安装器内嵌的 `maven/` 树 | 缺 `forge-<v>.jar`，启动报 `Cannot find launch target` |
+
+还有一处合并语义：库要按 `group:artifact` **替换**而不是并存——Forge 1.16.5 用
+log4j 2.15.0 顶掉原版的 2.8.1，两份都留在 classpath 上时旧版先命中，`%tEx` 抛
+`NoSuchMethodError`。修完后 1.16.5 与 1.20.1 都能进主菜单。
+
+**NeoForge 21.1.72 同样实测通过**（Java 21，133 个库、3888 个资产 / 826 MB）：
+日志里有 `ModLauncher running`、mod 发现列出 `neoforge-21.1.72-universal.jar` 与
+`client-1.21.1-20240808.144430-srg.jar`、纹理图集创建完成，进入主菜单。
+
 ### Phase 5 · 发布工程 🟡 在线更新已完成，其余未开始
 
 已完成：`tauri-plugin-updater` 自动更新（签名校验 + 静默安装 + 重启）、COS 分发、
@@ -627,7 +645,8 @@ Phase 0–3 已完成（含正版登录与实例管理），Fabric 与模组管�
 接下来按优先级：
 
 1. **Forge / NeoForge 收尾**（Phase 4 剩余项，R5 已解除）：自研 processor 链已落地，
-   产物与官方安装器逐字节一致；剩余是带完整资产的启动验证，以及 Quilt。
+   产物与官方安装器逐字节一致；Forge 1.16.5 / 1.20.1 与 NeoForge 21.1.72 均已实测进入
+   主菜单。剩余是 Quilt，以及 ≤1.12.2 那条官方安装器路径的实测。
 2. **macOS 签名与公证**（R3）：未签名的通用 dmg 已经在 0.1.8 发布，用户需右键打开；
    要消掉这个门槛得买 Apple 开发者账号。updater 的 `zip` 特性也要先恢复才谈得上自动更新。
 3. **代码签名**（R2）：Windows Authenticode / macOS 公证，缓解 SmartScreen 拦截。
