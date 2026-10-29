@@ -88,6 +88,20 @@ fn read_local_meta(game_dir: &Path, version: &str) -> Option<VersionMeta> {
     serde_json::from_str(&raw).ok()
 }
 
+/// 把 Forge / NeoForge 版本 JSON 的 `inheritsFrom` 合并进来。
+///
+/// 安装器写出的那份只有 29 个库，没有 `assetIndex`、没有 `downloads`，游戏参数里也没有
+/// `--username` 一类——这些都在原版版本里。不合并就直接启动，得到的是一条缺 88 个库、
+/// 缺资产索引、缺玩家参数的命令。
+async fn resolve_forge_meta(
+    downloader: &HttpDownloader,
+    meta: VersionMeta,
+) -> Result<VersionMeta, String> {
+    qcl_install::resolve_inherited(downloader, downloader.game_dir(), meta)
+        .await
+        .map_err(|error| format!("合并原版版本信息失败：{error}"))
+}
+
 /// 写入合并后的版本元数据。
 fn write_local_meta(game_dir: &Path, meta: &VersionMeta) -> Result<(), String> {
     let path = meta_path(game_dir, &meta.id);
@@ -132,9 +146,10 @@ impl LoaderKind {
     }
 }
 
-/// 安装器要用的代理（`host:port`），来自设置里的「安装器代理」。
+/// 加载器安装要用的代理（`host:port`），来自设置里的「安装器代理」。
 ///
-/// 安装器是独立 JVM，不走我们的下载器与镜像，只能靠 JVM 属性。
+/// 现在只有 1.12.2 及更早的官方安装器真的需要它：1.13 起的 Forge / NeoForge
+/// 走自研 processor 链，联网那一步（Mojang mappings）已经改走下载器与镜像。
 pub(crate) fn install_proxy(settings: &crate::settings::Settings) -> Option<String> {
     settings
         .installer_proxy
@@ -144,8 +159,8 @@ pub(crate) fn install_proxy(settings: &crate::settings::Settings) -> Option<Stri
         .map(str::to_owned)
 }
 
-/// 安装器用的 Java。它只要求 Java 8+，与游戏本身的 Java 版本无关，
-/// 所以不去复用启动路径那套「按版本选 Java」的逻辑。
+/// 安装器用的 Java。它要求 Java 8+（processor 也是独立 JVM），与游戏本身的 Java
+/// 版本无关，所以不去复用启动路径那套「按版本选 Java」的逻辑。
 fn resolve_installer_java(game_dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
     let installations = qcl_java::detect(&[], Some(&game_dir.join("runtime")));
     qcl_java::select(&installations, 8)
@@ -162,6 +177,7 @@ pub(crate) async fn load_meta_with_loader(
     kind: LoaderKind,
     java: Option<&std::path::Path>,
     proxy: Option<&str>,
+    loader_progress: Option<qcl_install::StepCallback<'_>>,
 ) -> Result<VersionMeta, String> {
     let parent = load_meta(downloader, version).await?;
 
@@ -174,7 +190,7 @@ pub(crate) async fn load_meta_with_loader(
     if let LoaderKind::Forge(kind) = kind {
         let id = qcl_install::forge_version_id(kind, &parent.id, loader_version);
         if let Some(meta) = read_local_meta(downloader.game_dir(), &id) {
-            return Ok(meta);
+            return resolve_forge_meta(downloader, meta).await;
         }
 
         let Some(java) = java else {
@@ -184,6 +200,7 @@ pub(crate) async fn load_meta_with_loader(
             ));
         };
 
+        let noop = |_: usize, _: usize| {};
         qcl_install::install_forge(
             downloader,
             kind,
@@ -191,13 +208,17 @@ pub(crate) async fn load_meta_with_loader(
             &parent.id,
             loader_version,
             downloader.game_dir(),
-            proxy,
+            qcl_install::InstallHooks {
+                proxy,
+                on_step: loader_progress.unwrap_or(&noop),
+            },
         )
         .await
         .map_err(|error| format!("安装 {} 失败：{error}", kind.display()))?;
 
-        return read_local_meta(downloader.game_dir(), &id)
-            .ok_or_else(|| format!("{} 安装器没有生成版本文件", kind.display()));
+        let meta = read_local_meta(downloader.game_dir(), &id)
+            .ok_or_else(|| format!("{} 安装器没有生成版本文件", kind.display()))?;
+        return resolve_forge_meta(downloader, meta).await;
     }
 
     // 装过一次之后，合并结果就落在 `versions/<id>/<id>.json`。启动前先看本地：
@@ -258,6 +279,20 @@ pub async fn install_game_version(
             .map_err(|_| "内部状态锁已中毒".to_owned())?;
         install_proxy(&inner.settings)
     };
+    // 加载器安装要跑 processor（独立 JVM，一步几秒到几十秒），没有反馈用户只能干等。
+    // 单独一个 `loader` 阶段，按步骤数报百分比。
+    let on_loader_step = |completed: usize, total: usize| {
+        let percent = u32::try_from(completed * 100 / total.max(1)).unwrap_or(100);
+        let _ = app.emit(
+            INSTALL_PROGRESS_EVENT,
+            InstallProgressEvent {
+                phase: "loader",
+                completed,
+                total,
+                percent,
+            },
+        );
+    };
     let meta = load_meta_with_loader(
         &downloader,
         &version,
@@ -265,6 +300,7 @@ pub async fn install_game_version(
         kind,
         java.as_deref(),
         proxy.as_deref(),
+        Some(&on_loader_step),
     )
     .await?;
     let options = VersionInstallOptions::for_version(&meta.id);
@@ -485,6 +521,7 @@ mod live_tests {
             super::LoaderKind::Fabric,
             None,
             None,
+            None,
         )
         .await
         .expect("应能合并出加载器版本");
@@ -584,6 +621,7 @@ mod offline_tests {
             "26.3",
             Some("0.20.1"),
             super::LoaderKind::Fabric,
+            None,
             None,
             None,
         )

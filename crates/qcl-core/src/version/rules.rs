@@ -69,6 +69,12 @@ pub enum RuleAction {
     Allow,
     /// 拒绝。
     Deny,
+    /// 拒绝（旧写法）。
+    ///
+    /// 1.16.5 的 `version.json` 里写的是 `{"action": "disallow", "os": {...}}`，
+    /// 语义与 `deny` 相同。只认 `allow` / `deny` 会让整份 JSON 解析失败，
+    /// 于是 1.16.5 连原版都装不了。
+    Disallow,
 }
 
 /// 操作系统条件。各字段均为可选，缺省表示不限制。
@@ -247,10 +253,17 @@ pub fn evaluate_rules(rules: Option<&[Rule]>, context: &LaunchContext) -> bool {
         return true;
     }
 
-    rules
-        .iter()
-        .find(|rule| rule.matches(context))
-        .is_some_and(|rule| rule.action == RuleAction::Allow)
+    // **最后一条命中的规则生效**，不是第一条。官方启动器逐个求值并覆盖结果，
+    // 默认拒绝。1.16.5 的 `[{"action":"allow"},{"action":"disallow","os":{"name":"osx"}}]`
+    // 正是这个用法：先全放行，再单独排除 macOS。按「第一条命中」求值，
+    // 后面那条 `disallow` 永远不生效，macOS 上会多出本该被排除的库。
+    let mut allowed = false;
+    for rule in rules {
+        if rule.matches(context) {
+            allowed = rule.action == RuleAction::Allow;
+        }
+    }
+    allowed
 }
 
 /// 用正则匹配系统版本。正则非法时视为不匹配，而不是 panic。

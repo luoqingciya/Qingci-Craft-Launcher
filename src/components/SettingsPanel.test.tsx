@@ -241,6 +241,18 @@ describe("InstallProgressBar", () => {
     expect(screen.getByText("正在下载版本文件 76/76")).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
   });
+
+  it("加载器阶段不是「下载」，按步骤数计", () => {
+    // processor 是本地执行的独立 JVM，说「正在下载加载器」会误导。
+    render(
+      <InstallProgressBar
+        progress={{ phase: "loader", completed: 3, total: 6, percent: 50 }}
+      />,
+    );
+
+    expect(screen.getByText("正在安装加载器 3/6")).toBeInTheDocument();
+    expect(screen.getByText("50%")).toBeInTheDocument();
+  });
 });
 
 describe("InstallProgressBar 的来源标注", () => {

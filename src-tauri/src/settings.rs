@@ -65,10 +65,11 @@ pub struct Settings {
     /// 而不是让启动器起不来。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub download_source: Option<String>,
-    /// 安装器代理（`host:port`）。
+    /// 代理地址（`host:port`），给**官方安装器**与 processor 子进程用。
     ///
-    /// Forge / NeoForge 的安装器是独立 JVM，**不走我们的下载器与镜像**——
-    /// 它访问的是硬编码的 launchermeta 等地址，只能靠 JVM 代理属性。
+    /// 1.13 起的 Forge / NeoForge 走自研 processor 链（`qcl_install::forge_processor`），
+    /// 除 Mojang mappings 一步外全部本地执行，那一步也走下载器与镜像，所以不需要代理；
+    /// 只有 1.12.2 及更早仍要起官方安装器，而它会探测 Mojang 主机并校验证书。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub installer_proxy: Option<String>,
     /// 已知实例。至少一个——[`Settings::normalize`] 保证。

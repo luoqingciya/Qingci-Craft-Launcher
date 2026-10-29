@@ -234,7 +234,7 @@ pub struct Extract {
 }
 
 /// 结构化启动参数。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Arguments {
     /// 传给主类的参数。
     #[serde(default)]

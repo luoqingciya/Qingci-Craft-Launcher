@@ -73,7 +73,11 @@ pub fn plan_version_files(
     let mut seen: BTreeSet<String> = BTreeSet::new();
 
     let mut push = |url: &str, path: String, sha1: &str, size: u64| {
-        if sha1.is_empty() || !seen.insert(path.clone()) {
+        // 摘要为空是官方约定的「不下载」；**地址为空**同样要跳过——
+        // Forge 1.16.5 的 `version.json` 里 `net.minecraftforge:forge:…` 这一条
+        // 就是 `"url": ""`，那个 jar 由加载器安装器本地产出，没有远程来源。
+        // 不跳过会拿空地址去建请求，直接 `builder error`。
+        if sha1.is_empty() || url.trim().is_empty() || !seen.insert(path.clone()) {
             return;
         }
         tasks.push(DownloadTask {

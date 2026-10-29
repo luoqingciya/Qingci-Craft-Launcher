@@ -45,7 +45,12 @@ export interface SettingsView {
   loaderVersion: string | null;
   /** 下载源：`official` 或 `bmclapi`。 */
   downloadSource: string;
-  /** 安装器代理（`host:port`），空串表示直连。 */
+  /**
+   * 代理地址（`host:port`），空串表示直连。
+   *
+   * 只对官方安装器与 processor 进程生效：1.13 起的 Forge / NeoForge 走自研安装流程，
+   * 不需要代理；只有 1.12.2 及更早仍要起官方安装器。
+   */
   installerProxy?: string;
   /** 已知实例，按添加顺序排列。 */
   instances: InstanceView[];
@@ -111,8 +116,13 @@ export interface InstallSummary {
 
 /** 安装进度事件。 */
 export interface InstallProgressEvent {
-  /** `versionFiles` 或 `assets`。 */
-  phase: "versionFiles" | "assets";
+  /**
+   * `versionFiles`、`assets` 或 `loader`。
+   *
+   * `loader` 是 Forge / NeoForge 的安装步骤：跑的是 processor（独立 JVM），
+   * 按步骤数而不是文件数计进度。
+   */
+  phase: "versionFiles" | "assets" | "loader";
   completed: number;
   total: number;
   percent: number;

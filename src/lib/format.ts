@@ -45,6 +45,7 @@ export function formatDate(iso: string): string {
 const PHASE_LABELS: Record<string, string> = {
   versionFiles: "版本文件",
   assets: "资产",
+  loader: "加载器",
 };
 
 /** 取安装阶段的中文标签。 */

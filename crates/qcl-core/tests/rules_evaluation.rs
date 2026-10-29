@@ -75,19 +75,22 @@ fn rules_deny_by_default_when_nothing_matches() {
 }
 
 #[test]
-fn first_matching_rule_wins() {
+fn last_matching_rule_wins() {
     let ctx = windows_11();
 
+    // 官方启动器逐个求值并覆盖结果，因此**后面的规则可以推翻前面的**。
+    // 1.16.5 就靠这个写法排除 macOS 专属库：
+    // `[{"action":"allow"},{"action":"disallow","os":{"name":"osx"}}]`
     let allow_then_deny = [allow(os_named("windows")), deny(None)];
     assert!(
-        evaluate_rules(Some(&allow_then_deny), &ctx),
-        "先命中的 allow 应立即生效"
+        !evaluate_rules(Some(&allow_then_deny), &ctx),
+        "后面的 deny 应当推翻前面的 allow"
     );
 
     let deny_then_allow = [deny(os_named("windows")), allow(None)];
     assert!(
-        !evaluate_rules(Some(&deny_then_allow), &ctx),
-        "先命中的 deny 应立即生效，顺序不可忽略"
+        evaluate_rules(Some(&deny_then_allow), &ctx),
+        "后面的 allow 应当推翻前面的 deny"
     );
 }
 
@@ -286,4 +289,17 @@ fn current_platform_uses_official_naming() {
 
     let arch = current_arch();
     assert_ne!(arch, "aarch64", "ARM64 必须映射为 arm64");
+}
+
+#[test]
+fn disallow_is_accepted_and_behaves_like_deny() {
+    // 1.16.5 的 `version.json` 里写的是 `{"action": "disallow", "os": {"name": "osx"}}`，
+    // 语义与 `deny` 相同。只认 allow / deny 会让整份 JSON 解析失败——
+    // 那不是「少一个库」，是 1.16.5 连原版都装不了。
+    let rules: Vec<Rule> =
+        serde_json::from_str(r#"[{"action":"allow"},{"action":"disallow","os":{"name":"osx"}}]"#)
+            .expect("disallow 应当能解析");
+
+    assert!(evaluate_rules(Some(&rules), &windows_11()));
+    assert!(!evaluate_rules(Some(&rules), &context("osx", "arm64")));
 }

@@ -26,6 +26,11 @@ pub struct LaunchLayout {
     pub assets_dir: String,
     /// natives 解压目录，如 `versions/26.3/natives`。
     pub natives_dir: String,
+    /// 依赖库根目录，如 `libraries`。
+    ///
+    /// Forge / NeoForge 的 JVM 参数用 `${library_directory}` 引用它（模块路径与
+    /// `-DlibraryDirectory` 都靠这个），原版参数里没有这个变量。
+    pub libraries_dir: String,
     /// 追加到 classpath 末尾的条目（模组加载器的库）。
     pub classpath_extra: Vec<String>,
 }
@@ -144,6 +149,10 @@ fn build_variables(
         .with("launcher_name", crate::LAUNCHER_NAME)
         .with("launcher_version", crate::LAUNCHER_VERSION)
         .with("classpath", join_classpath(classpath, classpath_separator()))
+        // Forge / NeoForge 的模块路径用这两个变量拼；原版 JSON 里不出现，缺了会直接
+        // 报 `UnknownVariable`。分隔符随平台变，所以同样要作为变量提供。
+        .with("library_directory", layout.libraries_dir.as_str())
+        .with("classpath_separator", classpath_separator().to_string())
         .with("user_properties", "{}")
         .with("resolution_width", width.to_string())
         .with("resolution_height", height.to_string())
@@ -158,6 +167,7 @@ impl LaunchLayout {
             version_dir: format!("versions/{version_id}"),
             assets_dir: "assets".to_owned(),
             natives_dir: format!("versions/{version_id}/natives"),
+            libraries_dir: "libraries".to_owned(),
             classpath_extra: Vec::new(),
         }
     }

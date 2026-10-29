@@ -435,8 +435,10 @@ export function SettingsPanel({
               className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2.5 py-2 text-[13px]"
             />
             <p className="mt-1.5 text-[12px] text-[var(--color-text-muted)]">
-              只影响 Forge / NeoForge 的安装器。它不走下载源镜像，访问的是
-              Mojang 的官方地址，国内网络下不配代理会卡在下载库文件。
+              只影响 1.12.2 及更早版本：那代仍要起官方安装器，它会探测 Mojang
+              主机并校验证书。1.13 起的 Forge / NeoForge 走自研安装流程，
+              除 Mojang mappings 外全部本地执行，mappings 也走下载源镜像，
+              不需要代理。
             </p>
           </div>
           {draft.downloadSource === "bmclapi" && (
@@ -534,7 +536,9 @@ export function InstallProgressBar({
     <div className="mt-2">
       <div className="flex items-center justify-between text-[12px] text-[var(--color-text-secondary)]">
         <span>
-          正在下载{phaseLabel(progress.phase)} {progress.completed}/{progress.total}
+          {`${
+            progress.phase === "loader" ? "正在安装" : "正在下载"
+          }${phaseLabel(progress.phase)} ${progress.completed}/${progress.total}`}
         </span>
         <span>{progress.percent}%</span>
       </div>

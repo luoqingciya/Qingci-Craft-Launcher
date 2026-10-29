@@ -216,3 +216,26 @@ fn retryable_statuses_exclude_client_errors() {
         assert!(!is_retryable_status(status), "{status} 不应重试");
     }
 }
+
+#[test]
+fn artifacts_without_a_url_are_not_planned() {
+    // Forge 1.16.5 的 `version.json` 里 `net.minecraftforge:forge:…` 这条是 `"url": ""`：
+    // 那个 jar 由加载器安装器本地产出，没有远程来源。计划里必须跳过，
+    // 否则会拿空地址去建请求，直接 `builder error`。
+    let raw = r#"{
+        "id": "1.16.5-forge-36.2.39",
+        "type": "release",
+        "mainClass": "cpw.mods.fml.common.launcher.FMLTweaker",
+        "releaseTime": "2021-01-01T00:00:00+00:00",
+        "time": "2021-01-01T00:00:00+00:00",
+        "libraries": [
+            { "name": "net.minecraftforge:forge:1.16.5-36.2.39",
+              "downloads": { "artifact": {
+                "path": "net/minecraftforge/forge/1.16.5-36.2.39/forge-1.16.5-36.2.39.jar",
+                "url": "", "sha1": "0094f0546dba2d5bcee90e6a0a4f98d3adb40baf", "size": 212574 } } }
+        ]
+    }"#;
+
+    let plan = plan_version_files(&parse(raw), &windows_11(), "versions/1.16.5-forge-36.2.39");
+    assert!(plan.tasks.is_empty(), "空 url 的构件不该进计划");
+}
