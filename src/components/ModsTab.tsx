@@ -132,7 +132,11 @@ export function ModsTab({
 
   // 依赖 `instance`：`mods/` 是**每个实例各一份**，切换实例后必须重新读，
   // 否则列表会停在切换前的那个实例上（标题已经跟着变了，列表没变，最难发现）。
+  // 实例名还没读出来（空串）时不读：那时后端也不知道该读哪个目录。
   useEffect(() => {
+    if (!instance) {
+      return;
+    }
     let cancelled = false;
     listMods()
       .then((names) => {
