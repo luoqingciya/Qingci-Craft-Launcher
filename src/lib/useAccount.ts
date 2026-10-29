@@ -85,6 +85,11 @@ export function useAccount(): AccountController {
             setRestoring(false);
             setPhase({ kind: "idle" });
             break;
+          case "cancelled":
+            // 用户自己点的取消：收起对话框，不要显示成错误。
+            setRestoring(false);
+            setPhase({ kind: "idle" });
+            break;
           case "failed":
             // 恢复失败也意味着「查完了」：这时说离线账户才是对的。
             setRestoring(false);

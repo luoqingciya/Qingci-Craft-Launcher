@@ -478,7 +478,9 @@ export type LoginState =
       expiresIn: number;
     }
   | { kind: "done"; account: Account }
-  | { kind: "failed"; message: string };
+  | { kind: "failed"; message: string }
+  /** 用户自己点了取消。不是错误，界面直接收起对话框。 */
+  | { kind: "cancelled" };
 
 /** 界面看到的账号状态。 */
 export interface AccountState {
