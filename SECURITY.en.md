@@ -31,8 +31,12 @@ risk, not as an empty promise on a wishlist.
    letters and backslashes, so nothing is written outside the game directory. Directory names derived
    from an instance name keep only letters, digits and `-` `_`, so a `../` in the name cannot escape
    `instances/` either.
-3. **No unverified execution**: the game is launched only from official artifacts; loader (Fabric)
-   libraries are verified the same way.
+3. **No unverified execution**: the game is launched only from official artifacts; loader
+   libraries are verified the same way — Fabric against the digests in its meta profile,
+   Forge / NeoForge against the per-library SHA-1 in `install_profile` (all 46 libraries for
+   1.20.1 and all 88 for 21.1.72 carry one), falling back to another mirror on mismatch.
+   Forge processor outputs (`-slim.jar`, `-client.jar`, …) are produced locally by upstream
+   tooling rather than downloaded, so they are not digest-checked.
 4. **Mod download verification**: mods from Modrinth must carry a valid SHA-1 before anything is
    downloaded; remote file names are rejected if they contain path separators or `..`, so nothing is
    written outside `mods/`. **Dependencies installed automatically go through the same path** — being

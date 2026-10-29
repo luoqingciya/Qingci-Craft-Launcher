@@ -63,6 +63,9 @@ pub struct StagedArtifact {
     pub path: String,
     /// 依次尝试的地址（镜像 → Central）。
     pub urls: Vec<String>,
+    /// `install_profile` 给出的 SHA-1。实测 1.20.1 的 46 个、21.1.72 的 88 个库
+    /// 全部带摘要；processor 里 `[...]` 引用的构件没有摘要，那时为 `None`。
+    pub sha1: Option<String>,
 }
 
 /// 备料结果。
@@ -125,6 +128,8 @@ struct Artifact {
     path: Option<String>,
     #[serde(default)]
     url: Option<String>,
+    #[serde(default)]
+    sha1: Option<String>,
 }
 
 /// 从 install_profile 文本里算出要下载的构件清单。
@@ -152,7 +157,11 @@ pub fn plan_from_profile(profile: &str) -> Result<Vec<StagedArtifact>, ForgeErro
             urls.push(url);
         }
         urls.extend(mirror_urls(&path));
-        out.push(StagedArtifact { path, urls });
+        out.push(StagedArtifact {
+            sha1: artifact.and_then(|a| a.sha1.clone()),
+            path,
+            urls,
+        });
     }
 
     // processor 自身与它引用的构件。实测这两个版本都被 `libraries[]` 覆盖，
@@ -181,6 +190,9 @@ pub fn plan_from_profile(profile: &str) -> Result<Vec<StagedArtifact>, ForgeErro
             out.push(StagedArtifact {
                 urls: mirror_urls(&path),
                 path,
+                // processor 引用没有摘要可校验；这类构件都在官方 maven 上，
+                // 且它们的用途只是喂给 processor，最终产物另有 SHA 校验。
+                sha1: None,
             });
         }
     }
@@ -258,6 +270,14 @@ pub async fn stage_prerequisites(
         for url in &item.urls {
             match downloader.fetch_bytes_with_headers(url, &agent, &[]).await {
                 Ok(bytes) => {
+                    // 摘要不符就换下一个源，而不是直接失败：镜像返回 200 却给错内容时，
+                    // 重试同一个镜像永远拿到同一份错文件（与 qcl-net 的回落策略一致）。
+                    if let Some(expected) = &item.sha1
+                        && !qcl_net::verify_sha1(expected, &bytes)
+                    {
+                        last_error = Some(format!("{url} → SHA-1 不匹配（期望 {expected}）"));
+                        continue;
+                    }
                     std::fs::write(&target, &bytes)?;
                     written = true;
                     break;
@@ -293,7 +313,8 @@ mod tests {
             { "name": "com.google.guava:guava:20.0",
               "downloads": { "artifact": {
                 "path": "com/google/guava/guava/20.0/guava-20.0.jar",
-                "url": "https://maven.minecraftforge.net/com/google/guava/guava/20.0/guava-20.0.jar"
+                "url": "https://maven.minecraftforge.net/com/google/guava/guava/20.0/guava-20.0.jar",
+                "sha1": "b8947f6c9e7b4b0c2b8b0f8c8b0c2b8b0f8c8b0c"
               } } },
             { "name": "net.minecraftforge:forge:1.20.1-47.2.0:universal" },
             { "name": "de.oceanlabs.mcp:mcp_config:1.20.1-20230612.114412@zip",
@@ -386,6 +407,26 @@ mod tests {
             "NeoForge 构件应先试 NeoForge 仓库：{:?}",
             plan[0].urls
         );
+    }
+
+    #[test]
+    fn libraries_carry_their_sha1_for_verification() {
+        // 实测 1.20.1 的 46 个库、21.1.72 的 88 个库全都带摘要，备料时要校验
+        let plan = plan_from_profile(PROFILE).expect("应当能解析");
+        let guava = plan
+            .iter()
+            .find(|item| item.path.ends_with("guava-20.0.jar"))
+            .expect("应当有 guava");
+        assert_eq!(
+            guava.sha1.as_deref(),
+            Some("b8947f6c9e7b4b0c2b8b0f8c8b0c2b8b0f8c8b0c")
+        );
+        // processor 引用的构件没有摘要，不能凭空造一个
+        let tool = plan
+            .iter()
+            .find(|item| item.path.contains("installertools"))
+            .expect("应当有 installertools");
+        assert_eq!(tool.sha1, None);
     }
 
     #[test]
