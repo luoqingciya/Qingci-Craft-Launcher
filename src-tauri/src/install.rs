@@ -132,16 +132,16 @@ impl LoaderKind {
     }
 }
 
-/// 安装器要用的代理（`host:port`）。
+/// 安装器要用的代理（`host:port`），来自设置里的「安装器代理」。
 ///
-/// 安装器是独立 JVM，不走我们的下载器与镜像，只能靠 JVM 属性；
-/// 而给它配代理需要一个用户可见的设置项，这一步还没做。
-/// 先用环境变量过渡：`QCL_INSTALLER_PROXY=127.0.0.1:10808`。
-pub(crate) fn install_proxy() -> Option<String> {
-    std::env::var("QCL_INSTALLER_PROXY")
-        .ok()
-        .map(|value| value.trim().to_owned())
+/// 安装器是独立 JVM，不走我们的下载器与镜像，只能靠 JVM 属性。
+pub(crate) fn install_proxy(settings: &crate::settings::Settings) -> Option<String> {
+    settings
+        .installer_proxy
+        .as_deref()
+        .map(str::trim)
         .filter(|value| !value.is_empty())
+        .map(str::to_owned)
 }
 
 /// 安装器用的 Java。它只要求 Java 8+，与游戏本身的 Java 版本无关，
@@ -161,6 +161,7 @@ pub(crate) async fn load_meta_with_loader(
     loader: Option<&str>,
     kind: LoaderKind,
     java: Option<&std::path::Path>,
+    proxy: Option<&str>,
 ) -> Result<VersionMeta, String> {
     let parent = load_meta(downloader, version).await?;
 
@@ -190,7 +191,7 @@ pub(crate) async fn load_meta_with_loader(
             &parent.id,
             loader_version,
             downloader.game_dir(),
-            install_proxy().as_deref(),
+            proxy,
         )
         .await
         .map_err(|error| format!("安装 {} 失败：{error}", kind.display()))?;
@@ -249,12 +250,21 @@ pub async fn install_game_version(
         LoaderKind::Fabric => None,
         LoaderKind::Forge(_) => Some(resolve_installer_java(&game_dir)?),
     };
+    // 读一次设置拿代理。锁在这里立即释放，后面要 await 的安装过程不持锁。
+    let proxy = {
+        let inner = state
+            .inner
+            .read()
+            .map_err(|_| "内部状态锁已中毒".to_owned())?;
+        install_proxy(&inner.settings)
+    };
     let meta = load_meta_with_loader(
         &downloader,
         &version,
         loader.as_deref(),
         kind,
         java.as_deref(),
+        proxy.as_deref(),
     )
     .await?;
     let options = VersionInstallOptions::for_version(&meta.id);
@@ -474,6 +484,7 @@ mod live_tests {
             Some("0.20.1"),
             super::LoaderKind::Fabric,
             None,
+            None,
         )
         .await
         .expect("应能合并出加载器版本");
@@ -573,6 +584,7 @@ mod offline_tests {
             "26.3",
             Some("0.20.1"),
             super::LoaderKind::Fabric,
+            None,
             None,
         )
         .await

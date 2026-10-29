@@ -45,6 +45,8 @@ export interface SettingsView {
   loaderVersion: string | null;
   /** 下载源：`official` 或 `bmclapi`。 */
   downloadSource: string;
+  /** 安装器代理（`host:port`），空串表示直连。 */
+  installerProxy?: string;
   /** 已知实例，按添加顺序排列。 */
   instances: InstanceView[];
   /** 当前实例名。 */
@@ -77,6 +79,7 @@ export interface SettingsInput {
   javaPath: string | null;
   /** 下载源：`official` / `bmclapi`；`null` 表示官方。 */
   downloadSource: string | null;
+  installerProxy?: string | null;
 }
 
 /** 一个可用的 Java 安装。 */

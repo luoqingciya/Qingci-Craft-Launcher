@@ -12,6 +12,7 @@ interface Draft {
   memory: string;
   javaPath: string;
   downloadSource: string;
+  installerProxy: string;
 }
 
 /**
@@ -32,6 +33,7 @@ function toDraft(settings: SettingsView): Draft {
     memory: settings.memoryMb === null ? "" : String(settings.memoryMb),
     javaPath: settings.javaPath ?? "",
     downloadSource: settings.downloadSource,
+    installerProxy: settings.installerProxy ?? "",
   };
 }
 
@@ -90,7 +92,8 @@ export function SettingsPanel({
     draft.playerName !== settings.playerName ||
     draft.memory !== (settings.memoryMb === null ? "" : String(settings.memoryMb)) ||
     draft.javaPath !== (settings.javaPath ?? "") ||
-    draft.downloadSource !== settings.downloadSource;
+    draft.downloadSource !== settings.downloadSource ||
+    draft.installerProxy !== (settings.installerProxy ?? "");
 
   const [minMemory, maxMemory] = settings.memoryRange;
 
@@ -128,6 +131,7 @@ export function SettingsPanel({
       memoryMb,
       javaPath: draft.javaPath.trim() === "" ? null : draft.javaPath.trim(),
       downloadSource: draft.downloadSource === "bmclapi" ? "bmclapi" : null,
+      installerProxy: draft.installerProxy.trim() === "" ? null : draft.installerProxy.trim(),
     });
   }
 
@@ -414,6 +418,27 @@ export function SettingsPanel({
             <option value="official">Mojang 官方</option>
             <option value="bmclapi">BMCLAPI 镜像（国内更快）</option>
           </select>
+          <div className="mt-3">
+            <label
+              htmlFor="installer-proxy"
+              className="text-[var(--color-text-secondary)]"
+            >
+              安装器代理
+            </label>
+            <input
+              id="installer-proxy"
+              value={draft.installerProxy}
+              onChange={(event) =>
+                setDraft((c) => ({ ...c, installerProxy: event.target.value }))
+              }
+              placeholder="例如 127.0.0.1:10808，留空则直连"
+              className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2.5 py-2 text-[13px]"
+            />
+            <p className="mt-1.5 text-[12px] text-[var(--color-text-muted)]">
+              只影响 Forge / NeoForge 的安装器。它不走下载源镜像，访问的是
+              Mojang 的官方地址，国内网络下不配代理会卡在下载库文件。
+            </p>
+          </div>
           {draft.downloadSource === "bmclapi" && (
             <p className="mt-1.5 text-[12px] text-[var(--color-text-muted)]">
               下载由{" "}

@@ -65,6 +65,12 @@ pub struct Settings {
     /// 而不是让启动器起不来。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub download_source: Option<String>,
+    /// 安装器代理（`host:port`）。
+    ///
+    /// Forge / NeoForge 的安装器是独立 JVM，**不走我们的下载器与镜像**——
+    /// 它访问的是硬编码的 launchermeta 等地址，只能靠 JVM 代理属性。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installer_proxy: Option<String>,
     /// 已知实例。至少一个——[`Settings::normalize`] 保证。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub instances: Vec<Instance>,
@@ -363,6 +369,7 @@ pub fn migrate_preferences(from: &Path, to: &Path) {
         loader_version: None,
         // 下载源是网络环境决定的偏好，跟机器走，带过来。
         download_source: legacy.download_source,
+        installer_proxy: legacy.installer_proxy,
         // 实例是「这一份安装的状态」，不迁移——见上面 `selected_version` 的理由。
         instances: Vec::new(),
         active_instance: None,
