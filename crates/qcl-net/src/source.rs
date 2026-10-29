@@ -23,7 +23,7 @@ use std::borrow::Cow;
 /// 其余（`piston-meta`、`piston-data`、`launchermeta`、`launcher`）保持路径不变。
 /// `piston-data` 是 1.19 之后客户端 jar 所在的主机，文档没写，**实测可用**
 /// （`/v1/objects/<sha>/client.jar` 返回 206）。
-const RULES: [(&str, &str); 9] = [
+const RULES: [(&str, &str); 11] = [
     (
         "https://piston-meta.mojang.com/",
         "https://bmclapi2.bangbang93.com/",
@@ -58,6 +58,17 @@ const RULES: [(&str, &str); 9] = [
     ),
     (
         "https://maven.fabricmc.net/",
+        "https://bmclapi2.bangbang93.com/maven/",
+    ),
+    // Forge 与 NeoForge 的 maven 是**真镜像**（实测：pom 内容与官方 SHA-1 一致，
+    // installer jar 经镜像 2.4 MB/s，官方只有约 500 B/s）。
+    // 注意 `maven.neoforged.net` 的仓库路径带 `/releases/`，镜像上统一落在 `/maven/`。
+    (
+        "https://maven.minecraftforge.net/",
+        "https://bmclapi2.bangbang93.com/maven/",
+    ),
+    (
+        "https://maven.neoforged.net/releases/",
         "https://bmclapi2.bangbang93.com/maven/",
     ),
 ];

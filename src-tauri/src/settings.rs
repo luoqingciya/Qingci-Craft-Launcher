@@ -36,6 +36,11 @@ pub struct Instance {
     /// 该实例上次选择的加载器版本（如 `0.20.1`）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub loader_version: Option<String>,
+    /// 该实例用的加载器种类：`fabric` / `forge` / `neoforge`。
+    ///
+    /// 缺省视为 Fabric：这个字段是后加的，之前的实例全都是 Fabric。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loader_kind: Option<String>,
 }
 
 /// 配置文件内容。
@@ -115,6 +120,7 @@ impl Settings {
                 dir: self.game_dir.take(),
                 selected_version: self.selected_version.take(),
                 loader_version: self.loader_version.take(),
+                loader_kind: None,
             });
         }
 
@@ -225,11 +231,22 @@ impl Settings {
     ///
     /// 选择记在**当前实例**上：两个实例可以各玩各的版本，切换过去不会互相覆盖。
     #[must_use]
-    pub fn with_selection(&self, version: Option<String>, loader: Option<String>) -> Self {
+    pub fn with_selection(
+        &self,
+        version: Option<String>,
+        loader: Option<String>,
+        loader_kind: Option<String>,
+    ) -> Self {
         let mut next = self.clone();
         if let Some(active) = next.active_mut() {
             active.selected_version = version.filter(|value| !value.trim().is_empty());
             active.loader_version = loader.filter(|value| !value.trim().is_empty());
+            // 没选加载器时连带把种类清掉，否则会留下「无加载器 + forge」这种自相矛盾的组合。
+            active.loader_kind = if active.loader_version.is_none() {
+                None
+            } else {
+                loader_kind.filter(|value| !value.trim().is_empty())
+            };
         }
         next
     }
@@ -406,6 +423,7 @@ mod tests {
                 dir: Some(PathBuf::from("/games/qcl")),
                 selected_version: Some("26.3".to_owned()),
                 loader_version: Some("0.20.1".to_owned()),
+                loader_kind: Some("fabric".to_owned()),
             }],
             active_instance: Some("默认".to_owned()),
             ..Settings::default()
@@ -564,7 +582,8 @@ mod selection_tests {
     #[test]
     fn with_selection_only_touches_selection() {
         // 切换版本不该顺手把设置表单里的值改掉——两边是独立的写入路径。
-        let next = populated().with_selection(Some("26.3".to_owned()), Some("0.20.1".to_owned()));
+        let next =
+            populated().with_selection(Some("26.3".to_owned()), Some("0.20.1".to_owned()), None);
         let active = next.active().expect("必有当前实例");
 
         assert_eq!(active.selected_version.as_deref(), Some("26.3"));
@@ -578,7 +597,7 @@ mod selection_tests {
     #[test]
     fn empty_selection_is_stored_as_none() {
         // 空串来自界面（加载器选「无」），不该写进配置文件。
-        let next = populated().with_selection(Some("  ".to_owned()), Some(String::new()));
+        let next = populated().with_selection(Some("  ".to_owned()), Some(String::new()), None);
         let active = next.active().expect("必有当前实例");
 
         assert!(active.selected_version.is_none());
@@ -595,10 +614,10 @@ mod selection_tests {
             ..Instance::default()
         });
 
-        let first = settings.with_selection(Some("26.3".to_owned()), None);
+        let first = settings.with_selection(Some("26.3".to_owned()), None, None);
         let mut second = first.clone();
         second.active_instance = Some("整合包".to_owned());
-        let second = second.with_selection(Some("1.7.10".to_owned()), None);
+        let second = second.with_selection(Some("1.7.10".to_owned()), None, None);
 
         assert_eq!(
             second.instances[0].selected_version.as_deref(),
@@ -616,7 +635,7 @@ mod selection_tests {
         let dir = tempfile::TempDir::new().expect("临时目录");
         let path = dir.path().join("settings.json");
         let settings =
-            populated().with_selection(Some("26.3".to_owned()), Some("0.20.1".to_owned()));
+            populated().with_selection(Some("26.3".to_owned()), Some("0.20.1".to_owned()), None);
 
         super::save(&path, &settings).expect("应能保存");
 

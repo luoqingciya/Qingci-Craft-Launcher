@@ -16,12 +16,18 @@
 //! - [`fetch_manifest`] / [`resolve_version`] / [`fetch_meta`]：安装前的元数据准备
 
 pub mod assets;
+pub mod forge;
 pub mod loader;
 pub mod manifest;
 pub mod natives;
 pub mod version;
 
 pub use assets::{AssetError, AssetInstallOptions, AssetInstallReport, install_assets};
+pub use forge::{
+    BMCLAPI_FORGE_API, FORGE_MAVEN_BASE, ForgeError, ForgeInstallReport, ForgeKind,
+    NEOFORGE_MAVEN_BASE, fetch_versions as fetch_forge_versions, install as install_forge,
+    installer_url, neoforge_prefix, version_id as forge_version_id,
+};
 pub use loader::{
     FABRIC_MAVEN_BASE, FABRIC_META_BASE, FabricLibrary, FabricProfile, LoaderError, LoaderInfo,
     fetch_loader_list, fetch_loader_list_from, fetch_profile, fetch_profile_from, inherits_from,
