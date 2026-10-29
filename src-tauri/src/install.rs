@@ -88,6 +88,20 @@ fn read_local_meta(game_dir: &Path, version: &str) -> Option<VersionMeta> {
     serde_json::from_str(&raw).ok()
 }
 
+/// 把 Forge / NeoForge 版本 JSON 的 `inheritsFrom` 合并进来。
+///
+/// 安装器写出的那份只有 29 个库，没有 `assetIndex`、没有 `downloads`，游戏参数里也没有
+/// `--username` 一类——这些都在原版版本里。不合并就直接启动，得到的是一条缺 88 个库、
+/// 缺资产索引、缺玩家参数的命令。
+async fn resolve_forge_meta(
+    downloader: &HttpDownloader,
+    meta: VersionMeta,
+) -> Result<VersionMeta, String> {
+    qcl_install::resolve_inherited(downloader, downloader.game_dir(), meta)
+        .await
+        .map_err(|error| format!("合并原版版本信息失败：{error}"))
+}
+
 /// 写入合并后的版本元数据。
 fn write_local_meta(game_dir: &Path, meta: &VersionMeta) -> Result<(), String> {
     let path = meta_path(game_dir, &meta.id);
@@ -175,7 +189,7 @@ pub(crate) async fn load_meta_with_loader(
     if let LoaderKind::Forge(kind) = kind {
         let id = qcl_install::forge_version_id(kind, &parent.id, loader_version);
         if let Some(meta) = read_local_meta(downloader.game_dir(), &id) {
-            return Ok(meta);
+            return resolve_forge_meta(downloader, meta).await;
         }
 
         let Some(java) = java else {
@@ -197,8 +211,9 @@ pub(crate) async fn load_meta_with_loader(
         .await
         .map_err(|error| format!("安装 {} 失败：{error}", kind.display()))?;
 
-        return read_local_meta(downloader.game_dir(), &id)
-            .ok_or_else(|| format!("{} 安装器没有生成版本文件", kind.display()));
+        let meta = read_local_meta(downloader.game_dir(), &id)
+            .ok_or_else(|| format!("{} 安装器没有生成版本文件", kind.display()))?;
+        return resolve_forge_meta(downloader, meta).await;
     }
 
     // 装过一次之后，合并结果就落在 `versions/<id>/<id>.json`。启动前先看本地：

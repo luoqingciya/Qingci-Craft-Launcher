@@ -19,6 +19,7 @@ pub mod assets;
 pub mod forge;
 pub mod forge_processor;
 pub mod forge_stage;
+pub mod inherit;
 pub mod loader;
 pub mod manifest;
 pub mod natives;
@@ -37,6 +38,7 @@ pub use forge_stage::{
     MAVEN_CENTRAL_BASE, StageReport, StagedArtifact, plan_from_profile, read_install_profile,
     stage_prerequisites,
 };
+pub use inherit::{InheritError, merge_inherited, resolve_inherited};
 pub use loader::{
     FABRIC_MAVEN_BASE, FABRIC_META_BASE, FabricLibrary, FabricProfile, LoaderError, LoaderInfo,
     fetch_loader_list, fetch_loader_list_from, fetch_profile, fetch_profile_from, inherits_from,
