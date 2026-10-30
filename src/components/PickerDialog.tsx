@@ -36,6 +36,9 @@ export function PickerDialog({
   items,
   selectedId,
   emptyHint = "没有匹配项",
+  busy = false,
+  error = null,
+  onRetry,
   onPick,
   onClose,
 }: {
@@ -44,6 +47,12 @@ export function PickerDialog({
   items: PickerItem[];
   selectedId: string | null;
   emptyHint?: string;
+  /** 正在拉取列表：此时「0 项」是没有意义的，要显示「正在读取」。 */
+  busy?: boolean;
+  /** 拉取失败的原因。**必须与「空列表」分开**：否则「连不上」会被读成「上游没有」。 */
+  error?: string | null;
+  /** 重新拉取。给了才显示「重试」。 */
+  onRetry?: () => void;
   onPick: (id: string) => void;
   onClose: () => void;
 }) {
@@ -125,13 +134,32 @@ export function PickerDialog({
             className="ml-2 min-w-0 flex-1 bg-transparent text-[14px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
           />
           <span className="shrink-0 text-[11px] tabular-nums text-[var(--color-text-muted)]">
-            {filtered.length} 项
+            {busy ? "读取中" : `${filtered.length} 项`}
           </span>
         </div>
 
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1.5">
-          {visible.length === 0 && (
-            <p className="px-3 py-6 text-[13px] text-[var(--color-text-muted)]">{emptyHint}</p>
+          {error !== null ? (
+            <div className="px-3 py-6">
+              <p className="text-[13px] leading-relaxed break-words text-[var(--color-danger)]">
+                读取失败：{error}
+              </p>
+              {onRetry && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="mt-3 rounded-lg px-3 py-1.5 text-[12px] text-[var(--color-accent-text)] ring-1 ring-inset ring-[var(--color-border-strong)] transition-colors hover:bg-[var(--color-surface-hover)]"
+                >
+                  重试
+                </button>
+              )}
+            </div>
+          ) : (
+            visible.length === 0 && (
+              <p className="px-3 py-6 text-[13px] text-[var(--color-text-muted)]">
+                {busy ? "正在读取…" : emptyHint}
+              </p>
+            )
           )}
 
           {visible.map((item, index) => {

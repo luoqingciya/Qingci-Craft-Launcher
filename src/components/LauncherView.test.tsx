@@ -43,6 +43,8 @@ function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {})
     onLoaderKindChange: vi.fn(),
     loader: "",
     loaderBusy: false,
+    loaderError: null,
+    onRetryLoaders: () => {},
     busy: false,
     progress: null,
     status: { running: false, version: null },

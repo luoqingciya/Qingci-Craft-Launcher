@@ -235,6 +235,14 @@ impl HttpDownloader {
     /// 与 [`DownloadOps::fetch_once`] 的区别：不落盘、不做 SHA-1 校验。
     /// 需要校验时由调用方拿返回值自行比对——清单文件很小，留在内存里更直接。
     pub async fn fetch_text(&self, url: &str) -> Result<String, DownloadError> {
+        // 与字节下载同样重试：加载器列表、版本清单都走这里，而镜像的元数据端点
+        // 会 302 到 CDN，那些节点偶发 reset——一次失败就报「没有可用版本」太糙了。
+        self.with_retry(|| async { self.fetch_text_once(url).await })
+            .await
+    }
+
+    /// 单次尝试：按候选地址取回文本。
+    async fn fetch_text_once(&self, url: &str) -> Result<String, DownloadError> {
         let response = self
             .send_first_ok(url, |client, url| client.get(url))
             .await?;
@@ -253,6 +261,33 @@ impl HttpDownloader {
             .text()
             .await
             .map_err(|error| DownloadError::Network(error.to_string()))
+    }
+
+    /// 按默认重试策略执行一次可能因网络抖动的请求。
+    ///
+    /// 只重试 [`DownloadError::Network`]：4xx 与本地 IO 错误重试也没有意义。
+    async fn with_retry<F, Fut, T>(&self, attempt_once: F) -> Result<T, DownloadError>
+    where
+        F: Fn() -> Fut,
+        Fut: std::future::Future<Output = Result<T, DownloadError>>,
+    {
+        let policy = crate::retry::RetryPolicy::default();
+        let mut attempt = 1;
+        loop {
+            match attempt_once().await {
+                Ok(value) => return Ok(value),
+                Err(error) => {
+                    let retryable = matches!(error, DownloadError::Network(_));
+                    match policy.delay_for(attempt).filter(|_| retryable) {
+                        Some(delay) => {
+                            tokio::time::sleep(delay).await;
+                            attempt += 1;
+                        }
+                        None => return Err(error),
+                    }
+                }
+            }
+        }
     }
 
     /// 探测远端文件大小。
@@ -376,25 +411,9 @@ impl HttpDownloader {
     ) -> Result<Vec<u8>, DownloadError> {
         // 这里**必须重试**：安装器 jar 有 5–8 MB，走的是流式读取，中途被 reset
         // 时报的是「error decoding response body」——用户第一次装 Forge 失败、
-        // 再点一次就好，正是缺了这一层。元数据请求失败重试一次也就几十毫秒。
-        let policy = crate::retry::RetryPolicy::default();
-        let mut attempt = 1;
-        loop {
-            match self.fetch_bytes_once(url, user_agent, headers).await {
-                Ok(bytes) => return Ok(bytes),
-                Err(error) => {
-                    // 本地问题与 4xx 重试也没用，直接回。
-                    let retryable = matches!(error, DownloadError::Network(_));
-                    match policy.delay_for(attempt).filter(|_| retryable) {
-                        Some(delay) => {
-                            tokio::time::sleep(delay).await;
-                            attempt += 1;
-                        }
-                        None => return Err(error),
-                    }
-                }
-            }
-        }
+        // 再点一次就好，正是缺了这一层。
+        self.with_retry(|| async { self.fetch_bytes_once(url, user_agent, headers).await })
+            .await
     }
 
     /// 单次尝试：按候选地址取回全部字节。
