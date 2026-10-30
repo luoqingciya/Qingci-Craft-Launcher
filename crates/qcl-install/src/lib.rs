@@ -46,7 +46,7 @@ pub use loader::{
 };
 pub use manifest::{
     ManifestError, VERSION_MANIFEST_URL, fetch_manifest, fetch_manifest_from, fetch_meta,
-    resolve_version,
+    meta_path, read_meta, resolve_version, write_meta,
 };
 pub use natives::{ExtractOutcome, NativeError, NativesReport, extract_natives, install_natives};
 pub use version::{

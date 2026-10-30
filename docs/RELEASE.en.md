@@ -186,6 +186,29 @@ the same version means users who already upgraded will not update again. Bump th
 the objects it would upload, without touching COS or creating a Release. Run it once
 after configuring secrets.
 
+### Pre-release smoke (install pipeline)
+
+The UI cannot reproduce an "empty instance", yet every blocking bug so far only showed up
+in an empty directory (missing vanilla jar, loader kind out of sync, clicking a stale
+loader list). Run the CLI instead:
+
+```bash
+# Empty instance + Forge: covers the "install vanilla first, then the loader" ordering
+cargo run -p qcl-cli -- 1.20.1 --dir /tmp/qcl-smoke-forge --fresh \
+  --loader forge:47.2.0 --expect "Forge mod loading"
+
+# Empty instance + Fabric
+cargo run -p qcl-cli -- 1.20.1 --dir /tmp/qcl-smoke-fabric --fresh \
+  --loader fabric:0.15.0 --expect "Setting user"
+```
+
+- `--fresh` requires an empty directory (missing or empty) and **never clears it for you**.
+- `--expect <text>` waits for that text in the log; a hit stops the game and exits 0,
+  a timeout exits non-zero.
+- `--dry-run` installs and prints the launch command without starting the game.
+- The order matches the desktop app (vanilla → loader → top up the merged version), so it
+  catches the same class of mistake.
+
 ## Platform status
 
 Two distribution channels, deliberately kept apart:
