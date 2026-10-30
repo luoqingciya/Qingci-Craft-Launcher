@@ -188,6 +188,8 @@ function Preview() {
       onLoaderKindChange={() => {}}
       loader={loader}
       loaderBusy={false}
+      loaderError={null}
+      onRetryLoaders={() => {}}
       busy={false}
       progress={null}
       status={STATUS}

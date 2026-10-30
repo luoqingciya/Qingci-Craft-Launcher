@@ -42,6 +42,9 @@ pub const NEOFORGE_MAVEN_BASE: &str = "https://maven.neoforged.net/releases/";
 /// 且是 JSON。镜像不可用时才回落到官方 XML。
 pub const BMCLAPI_FORGE_API: &str = "https://bmclapi2.bangbang93.com/forge/minecraft";
 
+/// BMCLAPI 的 NeoForge 构建列表。实测 26.2 返回 92 个构建（含 beta）。
+pub const BMCLAPI_NEOFORGE_API: &str = "https://bmclapi2.bangbang93.com/neoforge/list";
+
 /// 安装器缓存目录（相对游戏目录）。装完不必保留，但重装时能省一次下载。
 const INSTALLER_DIR: &str = "installer-cache";
 
@@ -166,6 +169,23 @@ async fn fetch_neoforge_versions(
             "NeoForge 从 Minecraft 1.20.2 起才独立发布，{game_version} 不受支持"
         ))
     })?;
+
+    // 先试镜像的专用接口：`maven.neoforged.net` 在部分网络下连不通（实测直连超时），
+    // 而 BMCLAPI 这个接口可用（26.2 返回 92 个构建）。与 Forge 那边同样的取舍：
+    // 体积小、是 JSON、不依赖 maven。
+    let url = format!("{BMCLAPI_NEOFORGE_API}/{game_version}");
+    if let Ok(raw) = downloader.fetch_text(&url).await
+        && let Ok(list) = parse_bmclapi_builds(&raw)
+    {
+        // 接口已按 MC 版本过滤，这里再按前缀筛一次：防止镜像把别的版本混进来。
+        let filtered: Vec<LoaderInfo> = list
+            .into_iter()
+            .filter(|loader| loader.version.starts_with(&prefix))
+            .collect();
+        if !filtered.is_empty() {
+            return Ok(filtered);
+        }
+    }
 
     let url = format!("{NEOFORGE_MAVEN_BASE}net/neoforged/neoforge/maven-metadata.xml");
     let raw = downloader.fetch_text(&url).await?;
@@ -572,6 +592,25 @@ pub(crate) fn proxy_args(proxy: Option<&str>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bmclapi_neoforge_list_filters_beta_and_sorts() {
+        // 形状取自 BMCLAPI `/neoforge/list/26.2` 的真实响应：
+        // 四段版本号、beta 与正式混排、顺序不保证。
+        let raw = r#"[
+            {"version":"26.2.0.0-beta","mcversion":"26.2"},
+            {"version":"26.2.0.57","mcversion":"26.2"},
+            {"version":"26.2.0.93","mcversion":"26.2"},
+            {"version":"26.1.2.125","mcversion":"26.1"}
+        ]"#;
+        let list = parse_bmclapi_builds(raw).expect("应可解析");
+
+        // beta 被 `is_numeric_version` 挡掉，且按数值降序：93 > 57。
+        assert_eq!(list.len(), 3);
+        assert_eq!(list[0].version, "26.2.0.93");
+        assert_eq!(list[1].version, "26.2.0.57");
+        assert_eq!(list[2].version, "26.1.2.125");
+    }
 
     #[test]
     fn neoforge_prefix_maps_minecraft_versions() {

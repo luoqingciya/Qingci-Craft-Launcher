@@ -100,3 +100,32 @@ describe("PickerDialog", () => {
     expect(screen.getByText("快照")).toBeInTheDocument();
   });
 });
+
+describe("PickerDialog 的读取状态", () => {
+  it("读取中不显示「0 项」，也不下「没有可用」的结论", () => {
+    // 真实故障：列表还在拉（或已失败）时，界面同时显示「正在读取…」和
+    // 「0 项 / 没有可用的 NeoForge 加载器」，看起来像上游不支持这个版本。
+    renderPicker({ items: [], busy: true, emptyHint: "26.2 没有可用的加载器" });
+
+    expect(screen.getByText("读取中")).toBeInTheDocument();
+    expect(screen.getByText("正在读取…")).toBeInTheDocument();
+    expect(screen.queryByText("26.2 没有可用的加载器")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 项")).not.toBeInTheDocument();
+  });
+
+  it("失败时显示原因与重试，而不是「没有可用」", async () => {
+    const onRetry = vi.fn();
+    renderPicker({
+      items: [],
+      error: "获取 NeoForge 列表失败：网络错误",
+      onRetry,
+      emptyHint: "26.2 没有可用的加载器",
+    });
+
+    expect(screen.getByText(/获取 NeoForge 列表失败/)).toBeInTheDocument();
+    expect(screen.queryByText("26.2 没有可用的加载器")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});

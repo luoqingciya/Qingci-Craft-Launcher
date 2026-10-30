@@ -62,6 +62,8 @@ export default function App() {
   // 加载器种类。切种类要清掉版本号，否则会拿 Fabric 的版本号去装 Forge。
   const [loaderKind, setLoaderKind] = useState<LoaderKind>("fabric");
   const [loaderBusy, setLoaderBusy] = useState(false);
+  // 加载器列表拉取失败的原因。空列表不能说明原因，界面上会被误读成「上游没有这个加载器」。
+  const [loaderError, setLoaderError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<InstallProgressEvent | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -127,6 +129,7 @@ export default function App() {
   const loadLoaders = useCallback(async (id: string, kind: LoaderKind) => {
     const request = ++loaderRequest.current;
     setLoaderBusy(true);
+    setLoaderError(null);
     // 先把上一份列表清掉：切种类后旧列表还留在屏幕上，用户点到的就是**别的加载器**
     // 的版本号（Forge 实例记下 Fabric 的 0.20.1，安装时报 404 就是这么来的）。
     setLoaders([]);
@@ -136,10 +139,12 @@ export default function App() {
       if (loaderRequest.current === request) {
         setLoaders(options);
       }
-    } catch {
-      // 拉不到加载器列表不影响原版安装，界面退化成只有「无（原版）」。
+    } catch (cause: unknown) {
+      // 拉不到加载器列表不影响原版安装，但**必须说出原因**：
+      // 空列表会被读成「上游没有这个加载器」，而实际常常只是没连上。
       if (loaderRequest.current === request) {
         setLoaders([]);
+        setLoaderError(String(cause));
       }
     } finally {
       if (loaderRequest.current === request) {
@@ -147,6 +152,13 @@ export default function App() {
       }
     }
   }, []);
+
+  /** 重新拉一次当前版本 + 种类的加载器列表（选择器里的「重试」）。 */
+  const retryLoaders = useCallback(() => {
+    if (selected) {
+      void loadLoaders(selected, loaderKind);
+    }
+  }, [selected, loaderKind, loadLoaders]);
 
   const selectVersion = useCallback(
     async (id: string) => {
@@ -505,6 +517,8 @@ export default function App() {
       }}
       loader={loader}
       loaderBusy={loaderBusy}
+      loaderError={loaderError}
+      onRetryLoaders={retryLoaders}
       busy={busy}
       progress={progress}
       status={status}

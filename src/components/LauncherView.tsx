@@ -71,6 +71,8 @@ export function LauncherView({
   onLoaderKindChange,
   loader,
   loaderBusy,
+  loaderError,
+  onRetryLoaders,
   busy,
   progress,
   status,
@@ -120,6 +122,10 @@ export function LauncherView({
   onLoaderKindChange: (kind: LoaderKind) => void;
   loader: string;
   loaderBusy: boolean;
+  /** 加载器列表拉取失败的原因；null 表示没出错。 */
+  loaderError: string | null;
+  /** 重新拉取加载器列表。 */
+  onRetryLoaders: () => void;
   busy: boolean;
   progress: InstallProgressEvent | null;
   status: GameStatus;
@@ -435,6 +441,9 @@ export function LauncherView({
           placeholder={`搜索 ${kindLabel} 版本`}
           items={loaderItems}
           selectedId={loader}
+          busy={loaderBusy}
+          error={loaderError}
+          onRetry={onRetryLoaders}
           emptyHint={`${selected ?? "这个版本"} 没有可用的 ${kindLabel} 加载器`}
           onPick={(value) => {
             onLoaderChange(value);
