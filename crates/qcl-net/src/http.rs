@@ -374,6 +374,36 @@ impl HttpDownloader {
         user_agent: &str,
         headers: &[(&str, &str)],
     ) -> Result<Vec<u8>, DownloadError> {
+        // 这里**必须重试**：安装器 jar 有 5–8 MB，走的是流式读取，中途被 reset
+        // 时报的是「error decoding response body」——用户第一次装 Forge 失败、
+        // 再点一次就好，正是缺了这一层。元数据请求失败重试一次也就几十毫秒。
+        let policy = crate::retry::RetryPolicy::default();
+        let mut attempt = 1;
+        loop {
+            match self.fetch_bytes_once(url, user_agent, headers).await {
+                Ok(bytes) => return Ok(bytes),
+                Err(error) => {
+                    // 本地问题与 4xx 重试也没用，直接回。
+                    let retryable = matches!(error, DownloadError::Network(_));
+                    match policy.delay_for(attempt).filter(|_| retryable) {
+                        Some(delay) => {
+                            tokio::time::sleep(delay).await;
+                            attempt += 1;
+                        }
+                        None => return Err(error),
+                    }
+                }
+            }
+        }
+    }
+
+    /// 单次尝试：按候选地址取回全部字节。
+    async fn fetch_bytes_once(
+        &self,
+        url: &str,
+        user_agent: &str,
+        headers: &[(&str, &str)],
+    ) -> Result<Vec<u8>, DownloadError> {
         let response = self
             .send_first_ok(url, |client, url| {
                 let mut request = client
