@@ -166,6 +166,26 @@ GitHub Release（附安装包与 `.sig`）。
 `workflow_dispatch` 默认 `dry_run = true`：只构建并打印 `latest.json` 与将要上传的
 对象，不碰 COS、不建 Release。第一次配好之后建议先这样跑一遍。
 
+### 发版前冒烟（安装链路）
+
+界面点不出「空实例」这种场景，而历史上几个阻断性 bug 全是在空目录上才复现的
+（缺原版 jar、加载器种类不同步、切种类点到旧列表）。用 CLI 跑一遍：
+
+```bash
+# 空实例 + Forge：覆盖「先装原版 → 再装加载器」这条最容易写错的顺序
+cargo run -p qcl-cli -- 1.20.1 --dir /tmp/qcl-smoke-forge --fresh \
+  --loader forge:47.2.0 --expect "Forge mod loading"
+
+# 空实例 + Fabric
+cargo run -p qcl-cli -- 1.20.1 --dir /tmp/qcl-smoke-fabric --fresh \
+  --loader fabric:0.15.0 --expect "Setting user"
+```
+
+- `--fresh` 要求目录为空（不存在或空目录），**不会替你清空**——写错路径时拒绝执行。
+- `--expect <文本>` 启动后等日志出现该文本，命中即停游戏并返回 0；超时返回非 0。
+- 没有显示器或不想真启动时用 `--dry-run`：装完只打印启动命令。
+- 顺序与桌面端一致（原版 → 加载器 → 合并版本补文件），所以能挡住同一类错误。
+
 ## 平台现状
 
 两条分发通道，故意分开：

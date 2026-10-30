@@ -18,12 +18,14 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use qcl_core::launch::{
     AccountInfo, LaunchCommand, LaunchLayout, LaunchOptions, build_launch_command,
 };
 use qcl_install::{
-    InstallPhase, InstallProgress, VersionInstallOptions, fetch_manifest, fetch_meta,
+    ForgeKind, InstallPhase, InstallProgress, VersionInstallOptions, fetch_manifest, fetch_meta,
     install_version, resolve_version,
 };
 use qcl_java::{detect, select};
@@ -31,7 +33,7 @@ use qcl_net::HttpDownloader;
 use qcl_platform::launch_context;
 use qcl_runtime::{LogStream, spawn};
 
-use crate::args::{Args, ArgsError};
+use crate::args::{Args, ArgsError, LoaderKindArg, LoaderSpec};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -60,6 +62,11 @@ async fn main() -> ExitCode {
 
 async fn run(args: Args) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let game_dir = absolute(&args.game_dir)?;
+    // `--fresh` 模拟「新实例」：所有只在空目录暴露的问题（缺原版 jar、加载器顺序）
+    // 都靠它复现。目录非空就拒绝，免得误删用户已经装好的东西。
+    if args.fresh {
+        ensure_empty(&game_dir)?;
+    }
     std::fs::create_dir_all(&game_dir)?;
 
     let downloader = Arc::new(HttpDownloader::new(&game_dir)?);
@@ -68,15 +75,15 @@ async fn run(args: Args) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let manifest = fetch_manifest(&downloader).await?;
     let entry = resolve_version(&manifest, &args.version)?;
     println!("版本：{}（{}）", entry.id, entry.release_time);
-    let meta = fetch_meta(&downloader, entry).await?;
+    let vanilla = fetch_meta(&downloader, entry).await?;
 
-    // 2. 安装。幂等，因此每次启动前调用都能起到修复作用。
-    println!("检查文件…");
+    // 2. 先装原版。加载器的 processor 要切分原版 jar，顺序反了会直接失败。
+    println!("检查原版文件…");
     let context = launch_context();
-    let options = VersionInstallOptions::for_version(&meta.id);
-    let report = install_version(
+    let options = VersionInstallOptions::for_version(&vanilla.id);
+    let vanilla_report = install_version(
         Arc::clone(&downloader),
-        &meta,
+        &vanilla,
         &context,
         &options,
         progress_printer(),
@@ -84,14 +91,43 @@ async fn run(args: Args) -> Result<ExitCode, Box<dyn std::error::Error>> {
     .await?;
 
     println!(
-        "文件就绪：版本文件 {}/{}（跳过 {}），natives {} 个，资产 {}/{}",
-        report.downloaded + report.skipped,
-        report.planned_files,
-        report.skipped,
-        report.natives.extracted,
-        report.assets.downloaded + report.assets.skipped,
-        report.assets.objects
+        "原版就绪：版本文件 {}/{}（跳过 {}），natives {} 个，资产 {}/{}",
+        vanilla_report.downloaded + vanilla_report.skipped,
+        vanilla_report.planned_files,
+        vanilla_report.skipped,
+        vanilla_report.natives.extracted,
+        vanilla_report.assets.downloaded + vanilla_report.assets.skipped,
+        vanilla_report.assets.objects
     );
+
+    // 3. 叠加加载器（可选）。装完把合并后的元数据落盘，和桌面端一样。
+    let meta = match &args.loader {
+        Some(spec) => {
+            println!("安装 {} {}…", spec.kind.label(), spec.version);
+            let merged = install_loader(&downloader, &game_dir, &vanilla, spec).await?;
+            println!("加载器就绪：{}", merged.id);
+
+            // 合并后的版本还带着自己的库与 natives，补齐一遍。
+            let merged_options = VersionInstallOptions::for_version(&merged.id);
+            let report = install_version(
+                Arc::clone(&downloader),
+                &merged,
+                &context,
+                &merged_options,
+                progress_printer(),
+            )
+            .await?;
+            println!(
+                "合并版本就绪：版本文件 {}/{}（跳过 {}），natives {} 个",
+                report.downloaded + report.skipped,
+                report.planned_files,
+                report.skipped,
+                report.natives.extracted
+            );
+            merged
+        }
+        None => vanilla,
+    };
 
     // 3. 选 Java。缺失时明确失败，而不是用低版本硬跑（那会抛 UnsupportedClassVersionError）。
     let required = meta.required_java_major().unwrap_or(8);
@@ -145,16 +181,36 @@ async fn run(args: Args) -> Result<ExitCode, Box<dyn std::error::Error>> {
     // Ctrl+C 交给 `wait_or_cancel` 处理，而不是让进程直接退出：子进程被
     // `CREATE_NO_WINDOW` 放进了独立控制台，终端的信号传不到它，直接退出会留下
     // 一个还在跑的游戏进程。
+    //
+    // 指定 `--expect` 时改成「等某行日志出现」：冒烟测试不该靠人盯着看，
+    // 命中就停游戏，超时就算失败。
     println!("\n启动游戏…（Ctrl+C 停止）\n");
     let mut process = spawn(&command, &game_dir)?;
+
+    let expect = args.expect.clone();
+    let hit = Arc::new(AtomicBool::new(false));
+    let (hit_tx, hit_rx) = tokio::sync::oneshot::channel::<()>();
+    let mut hit_tx = Some(hit_tx);
+    let timeout = Duration::from_secs(args.timeout_secs);
+
     let outcome = process
         .wait_or_cancel(
-            async {
-                if tokio::signal::ctrl_c().await.is_ok() {
-                    eprintln!("\n收到中断信号，正在停止游戏…");
-                } else {
-                    // 拿不到信号处理器时不要误杀游戏，等它自己结束。
-                    std::future::pending::<()>().await;
+            {
+                let expect = expect.clone();
+                async move {
+                    match expect {
+                        Some(_) => {
+                            let _ = tokio::time::timeout(timeout, hit_rx).await;
+                        }
+                        None => {
+                            if tokio::signal::ctrl_c().await.is_ok() {
+                                eprintln!("\n收到中断信号，正在停止游戏…");
+                            } else {
+                                // 拿不到信号处理器时不要误杀游戏，等它自己结束。
+                                std::future::pending::<()>().await;
+                            }
+                        }
+                    }
                 }
             },
             |line| {
@@ -162,6 +218,15 @@ async fn run(args: Args) -> Result<ExitCode, Box<dyn std::error::Error>> {
                 match line.stream {
                     LogStream::Stdout => println!("{}", line.text),
                     LogStream::Stderr => eprintln!("{}", line.text),
+                }
+                if let (Some(needle), Some(sender)) = (&expect, hit_tx.take()) {
+                    if line.text.contains(needle.as_str()) {
+                        hit.store(true, Ordering::Relaxed);
+                        let _ = sender.send(());
+                    } else {
+                        // 没命中就把发送端放回去，别让后面几万行日志失去机会。
+                        hit_tx = Some(sender);
+                    }
                 }
             },
         )
@@ -173,11 +238,97 @@ async fn run(args: Args) -> Result<ExitCode, Box<dyn std::error::Error>> {
         outcome.duration.as_secs_f64()
     );
 
+    // 冒烟结论：命中就是通过，不管游戏是被我们停掉的还是自己退的。
+    if let Some(needle) = &expect {
+        if hit.load(Ordering::Relaxed) {
+            println!("\n冒烟通过：日志里出现了 `{needle}`");
+            return Ok(ExitCode::SUCCESS);
+        }
+        return Err(format!("冒烟失败：{} 秒内没等到日志 `{needle}`", args.timeout_secs).into());
+    }
+
     Ok(match outcome.exit_code {
         Some(0) => ExitCode::SUCCESS,
         Some(code) => ExitCode::from(u8::try_from(code).unwrap_or(1)),
         None => ExitCode::FAILURE,
     })
+}
+
+/// `--fresh` 的前置检查：目录必须不存在或为空。
+///
+/// 拒绝而不是「帮你清空」：`--dir` 写错一个字母就删掉整份游戏目录，代价太大。
+fn ensure_empty(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    match std::fs::read_dir(dir) {
+        Ok(mut entries) => {
+            if entries.next().is_some() {
+                return Err(format!(
+                    "`--fresh` 要求目录为空，但 {} 里已经有文件。删掉它，或换一个 --dir。",
+                    dir.display()
+                )
+                .into());
+            }
+            Ok(())
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// 安装加载器并返回合并后的版本元数据。
+///
+/// 顺序与桌面端一致：原版文件必须已经就绪（processor 要切分原版 jar），
+/// 装完把合并结果写进 `versions/<id>/<id>.json`，启动前直接读。
+async fn install_loader(
+    downloader: &Arc<HttpDownloader>,
+    game_dir: &Path,
+    parent: &qcl_core::version::VersionMeta,
+    spec: &LoaderSpec,
+) -> Result<qcl_core::version::VersionMeta, Box<dyn std::error::Error>> {
+    match spec.kind {
+        LoaderKindArg::Fabric => {
+            let profile = qcl_install::fetch_profile(downloader, &parent.id, &spec.version).await?;
+            if !qcl_install::inherits_from(&profile, &parent.id) {
+                return Err(format!(
+                    "该 Fabric 版本对应的原版是 {}，与所选 {} 不一致",
+                    profile.inherits_from, parent.id
+                )
+                .into());
+            }
+            let libraries = qcl_install::resolve_libraries(downloader, &profile).await?;
+            let merged = qcl_install::merge(parent, &profile, libraries);
+            qcl_install::write_meta(game_dir, &merged)?;
+            Ok(merged)
+        }
+        kind => {
+            let forge_kind = if kind == LoaderKindArg::Forge {
+                ForgeKind::Forge
+            } else {
+                ForgeKind::NeoForge
+            };
+            // 安装器要求 Java 8+，与游戏本身的 Java 版本无关。
+            let installations = detect(&[], Some(&game_dir.join("runtime")));
+            let java = select(&installations, 8)
+                .ok_or("安装 Forge / NeoForge 需要 Java 8+，但本机未检测到。请先安装 Java。")?;
+
+            let report = qcl_install::install_forge(
+                downloader,
+                forge_kind,
+                &java.executable,
+                &parent.id,
+                &spec.version,
+                game_dir,
+                qcl_install::InstallHooks {
+                    proxy: None,
+                    on_step: &|done, total| println!("  步骤 {done}/{total}"),
+                },
+            )
+            .await?;
+
+            let raw = qcl_install::read_meta(game_dir, &report.version_id)
+                .ok_or("安装器没有生成版本文件")?;
+            Ok(qcl_install::resolve_inherited(downloader, game_dir, raw).await?)
+        }
+    }
 }
 
 /// 离线账户。启动器尚未接入微软登录，这里用占位凭据。
