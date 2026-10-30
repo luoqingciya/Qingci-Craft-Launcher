@@ -508,18 +508,49 @@ fn rename_instance(
 fn delete_instance(
     state: tauri::State<'_, AppState>,
     name: String,
+    delete_files: Option<bool>,
 ) -> Result<SettingsView, String> {
     let mut next = state.settings_snapshot()?;
     if next.instances.len() <= 1 {
         return Err("至少要保留一个实例".to_owned());
     }
 
-    let before = next.instances.len();
-    next.instances.retain(|instance| instance.name != name);
-    if next.instances.len() == before {
+    let Some(index) = next
+        .instances
+        .iter()
+        .position(|instance| instance.name == name)
+    else {
         return Err(format!("实例不存在：{name}"));
+    };
+    let removed = next.instances[index].clone();
+
+    // 删文件是不可逆的，所以先把所有「不能删」的情况挡在前面，再动手。
+    if delete_files.unwrap_or(false) {
+        let Some(dir) = removed.dir.clone() else {
+            return Err("这个实例指向默认游戏目录，已跳过删除文件".to_owned());
+        };
+        if dir == settings::default_game_dir(&state.install_dir) {
+            return Err(format!(
+                "{} 是默认游戏目录，删掉会连带默认实例的数据，已跳过删除文件",
+                dir.display()
+            ));
+        }
+        // 另一个实例也在用同一个目录时，删掉等于删了别人的存档。
+        if next
+            .instances
+            .iter()
+            .any(|other| other.name != name && other.dir.as_ref() == Some(&dir))
+        {
+            return Err(format!(
+                "另一个实例也在使用 {}，不能删除这个目录",
+                dir.display()
+            ));
+        }
+        std::fs::remove_dir_all(&dir)
+            .map_err(|error| format!("删除 {} 失败：{error}", dir.display()))?;
     }
 
+    next.instances.remove(index);
     if next.active_instance.as_deref() == Some(name.as_str()) {
         next.active_instance = next.instances.first().map(|instance| instance.name.clone());
     }

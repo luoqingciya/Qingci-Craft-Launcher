@@ -65,7 +65,8 @@ export function SettingsPanel({
   onSwitchInstance: (name: string) => void;
   onCreateInstance: (name: string) => void;
   onRenameInstance: (from: string, to: string) => void;
-  onDeleteInstance: (name: string) => void;
+  /** 移除实例；第二个参数为真时连游戏目录一起删。 */
+  onDeleteInstance: (name: string, deleteFiles: boolean) => void;
   /** 放在抽屉等已有容器里时去掉自身的卡片外框，避免卡片套卡片。 */
   embedded?: boolean;
 }) {
@@ -76,6 +77,8 @@ export function SettingsPanel({
   // 所以各自的输入放在本地状态里。
   const [newInstance, setNewInstance] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
+  // 移除是不可逆的（可能连目录一起删），所以走两步：先问，再选「仅移除」还是「连文件夹」。
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
   // 外部设置变化时同步草稿（例如保存成功后后端返回了规范化后的路径）。
@@ -223,6 +226,46 @@ export function SettingsPanel({
                       取消
                     </button>
                   </>
+                ) : confirmingDelete === instance.name ? (
+                  <>
+                    <span className="min-w-0 flex-1 text-[12px] leading-snug text-[var(--color-text-secondary)]">
+                      移除「{instance.name}」？
+                      <span className="mt-0.5 block truncate font-mono text-[11px] text-[var(--color-text-muted)]">
+                        {instance.gameDir}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onDeleteInstance(instance.name, false);
+                        setConfirmingDelete(null);
+                      }}
+                      disabled={saving}
+                      title="只从列表移除，游戏目录与存档保留"
+                      className="shrink-0 rounded px-2 py-1 text-[12px] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40"
+                    >
+                      仅移除
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onDeleteInstance(instance.name, true);
+                        setConfirmingDelete(null);
+                      }}
+                      disabled={saving}
+                      title="从列表移除，并删除上面这个文件夹（含存档、模组，不可恢复）"
+                      className="shrink-0 rounded px-2 py-1 text-[12px] font-medium text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 disabled:opacity-40"
+                    >
+                      连文件夹删除
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingDelete(null)}
+                      className="shrink-0 rounded px-2 py-1 text-[12px] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"
+                    >
+                      取消
+                    </button>
+                  </>
                 ) : (
                   <>
                     <button
@@ -258,13 +301,12 @@ export function SettingsPanel({
                     </button>
                     <button
                       type="button"
-                      onClick={() => onDeleteInstance(instance.name)}
+                      onClick={() => setConfirmingDelete(instance.name)}
                       disabled={saving || settings.instances.length <= 1}
-                      // 只移除记录，不删文件——说清楚比事后解释好。
                       title={
                         settings.instances.length <= 1
                           ? "至少要保留一个实例"
-                          : "从列表移除，不会删除磁盘上的文件"
+                          : "移除前会让你选「仅移除」还是「连文件夹删除」"
                       }
                       className="shrink-0 rounded px-2 py-1 text-[12px] text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 disabled:opacity-30"
                     >

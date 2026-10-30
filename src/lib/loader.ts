@@ -16,3 +16,16 @@ import type { LoaderKind } from "../api";
 export function parseLoaderKind(raw: string | null | undefined): LoaderKind {
   return raw === "forge" || raw === "neoforge" ? raw : "fabric";
 }
+
+/**
+ * 一次安装失败，是不是「加载器版本不属于当前种类」？
+ *
+ * 判据是上游回了 **4xx**：说明请求到达了、但那个版本号被拒绝——典型原因是切换
+ * 加载器种类时点到了还没刷新的旧列表（Forge 实例记下 Fabric 的 0.20.1 → 404）。
+ * 网络错误不算：那种重试即可，不该动用户已经选好的版本。
+ */
+export function isLoaderVersionRejected(message: string): boolean {
+  return /(安装 (?:Forge|NeoForge) 失败|获取 Fabric profile 失败)[\s\S]*HTTP 4\d\d/.test(
+    message,
+  );
+}

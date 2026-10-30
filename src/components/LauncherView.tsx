@@ -173,7 +173,7 @@ export function LauncherView({
   onRefreshModCount: () => void;
   onCreateInstance: (name: string) => void;
   onRenameInstance: (from: string, to: string) => void;
-  onDeleteInstance: (name: string) => void;
+  onDeleteInstance: (name: string, deleteFiles: boolean) => void;
 }) {
   const [tab, setTab] = useState<Tab>("home");
 

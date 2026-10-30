@@ -40,7 +40,7 @@ import {
 } from "./api";
 import { LauncherView, type VersionsState } from "./components/LauncherView";
 import { summarizeCrash } from "./lib/crash";
-import { parseLoaderKind } from "./lib/loader";
+import { isLoaderVersionRejected, parseLoaderKind } from "./lib/loader";
 import { appendLog, type LogEntry, type LogStreamKind } from "./lib/logs";
 import { useAccount } from "./lib/useAccount";
 import { useUpdate } from "./lib/useUpdate";
@@ -127,6 +127,9 @@ export default function App() {
   const loadLoaders = useCallback(async (id: string, kind: LoaderKind) => {
     const request = ++loaderRequest.current;
     setLoaderBusy(true);
+    // 先把上一份列表清掉：切种类后旧列表还留在屏幕上，用户点到的就是**别的加载器**
+    // 的版本号（Forge 实例记下 Fabric 的 0.20.1，安装时报 404 就是这么来的）。
+    setLoaders([]);
 
     try {
       const options = await listLoaders(id, kind);
@@ -350,7 +353,15 @@ export default function App() {
         // `mods/` 每个实例各一份：不重数就会显示上一个实例的数字。
         void refreshModCount();
 
-        setState({ status: "ready", versions: await listVersions() });
+        // **不要 await 版本清单**：它是网络请求，官方源不通时能挂很久，
+        // 而「保存中」的转圈就挂在这句上——用户看到的是「创建实例卡住」。
+        // 实例本身已经建好了，清单晚一点到就行。
+        setState({ status: "loading" });
+        void listVersions()
+          .then((versions) => setState({ status: "ready", versions }))
+          .catch((cause: unknown) =>
+            setState({ status: "failed", message: String(cause) })
+          );
       } catch (cause: unknown) {
         setSettingsError(String(cause));
       } finally {
@@ -382,8 +393,8 @@ export default function App() {
   );
 
   const deleteInstanceByName = useCallback(
-    (name: string) => {
-      void adoptInstance(() => deleteInstance(name));
+    (name: string, deleteFiles: boolean) => {
+      void adoptInstance(() => deleteInstance(name, deleteFiles));
     },
     [adoptInstance]
   );
@@ -427,7 +438,14 @@ export default function App() {
           `资产 ${summary.assets} 个，natives ${summary.natives} 个`,
       );
     } catch (cause: unknown) {
-      setError(String(cause));
+      const text = String(cause);
+      setError(text);
+      // 上游 4xx 拒绝了这个加载器版本号 = 它不属于当前种类（切种类时点到了旧列表）。
+      // 清掉选择让「加载器」那行解锁，用户能重选；网络错误不动，重试即可。
+      if (selected && isLoaderVersionRejected(text)) {
+        setLoader("");
+        void rememberSelection(selected, null, loaderKind);
+      }
     } finally {
       setBusy(false);
       setProgress(null);
