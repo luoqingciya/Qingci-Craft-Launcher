@@ -226,6 +226,10 @@ export function ModsTab({
       setResolvedQuery(outcome.query === query.trim() ? null : outcome.query);
       setSearched(true);
     } catch (cause: unknown) {
+      // 清掉旧结果：失败时还挂着上一次的列表，会被当成这次的搜索结果。
+      // `searched` 一起置真，让下面的空态让位给错误信息（不能显示「没有找到」）。
+      setResults([]);
+      setSearched(true);
       setError(String(cause));
     } finally {
       setSearching(false);
@@ -407,7 +411,7 @@ export function ModsTab({
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {searched && results.length === 0 && !searching && (
+        {searched && results.length === 0 && !searching && !error && (
           <p className="py-6 text-[13px] text-[var(--color-text-muted)]">
             没有找到适配该版本的模组。
           </p>

@@ -73,6 +73,7 @@ export function LauncherView({
   loaderBusy,
   loaderError,
   onRetryLoaders,
+  onRetryVersions,
   busy,
   progress,
   status,
@@ -126,6 +127,8 @@ export function LauncherView({
   loaderError: string | null;
   /** 重新拉取加载器列表。 */
   onRetryLoaders: () => void;
+  /** 重新拉取版本清单。 */
+  onRetryVersions: () => void;
   busy: boolean;
   progress: InstallProgressEvent | null;
   status: GameStatus;
@@ -404,6 +407,10 @@ export function LauncherView({
           placeholder="搜索版本号，如 1.20 或 26.3"
           items={versionItems}
           selectedId={selected}
+          // 失败不能显示成「还没加载完」：那会让人一直等一个永远不会来的结果。
+          busy={versions.status === "loading"}
+          error={versions.status === "failed" ? versions.message : null}
+          onRetry={onRetryVersions}
           emptyHint={ready ? "没有匹配的版本" : "版本清单还没加载完"}
           onPick={(id) => {
             onSelectVersion(id);

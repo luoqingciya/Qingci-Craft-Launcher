@@ -122,6 +122,23 @@ describe("ModsTab", () => {
     await userEvent.type(screen.getByRole("textbox"), "x{Enter}");
 
     expect(await screen.findByText("网络错误")).toBeInTheDocument();
+    // 不能同时显示「没有找到」：那是「搜到了但没结果」的结论，
+    // 把「连不上」说成「没有这个模组」会让人白找。
+    expect(screen.queryByText(/没有找到适配该版本的模组/)).not.toBeInTheDocument();
+  });
+
+  it("上一次的结果不会留在失败的搜索下面", async () => {
+    searchMods.mockResolvedValueOnce({ query: "sodium", hits: HITS });
+    render(<ModsTab version="26.3" loader="0.20.1" instance="默认" />);
+
+    await userEvent.type(screen.getByRole("textbox"), "sodium{Enter}");
+    expect(await screen.findByText("Sodium")).toBeInTheDocument();
+
+    searchMods.mockRejectedValueOnce("网络错误");
+    await userEvent.type(screen.getByRole("textbox"), "x{Enter}");
+
+    expect(await screen.findByText("网络错误")).toBeInTheDocument();
+    expect(screen.queryByText("Sodium")).not.toBeInTheDocument();
   });
 
   it("没有结果时给出提示", async () => {
