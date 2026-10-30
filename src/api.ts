@@ -202,9 +202,13 @@ export function renameInstance(from: string, to: string): Promise<SettingsView> 
   return invoke<SettingsView>("rename_instance", { from, to });
 }
 
-/** 从列表里移除实例。**不删文件**——游戏目录里可能有存档。 */
-export function deleteInstance(name: string): Promise<SettingsView> {
-  return invoke<SettingsView>("delete_instance", { name });
+/** 从列表里移除实例。默认只移除记录：游戏目录里可能有存档与截图。 */
+export function deleteInstance(
+  name: string,
+  /** 是否连同游戏目录一起删除。默认只从列表移除。 */
+  deleteFiles = false
+): Promise<SettingsView> {
+  return invoke<SettingsView>("delete_instance", { name, deleteFiles });
 }
 
 /** 列出本机可用的 Java。 */

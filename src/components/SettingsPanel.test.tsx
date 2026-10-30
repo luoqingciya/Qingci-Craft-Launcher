@@ -381,3 +381,76 @@ describe("实例管理", () => {
     expect(onRename).toHaveBeenCalledWith("整合包", "模组服");
   });
 });
+
+describe("移除实例", () => {
+  const TWO_INSTANCES = [
+    {
+      name: "默认",
+      gameDir: "C:\\games\\qcl",
+      isDefaultDir: false,
+      active: true,
+      selectedVersion: null,
+      loaderVersion: null,
+      loaderKind: null,
+    },
+    {
+      name: "整合包",
+      gameDir: "C:\\games\\pack",
+      isDefaultDir: false,
+      active: false,
+      selectedVersion: null,
+      loaderVersion: null,
+      loaderKind: null,
+    },
+  ];
+
+  it("先问一次，再让用户选「仅移除」还是「连文件夹删除」", async () => {
+    // 删文件不可逆，所以不能一个按钮直接执行。
+    const onDelete = vi.fn();
+    render(
+      <SettingsPanel
+        settings={settings({ instances: TWO_INSTANCES, activeInstance: "默认" })}
+        javaOptions={[]}
+        saving={false}
+        error={null}
+        onSave={vi.fn()}
+        onRefreshJava={vi.fn()}
+        onSwitchInstance={vi.fn()}
+        onCreateInstance={vi.fn()}
+        onRenameInstance={vi.fn()}
+        onDeleteInstance={onDelete}
+      />
+    );
+
+    await userEvent.click(screen.getAllByRole("button", { name: "移除" })[0]);
+    expect(onDelete).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "连文件夹删除" })
+    );
+    expect(onDelete).toHaveBeenCalledWith("默认", true);
+  });
+
+  it("「仅移除」不会要求删除文件", async () => {
+    const onDelete = vi.fn();
+    render(
+      <SettingsPanel
+        settings={settings({ instances: TWO_INSTANCES, activeInstance: "默认" })}
+        javaOptions={[]}
+        saving={false}
+        error={null}
+        onSave={vi.fn()}
+        onRefreshJava={vi.fn()}
+        onSwitchInstance={vi.fn()}
+        onCreateInstance={vi.fn()}
+        onRenameInstance={vi.fn()}
+        onDeleteInstance={onDelete}
+      />
+    );
+
+    await userEvent.click(screen.getAllByRole("button", { name: "移除" })[0]);
+    await userEvent.click(screen.getByRole("button", { name: "仅移除" }));
+
+    expect(onDelete).toHaveBeenCalledWith("默认", false);
+  });
+});
