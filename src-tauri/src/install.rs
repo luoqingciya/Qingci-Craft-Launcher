@@ -8,7 +8,7 @@
 //! 真正的安装顺序与失败归类都在 `qcl_install` 里，因此那部分逻辑仍可在无 GUI
 //! 的测试中验证。
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use qcl_core::version::VersionMeta;
@@ -83,9 +83,7 @@ pub(crate) async fn load_meta(
 
 /// 读取本地已合并的版本元数据。文件不存在或损坏时返回 `None`，让调用方回上游。
 fn read_local_meta(game_dir: &Path, version: &str) -> Option<VersionMeta> {
-    let path = meta_path(game_dir, version);
-    let raw = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str(&raw).ok()
+    qcl_install::read_meta(game_dir, version)
 }
 
 /// 把 Forge / NeoForge 版本 JSON 的 `inheritsFrom` 合并进来。
@@ -104,21 +102,7 @@ async fn resolve_forge_meta(
 
 /// 写入合并后的版本元数据。
 fn write_local_meta(game_dir: &Path, meta: &VersionMeta) -> Result<(), String> {
-    let path = meta_path(game_dir, &meta.id);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("无法创建 {}：{error}", parent.display()))?;
-    }
-    let raw = serde_json::to_string_pretty(meta)
-        .map_err(|error| format!("序列化版本元数据失败：{error}"))?;
-    std::fs::write(&path, raw).map_err(|error| format!("写入 {} 失败：{error}", path.display()))
-}
-
-fn meta_path(game_dir: &Path, version: &str) -> PathBuf {
-    game_dir
-        .join("versions")
-        .join(version)
-        .join(format!("{version}.json"))
+    qcl_install::write_meta(game_dir, meta).map_err(|error| format!("写入版本元数据失败：{error}"))
 }
 
 /// 取版本元数据，可选叠加加载器。
@@ -467,7 +451,7 @@ pub async fn list_loaders(
 
 #[cfg(test)]
 mod tests {
-    use super::{load_meta, meta_path, read_local_meta, write_local_meta};
+    use super::{load_meta, read_local_meta, write_local_meta};
     use qcl_core::version::VersionMeta;
     use qcl_net::HttpDownloader;
     use tempfile::TempDir;
@@ -495,7 +479,7 @@ mod tests {
 
         write_local_meta(dir.path(), &meta).expect("应能写入");
 
-        let path = meta_path(dir.path(), "fabric-loader-0.20.1-26.3");
+        let path = qcl_install::meta_path(dir.path(), "fabric-loader-0.20.1-26.3");
         assert!(path.is_file(), "应写到 versions/<id>/<id>.json");
 
         let read_back = read_local_meta(dir.path(), "fabric-loader-0.20.1-26.3").expect("应能读回");
@@ -506,7 +490,7 @@ mod tests {
     #[test]
     fn corrupt_local_meta_is_ignored() {
         let dir = TempDir::new().expect("临时目录");
-        let path = meta_path(dir.path(), "broken");
+        let path = qcl_install::meta_path(dir.path(), "broken");
         std::fs::create_dir_all(path.parent().expect("应有父目录")).expect("应能建目录");
         std::fs::write(&path, b"{ not json").expect("应能写入");
 

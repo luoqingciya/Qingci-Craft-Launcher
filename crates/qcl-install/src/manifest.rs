@@ -8,6 +8,8 @@
 //! 入口里——否则两处会各写一份「拉清单、找版本、校验 SHA-1」，而其中任何一处
 //! 漏掉校验都不会被立刻发现。
 
+use std::path::{Path, PathBuf};
+
 use qcl_core::version::{VersionEntry, VersionManifest, VersionMeta};
 use qcl_net::{DownloadError, HttpDownloader, verify_sha1};
 
@@ -87,4 +89,36 @@ pub async fn fetch_meta(
     }
 
     Ok(serde_json::from_str(&raw)?)
+}
+
+/// 版本元数据的落盘路径：`<game>/versions/<id>/<id>.json`。
+///
+/// 与官方启动器的布局一致。合并后的加载器版本也写在这里，所以启动前能直接读，
+/// 不必每次去上游取 profile。
+#[must_use]
+pub fn meta_path(game_dir: &Path, version: &str) -> PathBuf {
+    game_dir
+        .join("versions")
+        .join(version)
+        .join(format!("{version}.json"))
+}
+
+/// 读本地版本元数据；文件不存在或内容损坏时返回 `None`。
+///
+/// 损坏不报错是刻意的：这份文件可以由上游重新生成，读不出来就当作「没装过」，
+/// 让调用方走一遍安装流程。
+#[must_use]
+pub fn read_meta(game_dir: &Path, version: &str) -> Option<VersionMeta> {
+    let raw = std::fs::read_to_string(meta_path(game_dir, version)).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+/// 把版本元数据写到标准位置。
+pub fn write_meta(game_dir: &Path, meta: &VersionMeta) -> std::io::Result<()> {
+    let path = meta_path(game_dir, &meta.id);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let raw = serde_json::to_string_pretty(meta).map_err(std::io::Error::other)?;
+    std::fs::write(path, raw)
 }
