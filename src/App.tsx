@@ -179,6 +179,16 @@ export default function App() {
     [selected, loaderKind]
   );
 
+  /** 重新拉一次版本清单（版本选择器里的「重试」）。 */
+  const reloadVersions = useCallback(async () => {
+    setState({ status: "loading" });
+    try {
+      setState({ status: "ready", versions: await listVersions() });
+    } catch (cause: unknown) {
+      setState({ status: "failed", message: String(cause) });
+    }
+  }, []);
+
   // 初始数据：版本清单、设置、运行状态。
   useEffect(() => {
     let cancelled = false;
@@ -519,6 +529,7 @@ export default function App() {
       loaderBusy={loaderBusy}
       loaderError={loaderError}
       onRetryLoaders={retryLoaders}
+      onRetryVersions={() => void reloadVersions()}
       busy={busy}
       progress={progress}
       status={status}

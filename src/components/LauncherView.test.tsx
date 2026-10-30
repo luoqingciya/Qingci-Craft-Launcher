@@ -45,6 +45,7 @@ function renderView(overrides: Partial<Parameters<typeof LauncherView>[0]> = {})
     loaderBusy: false,
     loaderError: null,
     onRetryLoaders: () => {},
+    onRetryVersions: () => {},
     busy: false,
     progress: null,
     status: { running: false, version: null },
@@ -272,12 +273,15 @@ describe("LauncherView", () => {
     expect(document.documentElement.dataset.theme).toBe("light");
   });
 
-  it("版本清单加载失败时，选择器里给出提示而不是空白", async () => {
+  it("版本清单加载失败时，选择器说明原因并可重试，而不是假装还在加载", async () => {
     renderView({ versions: { status: "failed", message: "网络错误" } });
 
     await userEvent.click(screen.getByRole("button", { name: "更换版本" }));
 
-    expect(screen.getByText("版本清单还没加载完")).toBeInTheDocument();
+    expect(screen.getByText(/读取失败：网络错误/)).toBeInTheDocument();
+    // 「还没加载完」会让人一直等一个不会来的结果。
+    expect(screen.queryByText("版本清单还没加载完")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });
 });
 

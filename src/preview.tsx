@@ -190,6 +190,7 @@ function Preview() {
       loaderBusy={false}
       loaderError={null}
       onRetryLoaders={() => {}}
+      onRetryVersions={() => {}}
       busy={false}
       progress={null}
       status={STATUS}
