@@ -2,39 +2,46 @@
 
 [中文](RELEASE.md) | **English**
 
-Qingci updates are delivered as "GitHub Actions builds → Tencent Cloud COS serves". CI
-builds the NSIS installer, signs it with a private key, and uploads it to COS together
-with the update manifest `latest.json`. On startup the client reads the manifest, and if
+Qingci updates are delivered as "GitHub Actions builds → GitHub Release serves". CI builds the
+installers for all three platforms, signs them with a private key, and publishes them together with
+the update manifest `latest.json` on GitHub Releases. On startup the client reads the manifest, and if
 a newer version exists it downloads the installer and **verifies the signature against
 the bundled public key before installing**.
 
 ```
-tag v0.1.4            ← 0.1.4 as the worked example
+tag v0.1.14           ← 0.1.14 as the worked example
    │
    ▼
 GitHub Actions
    ├─ prepare   verify the three version strings + the signing key
-   ├─ build     matrix: Windows → NSIS / Linux → AppImage + deb (both signed)
-   └─ publish   merge artifacts → write latest.json → upload to COS → create the Release
-                   │
-                   ├─ COS (only what auto-update needs)
-                   │    ├─ QingciCraftLauncher_0.1.4_x64-setup.exe
-                   │    ├─ ...exe.sig
-                   │    └─ latest.json            ← uploaded last
+   ├─ build     matrix: Windows → NSIS / Linux → AppImage + deb / macOS → dmg + .app.tar.gz (all signed)
+   └─ publish   merge artifacts → write latest.json → create the Release → upload to COS
                    │
                    └─ GitHub Release (everything)
-                        └─ the three above + AppImage + AppImage.sig + deb
+                        ├─ QingciCraftLauncher_0.1.14_x64-setup.exe + .sig
+                        ├─ ..._x86_64.AppImage + .sig
+                        ├─ ..._universal.app.tar.gz + .sig
+                        ├─ ..._universal.dmg / ..._amd64.deb / portable build
+                        └─ latest.json
    │
    ▼
-client startup → GET https://qcl.luoqingciya.cn/releases/latest.json
+client startup → GET github.com/.../releases/latest/download/latest.json
    ├─ not newer → do nothing (no interruption)
    └─ newer → badge on the About tab → "Download and install"
               → signature check → silent install → relaunch
 ```
 
-The manifest only carries `windows-x86_64`: the Linux AppImage is 83.5 MB and does not participate in
-auto-update, so putting it on COS would cost bandwidth for nothing — it stays on GitHub Releases
-together with the deb.
+The manifest covers **three platforms, four targets**: `windows-x86_64` (NSIS), `linux-x86_64`
+(AppImage), `darwin-aarch64` and `darwin-x86_64` (the same universal `.app.tar.gz`). deb packages are
+managed by the system package manager and the portable build does not self-update, so neither has an
+entry.
+
+## Two channels and a transition period
+
+GitHub Release is the primary channel; **COS has not been retired** — it still serves `latest.json`
+and the Windows installer. Reason: clients ≤ 0.1.14 have **only COS** in their endpoint list and will
+never look at GitHub; dropping the channel would leave every existing user stranded. After the old
+versions have drained away, retire COS by removing the upload step and the fallback endpoint.
 
 ## One-time setup
 
@@ -211,40 +218,41 @@ cargo run -p qcl-cli -- 1.20.1 --dir /tmp/qcl-smoke-fabric --fresh \
 
 ## Platform status
 
-Two distribution channels, deliberately kept apart:
+GitHub Release is the primary channel; COS is a transitional manifest fallback:
 
 | Channel | Contents | Purpose |
 | --- | --- | --- |
-| COS (`qcl.luoqingciya.cn/releases/`) | Windows NSIS installer + `.sig` + `latest.json` | the auto-update channel |
-| GitHub Releases | all of the above, plus the Windows portable build, the macOS dmg and Linux AppImage/deb | manual downloads |
+| GitHub Releases (primary) | installers for all three platforms + `.sig` + `latest.json`, portable build | **the auto-update channel**, and the manual download page |
+| COS (`qcl.luoqingciya.cn/releases/`) | Windows NSIS installer + `.sig` + `latest.json` | **manifest fallback for clients ≤ 0.1.14**, retired after migration |
 
-`latest.json` therefore carries **only** a `windows-x86_64` entry. The macOS and Linux artifacts stay
-on GitHub Releases: the AppImage is 83.5 MB, the dmg is 12 MB, and neither participates in
-auto-update, so putting them on COS would cost bandwidth for nothing.
+`latest.json` covers four targets: `windows-x86_64`, `linux-x86_64` (AppImage),
+`darwin-aarch64` and `darwin-x86_64` (the same universal `.app.tar.gz`). Every download URL points
+at GitHub Release — including the URLs inside the COS copy of the manifest, so once a client has
+migrated to GitHub, new versions no longer depend on COS.
 
 Sizes below are measured from the 0.1.5 artifacts and drift a little between versions (more so when
 the frontend changes) — trust the actual artifacts, not these numbers.
 
 - **Windows installer**: NSIS, 3.8 MB, reuses the system WebView2; auto-update installs silently and relaunches.
 - **Windows portable**: 12.7 MB, the very exe that lives inside the installer — double-click to run, game
-  directory next to the exe. No auto-update: replacing a running exe is not allowed on Windows.
-- **macOS universal dmg**: 12.1 MB, built with `--target universal-apple-darwin`, so one file carries both arm64
-  and x86_64 — no architecture picking. **Unsigned and not notarized**: without a paid developer
-  account, the first launch needs right-click → Open, or `xattr -dr com.apple.quarantine`; the README
-  lists three ways.
-- **macOS uses its own release config** (`tauri.release-macos.json`) with `createUpdaterArtifacts`
-  turned off. Two reasons: enabling it demands a signing key at build time, and unpacking
-  `.app.tar.gz` needs the updater's `zip` feature, which is disabled because of two extraction
-  advisories (RUSTSEC-2026-0367 / 0368) — see `src-tauri/Cargo.toml`.
+  directory next to the exe. It does receive update prompts; installing means upgrading to the NSIS
+  build (the portable directory itself is not replaced).
+- **macOS universal dmg + `.app.tar.gz`**: 12.1 MB, built with `--target universal-apple-darwin`, so one
+  file carries both arm64 and x86_64 — no architecture picking. **Unsigned and not notarized**: without
+  a paid developer account, the first launch needs right-click → Open, or
+  `xattr -dr com.apple.quarantine`; the README lists three ways. The dmg is for first installs;
+  auto-update ships as `.app.tar.gz` — it is unpacked with tar+gz and **does not depend** on the
+  `zip` feature disabled by RUSTSEC-2026-0367/0368 (long assumed otherwise; corrected after reading
+  the tauri-plugin-updater 2.14.0 sources, see `src-tauri/Cargo.toml`).
 - **Linux AppImage**: 83.5 MB. Self-contained — it carries the whole WebKitGTK + JavaScriptCore + GTK3
   stack (530 files once extracted), which is why it is over ten times the size of the deb.
-- **Linux deb**: 5.3 MB, depends on the distribution's `libwebkit2gtk-4.1`.
-- **macOS and Linux**: no auto-update. The About page detects them from the UA (Linux / Macintosh) and
-  points at the download page instead of showing a button that would only fail.
-- **macOS**: not published. Auto-update needs the updater's `zip` feature to unpack `.app.tar.gz`,
-  and that feature is currently disabled because of two extraction vulnerabilities
-  (RUSTSEC-2026-0367 / 0368) — see `src-tauri/Cargo.toml`. An unsigned dmg is also blocked outright
-  by Gatekeeper, so proper distribution needs a paid developer account and notarization.
+  Auto-update replaces the AppImage file in place.
+- **Linux deb**: 5.3 MB, depends on the distribution's `libwebkit2gtk-4.1`. **No update entry**: deb
+  files belong to the package manager — having the updater replace files under `/usr/bin` would
+  require root and fight dpkg, so deb installs keep updating manually.
+- macOS artifacts are still not Apple-signed or notarized (no paid developer account); the minisign
+  signatures are generated as usual, and updates are unaffected by Gatekeeper (the quarantine
+  attribute only appears on files downloaded through a browser).
 
 ## Client behaviour
 
@@ -252,8 +260,8 @@ the frontend changes) — trust the actual artifacts, not these numbers.
   exists. Network failures stay silent — a "check failed" banner on a freshly opened
   launcher just makes people think the app is broken
 - The About page also has a manual "Check for updates" that surfaces the error
-- **Only installed builds auto-update**: a portable build has no `uninstall.exe`, and
-  Windows will not let a running exe be replaced, so the UI points at the download page
+- Endpoints are tried in order: GitHub first, COS as the fallback — GitHub's
+  `releases/latest/download/` is a 302 redirect, and an occasional failure falls through to COS
 - A signature mismatch **blocks installation** (`requireSignedVersion` additionally
   rejects a downgrade attack where the manifest version disagrees with the signed version)
 
@@ -261,8 +269,9 @@ the frontend changes) — trust the actual artifacts, not these numbers.
 
 | Symptom | Check |
 | --- | --- |
-| About page always says "up to date" | `curl https://qcl.luoqingciya.cn/releases/latest.json` — 200? version higher than local? |
-| Check fails | domain certificate, bucket permissions, manifest actually under `releases/` |
+| About page always says "up to date" | `curl -L https://github.com/luoqingciya/Qingci-Craft-Launcher/releases/latest/download/latest.json` — 200? version higher than local? |
+| Check fails | are both endpoints (GitHub, COS) reachable; is `latest.json` actually an asset of that Release |
 | Reaches 100% then fails | signature mismatch: private key and `pubkey` are not a pair, or `signature` is not the raw `.sig` content |
+| Linux update fails | only the AppImage flavour self-updates; deb installs update through the package manager |
 | Version unchanged after install | installed into a different directory (portable build treated as installed), or an older MSI install is also present |
 | Switching to BMCLAPI did not help, or still fails | a failing mirror **falls back to official automatically**. BMCLAPI's metadata endpoints 302 to its own CDN (`bmclapi*.sakura.sld.tw`), which some networks cannot reach; the Forge maven path goes through CERNET/USTC and usually works |

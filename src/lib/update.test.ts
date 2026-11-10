@@ -136,25 +136,12 @@ describe("updateSupported", () => {
     expect(updateSupported()).toBe(false);
   });
 
-  it("Windows 上有 Tauri 运行时则支持", () => {
-    withRuntime(WINDOWS_UA, () => {
-      expect(updateSupported()).toBe(true);
-    });
-  });
-
-  it("Linux 上判定为不支持——清单里没有对应平台", () => {
-    // AppImage 有 80 MB，不上 COS，只在 GitHub Release 提供，所以没有可下载的更新地址。
-    withRuntime(LINUX_UA, () => {
-      expect(updateSupported()).toBe(false);
-    });
-  });
-
-  it("macOS（Apple Silicon 与 Intel）都判定为不支持", () => {
-    // 产物是未签名 dmg，不进 COS；updater 的 zip 特性也关着。
-    // 漏判的话点「检查更新」会拿到一个「找不到 darwin 平台」的错误。
-    for (const ua of [MACOS_ARM_UA, MACOS_INTEL_UA]) {
+  it("有 Tauri 运行时的桌面平台都支持——包括 Linux 与 macOS", () => {
+    // 0.1.15 起 latest.json 覆盖全部三个平台，各自的产物与签名都在 GitHub Release。
+    // 是否真的有对应条目由插件按 latest.json 判断，这里只区分「有没有运行时」。
+    for (const ua of [WINDOWS_UA, LINUX_UA, MACOS_ARM_UA, MACOS_INTEL_UA]) {
       withRuntime(ua, () => {
-        expect(updateSupported()).toBe(false);
+        expect(updateSupported()).toBe(true);
       });
     }
   });

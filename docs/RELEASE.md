@@ -2,35 +2,42 @@
 
 **中文** | [English](RELEASE.en.md)
 
-Qingci Craft Launcher 的更新走「GitHub Actions 构建 → 腾讯云 COS 分发」：CI 打出 NSIS 安装包并用
-私钥签名，连同更新清单 `latest.json` 一起推到 COS；客户端启动后读清单，发现新版本
-就下载安装包，**先用内置公钥校验签名，校验通过才安装**。
+Qingci Craft Launcher 的更新走「GitHub Actions 构建 → GitHub Release 分发」：CI 打出三平台的
+安装包并用私钥签名，连同更新清单 `latest.json` 一起发布到 GitHub Release；客户端启动后读清单，
+发现新版本就下载安装包，**先用内置公钥校验签名，校验通过才安装**。
 
 ```
-tag v0.1.4            ← 以 0.1.4 为例
+tag v0.1.14           ← 以 0.1.14 为例
    │
    ▼
 GitHub Actions
    ├─ prepare   校验三处版本号 + 签名密钥（不一致就不让两台机器白编译）
-   ├─ build     matrix：Windows 出 NSIS / Linux 出 AppImage + deb（都签名）
-   └─ publish   合并产物 → 生成 latest.json → 推 COS → 建 GitHub Release
-                   │
-                   ├─ COS（只放自动更新需要的）
-                   │    ├─ QingciCraftLauncher_0.1.4_x64-setup.exe
-                   │    ├─ ...exe.sig
-                   │    └─ latest.json            ← 最后传
+   ├─ build     matrix：Windows NSIS / Linux AppImage + deb / macOS dmg + .app.tar.gz（都签名）
+   └─ publish   合并产物 → 生成 latest.json → 建 GitHub Release → 推 COS
                    │
                    └─ GitHub Release（全部产物）
-                        └─ 上面三个 + AppImage + AppImage.sig + deb
+                        ├─ QingciCraftLauncher_0.1.14_x64-setup.exe + .sig
+                        ├─ ..._x86_64.AppImage + .sig
+                        ├─ ..._universal.app.tar.gz + .sig
+                        ├─ ..._universal.dmg / ..._amd64.deb / 便携版
+                        └─ latest.json
    │
    ▼
-客户端启动 → GET https://qcl.luoqingciya.cn/releases/latest.json
+客户端启动 → GET github.com/.../releases/latest/download/latest.json
    ├─ 版本不新 → 什么都不做（不打扰）
    └─ 有新版本 → 「关于」页提示 → 用户点「下载并安装」→ 校验签名 → 静默安装 → 自动重启
 ```
 
-清单里只有 `windows-x86_64` 一条：Linux 的 AppImage 有 83.5 MB，又不参与自动更新，
-放 COS 上只是白占带宽，所以它和 deb 一起只留在 GitHub Release。
+清单覆盖**三个平台四条目标**：`windows-x86_64`（NSIS）、`linux-x86_64`（AppImage）、
+`darwin-aarch64` 与 `darwin-x86_64`（同一个 universal `.app.tar.gz`）。deb 由包管理器管，
+便携版不参与自更新，所以没有它们的条目。
+
+## 两条通道与一段过渡期
+
+主通道是 GitHub Release；**COS 没有退役**，仍在发 `latest.json` 与 Windows 安装包。
+原因：0.1.14 及更早的客户端端点列表里**只有 COS**，它们永远不会去读 GitHub——
+不保留这条通道，老用户就永远收不到更新。等观察一段时间（旧版本占比足够低）再退役 COS，
+到时只需要删掉工作流里的推送步骤与 `tauri.conf.json` 里的兜底端点。
 
 ## 一次性配置
 
@@ -188,43 +195,45 @@ cargo run -p qcl-cli -- 1.20.1 --dir /tmp/qcl-smoke-fabric --fresh \
 
 ## 平台现状
 
-两条分发通道，故意分开：
+主通道是 GitHub Release，COS 是过渡期的清单兜底：
 
 | 通道 | 内容 | 用途 |
 | --- | --- | --- |
-| COS（`qcl.luoqingciya.cn/releases/`） | Windows NSIS 安装包 + `.sig` + `latest.json` | **自动更新通道** |
-| GitHub Releases | 上面那些，外加 Windows 便携版、macOS 的 dmg、Linux 的 AppImage 与 deb | 人工下载 |
+| GitHub Releases（主） | 三平台安装包 + `.sig` + `latest.json`、便携版 | **自动更新通道**，也是人工下载页 |
+| COS（`qcl.luoqingciya.cn/releases/`） | Windows NSIS 安装包 + `.sig` + `latest.json` | **0.1.14 及更早客户端的清单兜底**，迁移完退役 |
 
-所以 `latest.json` 里**只有** `windows-x86_64` 一条。macOS 与 Linux 产物留在
-GitHub Releases：AppImage 有 83 MB、dmg 有 12 MB，又都不参与自动更新，
-放 COS 上只是白占带宽。
+`latest.json` 覆盖四条目标：`windows-x86_64`、`linux-x86_64`（AppImage）、
+`darwin-aarch64` 与 `darwin-x86_64`（同一个 universal `.app.tar.gz`）。全部下载地址
+都指向 GitHub Release——包括 COS 上那份清单里的，这样旧客户端迁移到 GitHub 后，
+新版本也不再依赖 COS。
 
 体积取自 0.1.5 的实测产物，版本之间会有小幅浮动（前端改动大时更明显）——发布前以实际产物为准，
 不要照抄这几个数字。
 
 - **Windows 安装版**：NSIS 3.8 MB，复用系统 WebView2，自动更新走静默安装 + 重启。
 - **Windows 便携版**：12.7 MB，就是安装包里那个 exe，双击即用，游戏目录落在 exe 旁边。
-  不参与自动更新——自更新要替换正在运行的 exe，Windows 不允许。
-- **macOS 通用 dmg**：12.1 MB，`--target universal-apple-darwin`，一次构建同时含 arm64 与 x86_64，
-  用户不必挑架构。**未签名、未公证**：没有付费开发者账号，用户首次打开要右键「打开」
-  或 `xattr -dr com.apple.quarantine`，README 里写了三种方式。
-- **macOS 走独立的 release 配置**（`tauri.release-macos.json`），把
-  `createUpdaterArtifacts` 关掉。两个理由：打开它会要求构建时提供签名私钥；
-  而 `.app.tar.gz` 的解压依赖 updater 的 `zip` 特性，那个特性因两个解压漏洞
-  （RUSTSEC-2026-0367 / 0368）被关着（见 `src-tauri/Cargo.toml`）。
+  会收到更新提示，安装的是 NSIS 版（等于升级成安装版）；便携版目录本身不会被替换。
+- **macOS 通用 dmg + `.app.tar.gz`**：12.1 MB，`--target universal-apple-darwin`，
+  一次构建同时含 arm64 与 x86_64，用户不必挑架构。**未签名、未公证**：没有付费开发者账号，
+  用户首次打开要右键「打开」或 `xattr -dr com.apple.quarantine`，README 里写了三种方式。
+  dmg 用于首次安装；自动更新走 `.app.tar.gz`——它的解压走 tar+gz，**不依赖**
+  因 RUSTSEC-2026-0367/0368 关掉的 `zip` 特性（曾误以为依赖，查过
+  tauri-plugin-updater 2.14.0 的源码后更正，见 `src-tauri/Cargo.toml`）。
 - **Linux AppImage**：83.5 MB。自包含，把 WebKitGTK + JavaScriptCore + GTK3 整套塞进去了
-  （解出来 530 个文件），所以体积是 deb 的十几倍。
-- **Linux deb**：5.3 MB，依赖发行版的 `libwebkit2gtk-4.1`。
-- **macOS 与 Linux 都不提供自动更新**。「关于」页按 UA 识别（Linux / Macintosh），
-  直接引导到下载页，而不是给一个点了就报错的按钮。
+  （解出来 530 个文件），所以体积是 deb 的十几倍。自动更新直接替换 AppImage 文件。
+- **Linux deb**：5.3 MB，依赖发行版的 `libwebkit2gtk-4.1`。**没有更新条目**：
+  deb 的文件由包管理器管，updater 替换 `/usr/bin` 下的文件既越权也会和 dpkg 打架，
+  所以 deb 用户保持手动更新。
+- macOS 的产物仍未做 Apple 签名/公证（无付费开发者账号）；minisign 签名照常生成，
+  更新安装不受 Gatekeeper 影响（quarantine 属性只出现在浏览器下载的文件上）。
 
 ## 客户端行为
 
 - 启动后静默查一次；查到新版本才在「关于」标签上点红点，查不到或网络失败**什么都不显示**
   （一个「检查更新失败」的红条出现在刚打开的启动器上，只会让人以为程序坏了）
 - 关于页可以手动「检查更新」，失败时会显示原因
-- **只支持安装版自动更新**：便携版没有 `uninstall.exe`，Windows 不允许替换正在运行的
-  exe，界面改为引导用户去下载页
+- 端点按顺序尝试：GitHub 在前，COS 兜底——GitHub 的 `releases/latest/download/`
+  是 302 跳转，偶发失败时会落到 COS
 - 安装包签名对不上时**拒绝安装**（`requireSignedVersion` 还会拒绝「清单里的版本号与
   签名里的版本号不一致」的降级攻击）
 
@@ -232,8 +241,9 @@ GitHub Releases：AppImage 有 83 MB、dmg 有 12 MB，又都不参与自动更�
 
 | 现象 | 查什么 |
 | --- | --- |
-| 关于页一直是「已是最新版本」 | `curl https://qcl.luoqingciya.cn/releases/latest.json` 是否 200、版本号是否比本地大 |
-| 提示检查失败 | 域名证书、桶权限、`latest.json` 是否真的在 `releases/` 下 |
+| 关于页一直是「已是最新版本」 | `curl -L https://github.com/luoqingciya/Qingci-Craft-Launcher/releases/latest/download/latest.json` 是否 200、版本号是否比本地大 |
+| 提示检查失败 | 两个端点（GitHub、COS）是否都可达；`latest.json` 是否真的在该 Release 的资产里 |
 | 下载到 100% 后失败 | 签名不匹配：私钥与 `pubkey` 不是一对，或清单里的 `signature` 不是 `.sig` 原文 |
 | 安装后版本没变 | 装到了另一个目录（便携版被当成了安装版），或同时存在 MSI 装的旧版本 |
+| Linux 上更新失败 | 只支持 AppImage 方式运行；deb 安装的请走包管理器 |
 | 切到 BMCLAPI 后没变快，甚至仍报网络错误 | 镜像失败会**自动回落官方**。BMCLAPI 的元数据端点会 302 到它自己的 CDN（`bmclapi*.sakura.sld.tw`），部分网络不通；Forge maven 那条线则走 CERNET/USTC，通常可用 |

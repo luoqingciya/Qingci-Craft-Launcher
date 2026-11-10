@@ -545,14 +545,15 @@ macOS 的 codesign + 公证、Windows 的 Authenticode 目前都**没有**——
 后者需要代码签名证书。两者都不影响更新通道的完整性（那是 minisign 签名负责的），
 只影响系统对程序来源的信任提示。
 
-**发布产物覆盖 Windows 与 Linux，但两条通道分开。** COS 只放自动更新需要的东西
-（Windows NSIS 安装包 + `.sig` + `latest.json`），所以清单里只有 `windows-x86_64`；
-Linux 的 AppImage 与 deb 只进 GitHub Releases。AppImage 有 83.5 MB，又不参与自动更新，
-放 COS 上只是白占带宽。
+**发布产物覆盖三个平台，主通道是 GitHub Release，COS 是过渡期的清单兜底。**
+0.1.15 起清单覆盖四条目标（`windows-x86_64`、`linux-x86_64`、`darwin-aarch64`、
+`darwin-x86_64`），下载地址全部指向 GitHub Release；COS 仍发 `latest.json` 与
+Windows 安装包，服务 0.1.14 及更早的客户端——它们端点列表里只有 COS，不保留
+这条通道老用户就收不到更新。
 
-macOS 的 dmg 尚未接入，因为它的更新路径需要重新启用 `tauri-plugin-updater` 的 `zip` 特性
-（该特性目前因两个解压漏洞被关掉，见 `src-tauri/Cargo.toml` 注释），且未签名 dmg 会被
-Gatekeeper 拦下。
+macOS 的更新包是 `.app.tar.gz`，用 tar+gz 解压，**不依赖**因 RUSTSEC-2026-0367/0368
+关掉的 `zip` 特性（曾误判依赖，查过 tauri-plugin-updater 2.14.0 源码后更正）。
+Apple 签名/公证仍缺（需要付费开发者账号），minisign 签名照常。
 
 ### 8.3 分支保护（main）
 
