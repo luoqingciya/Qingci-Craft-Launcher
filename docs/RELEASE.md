@@ -13,7 +13,7 @@ tag v0.1.14           ← 以 0.1.14 为例
 GitHub Actions
    ├─ prepare   校验三处版本号 + 签名密钥（不一致就不让两台机器白编译）
    ├─ build     matrix：Windows NSIS / Linux AppImage + deb / macOS dmg + .app.tar.gz（都签名）
-   └─ publish   合并产物 → 生成 latest.json → 建 GitHub Release → 推 COS
+   └─ publish   合并产物 → 生成 latest.json → 建 GitHub Release
                    │
                    └─ GitHub Release（全部产物）
                         ├─ QingciCraftLauncher_0.1.14_x64-setup.exe + .sig
@@ -32,12 +32,13 @@ GitHub Actions
 `darwin-aarch64` 与 `darwin-x86_64`（同一个 universal `.app.tar.gz`）。deb 由包管理器管，
 便携版不参与自更新，所以没有它们的条目。
 
-## 两条通道与一段过渡期
+## 更新通道
 
-主通道是 GitHub Release；**COS 没有退役**，仍在发 `latest.json` 与 Windows 安装包。
-原因：0.1.14 及更早的客户端端点列表里**只有 COS**，它们永远不会去读 GitHub——
-不保留这条通道，老用户就永远收不到更新。等观察一段时间（旧版本占比足够低）再退役 COS，
-到时只需要删掉工作流里的推送步骤与 `tauri.conf.json` 里的兜底端点。
+只有 GitHub Release。COS（`qcl.luoqingciya.cn`）已于 2026-11-10 关闭并从工作流与
+端点列表中移除——`scripts/publish-cos.mjs` 一并删除，仓库里不再有 COS 的任何配置。
+
+**代价要写明**：0.1.14 及更早的客户端端点列表里只有 COS，它们**收不到**后续更新。
+这是关闭 COS 的既定代价，不是缺陷；受影响的用户需要从 GitHub Release 手动下载一次。
 
 ## 一次性配置
 
@@ -68,8 +69,6 @@ Settings → Secrets and variables → Actions：
 
 | 名称 | 值 |
 | --- | --- |
-| `TENCENT_SECRET_ID` | 腾讯云 API 密钥 |
-| `TENCENT_SECRET_KEY` | 同上 |
 | `TAURI_SIGNING_PRIVATE_KEY` | **私钥文件的全部内容**：一整行 base64，没有换行 |
 | `QCL_MS_CLIENT_ID` | Azure 应用注册里的「应用程序(客户端) ID」 |
 
@@ -94,50 +93,8 @@ ID 在每次请求的表单里明文出现。编译期注入只解决「仓库�
 > 为什么密码可有可无：私钥和密码都放在同一个 secret 存储里，多一个密码并不增加
 > 实际防护。只有在把私钥文件放到别处（比如离线保存）时，密码才有意义。
 
-### 3. COS 侧
-
-- 桶：`qcl-1331847184`，地域 `ap-guangzhou`，访问权限**私有读写**，路径前缀 `releases/`
-- 自定义域名：`qcl.luoqingciya.cn`，**必须启用 HTTPS**——客户端拒绝 http 端点
-- 桶不能开启「防盗链」白名单，否则客户端拿不到清单
-
-**读权限怎么给**。桶是**私有读写**，`releases/` 能被匿名读靠两层同时成立：
-
-| 机制 | 现状 | 依据 |
-| --- | --- | --- |
-| 对象 ACL | 上传时显式设 `public-read` | `scripts/publish-cos.mjs` 里的 `ACL: "public-read"` |
-| 桶策略 | 允许匿名读 `releases/*` 前缀，**不勾「列出对象列表」** | `releases/nope.txt` 返回 404 而非 403 |
-
-两层冗余是有意的，但排查 403 时要知道**有两处**——只改一处可能看不出任何变化。
-
-不要把桶直接设成「公有读私有写」：那会让桶里**任何**东西都可匿名读，而实际只有
-`releases/` 需要公开。
-
-两个前提：
-
-1. **桶不能开「禁止对象级 ACL」**。开了之后 `putObject` 带 ACL 会直接报错，上传全挂；
-   那种情况下只能靠桶策略，把对象 ACL 那一层去掉。
-2. 桶策略的资源写 `qcl-1331847184/releases/*`（**注意是复数 `releases`**）。
-   前缀写错一个字母就一条都匹配不上，而且**不会立刻暴露**——对象 ACL 还在，文件照样
-   能读，直到 ACL 那层失效才会以 403 的形式出现。
-
-任何时候都可以用这四条命令核对权限是否真的如上面所述（2026-10-27 实测通过）：
-
-```bash
-# 1. 清单本身：200 才算通
-curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/releases/latest.json
-# 2. 前缀内的不存在的键：404 = 这个前缀允许匿名读
-curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/releases/nope.txt
-# 3. 前缀外的不存在的键：403 = 桶确实是私有的
-curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/nope.txt
-# 4. 匿名列举：403 才算没开放（否则任何人都能枚举发布历史）
-curl -s -o /dev/null -w "%{http_code}\n" "https://qcl.luoqingciya.cn/?prefix=releases/"
-```
-
-关键判读：**私有桶对不存在的对象返回 403，允许匿名读的前缀下返回 404**。
-只测第 1 条分不清「权限没配好」和「文件还没上传」；几条一起测才能定位。
-
-第 4 条容易被忽略：`/releases/`（带尾斜杠）返回 200 是 COS 的目录占位，**不代表**能列目录；
-真正的列举请求带 `?prefix=` 查询串，它返回 403 才说明列表权限没开。
+COS 的配置（桶、自定义域名、匿名读策略）随 2026-11-10 关闭 COS 一并退役，
+不再需要——见下面的「平台现状」。
 
 ## 发版
 
@@ -162,7 +119,7 @@ git push origin main --tags
 第 2 步容易漏——v0.1.1 和 v0.1.2 都漏了，日志停在项目最初 5 个 PR 上，事后才补回来。
 原因很朴素：规则只写在 CONTRIBUTING 里说「发布前生成」，没落到具体某一步，就一定会忘。
 
-标签推上去后 `Release` workflow 自动跑：构建 → 签名 → 生成清单 → 推 COS → 建
+标签推上去后 `Release` workflow 自动跑：构建 → 签名 → 生成清单 → 建
 GitHub Release（附安装包与 `.sig`）。
 
 **不要复用已存在的标签**：客户端按 `latest.json` 里的版本号判断新旧，同一个版本号
@@ -170,8 +127,8 @@ GitHub Release（附安装包与 `.sig`）。
 
 ### 先验证再发布
 
-`workflow_dispatch` 默认 `dry_run = true`：只构建并打印 `latest.json` 与将要上传的
-对象，不碰 COS、不建 Release。第一次配好之后建议先这样跑一遍。
+`workflow_dispatch`（手动触发）只构建并打印 `latest.json`，**不创建 Release**——
+适合在正式打标签前验证构建与签名。
 
 ### 发版前冒烟（安装链路）
 
@@ -195,17 +152,17 @@ cargo run -p qcl-cli -- 1.20.1 --dir /tmp/qcl-smoke-fabric --fresh \
 
 ## 平台现状
 
-主通道是 GitHub Release，COS 是过渡期的清单兜底：
+唯一的分发与更新通道是 GitHub Release：
 
-| 通道 | 内容 | 用途 |
-| --- | --- | --- |
-| GitHub Releases（主） | 三平台安装包 + `.sig` + `latest.json`、便携版 | **自动更新通道**，也是人工下载页 |
-| COS（`qcl.luoqingciya.cn/releases/`） | Windows NSIS 安装包 + `.sig` + `latest.json` | **0.1.14 及更早客户端的清单兜底**，迁移完退役 |
+| 产物 | 用途 |
+| --- | --- |
+| Windows NSIS 安装包 + `.sig` | 自动更新（`windows-x86_64`） |
+| Linux AppImage + `.sig` | 自动更新（`linux-x86_64`）；deb 不参与 |
+| macOS universal `.app.tar.gz` + `.sig` | 自动更新（`darwin-aarch64` 与 `darwin-x86_64` 各一条） |
+| macOS dmg、Windows 便携版、Linux deb | 仅人工下载 |
 
-`latest.json` 覆盖四条目标：`windows-x86_64`、`linux-x86_64`（AppImage）、
-`darwin-aarch64` 与 `darwin-x86_64`（同一个 universal `.app.tar.gz`）。全部下载地址
-都指向 GitHub Release——包括 COS 上那份清单里的，这样旧客户端迁移到 GitHub 后，
-新版本也不再依赖 COS。
+`latest.json` 本身作为 Release 资产发布，客户端经
+`releases/latest/download/latest.json` 读取。
 
 体积取自 0.1.5 的实测产物，版本之间会有小幅浮动（前端改动大时更明显）——发布前以实际产物为准，
 不要照抄这几个数字。
@@ -232,8 +189,8 @@ cargo run -p qcl-cli -- 1.20.1 --dir /tmp/qcl-smoke-fabric --fresh \
 - 启动后静默查一次；查到新版本才在「关于」标签上点红点，查不到或网络失败**什么都不显示**
   （一个「检查更新失败」的红条出现在刚打开的启动器上，只会让人以为程序坏了）
 - 关于页可以手动「检查更新」，失败时会显示原因
-- 端点按顺序尝试：GitHub 在前，COS 兜底——GitHub 的 `releases/latest/download/`
-  是 302 跳转，偶发失败时会落到 COS
+- 端点只有一个（GitHub Release）；它的 `releases/latest/download/` 是 302 跳转，
+  最终指向该 Release 的资产
 - 安装包签名对不上时**拒绝安装**（`requireSignedVersion` 还会拒绝「清单里的版本号与
   签名里的版本号不一致」的降级攻击）
 
@@ -242,7 +199,8 @@ cargo run -p qcl-cli -- 1.20.1 --dir /tmp/qcl-smoke-fabric --fresh \
 | 现象 | 查什么 |
 | --- | --- |
 | 关于页一直是「已是最新版本」 | `curl -L https://github.com/luoqingciya/Qingci-Craft-Launcher/releases/latest/download/latest.json` 是否 200、版本号是否比本地大 |
-| 提示检查失败 | 两个端点（GitHub、COS）是否都可达；`latest.json` 是否真的在该 Release 的资产里 |
+| 提示检查失败 | `latest.json` 是否真的在该 Release 的资产里；GitHub 是否可达（直连不通时开代理） |
+| 0.1.14 及更早版本不再提示更新 | 它们只读已关闭的 COS，属预期；请手动下载一次 |
 | 下载到 100% 后失败 | 签名不匹配：私钥与 `pubkey` 不是一对，或清单里的 `signature` 不是 `.sig` 原文 |
 | 安装后版本没变 | 装到了另一个目录（便携版被当成了安装版），或同时存在 MSI 装的旧版本 |
 | Linux 上更新失败 | 只支持 AppImage 方式运行；deb 安装的请走包管理器 |

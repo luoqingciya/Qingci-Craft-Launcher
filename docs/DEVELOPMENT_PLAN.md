@@ -466,9 +466,8 @@ log4j 2.15.0 顶掉原版的 2.8.1，两份都留在 classpath 上时旧版先�
 
 ### Phase 5 · 发布工程 🟡 在线更新已完成，其余未开始
 
-已完成：`tauri-plugin-updater` 自动更新（签名校验 + 静默安装 + 重启）、COS 分发、
-GitHub Release 自动创建、Windows 便携版产物、两条分发通道按文件名隔离（COS 只放自动更新
-需要的三个文件）。
+已完成：`tauri-plugin-updater` 自动更新（签名校验 + 静默安装 + 重启）、GitHub Release 分发、
+Windows 便携版产物、三平台更新（0.1.15 起）。COS 分发已于 2026-11-10 关闭并移除。
 
 未完成：Windows Authenticode 签名、macOS codesign + 公证、i18n（zh-CN / en-US）、`v1.0.0`。
 
@@ -527,29 +526,27 @@ tag v0.1.4
        │    （createUpdaterArtifacts 只在这份 release 配置里打开，
        │      贡献者本地打包不需要签名密钥）
        ├─ 生成 latest.json（版本、说明、安装包 URL、.sig 原文）
-       ├─ 上传 COS：先传安装包，最后传 latest.json
-       └─ 创建 GitHub Release（安装包 + .sig + latest.json）
+       └─ 创建 GitHub Release（三平台安装包 + .sig + latest.json）
 ```
 
-**为什么分发走 COS 而不是 GitHub Releases**：GitHub 的下载在国内不可靠，而更新检查是每次
-启动都会发生的动作。GitHub Release 仍然保留，作为人工下载与版本说明的入口。
+**为什么分发走 GitHub Releases**：COS 需要单独的桶、域名与匿名读配置，而它只承载三个小文件；
+GitHub Release 本来就要创建（人工下载与版本说明），直接复用。代价是直连 GitHub 不可靠的网络下
+更新会失败——签名校验与下载走同一条通道，没有别的兜底（COS 已于 2026-11-10 关闭）。
 
 **签名与密钥管理**（全部走 GitHub Secrets，禁止入库）：
 
 | Secret | 用途 |
 |---|---|
 | `TAURI_SIGNING_PRIVATE_KEY` | 自动更新签名（必填）。私钥丢失等于再也发不出能被现有客户端接受的更新 |
-| `TENCENT_SECRET_ID` / `TENCENT_SECRET_KEY` | 推送 COS |
 
 macOS 的 codesign + 公证、Windows 的 Authenticode 目前都**没有**——前者需要付费开发者账号，
 后者需要代码签名证书。两者都不影响更新通道的完整性（那是 minisign 签名负责的），
 只影响系统对程序来源的信任提示。
 
-**发布产物覆盖三个平台，主通道是 GitHub Release，COS 是过渡期的清单兜底。**
+**发布产物覆盖三个平台，唯一的通道是 GitHub Release。**
 0.1.15 起清单覆盖四条目标（`windows-x86_64`、`linux-x86_64`、`darwin-aarch64`、
-`darwin-x86_64`），下载地址全部指向 GitHub Release；COS 仍发 `latest.json` 与
-Windows 安装包，服务 0.1.14 及更早的客户端——它们端点列表里只有 COS，不保留
-这条通道老用户就收不到更新。
+`darwin-x86_64`），下载地址全部指向 GitHub Release。0.1.14 及更早的客户端只读
+已关闭的 COS，收不到这些更新——受影响用户需手动下载一次。
 
 macOS 的更新包是 `.app.tar.gz`，用 tar+gz 解压，**不依赖**因 RUSTSEC-2026-0367/0368
 关掉的 `zip` 特性（曾误判依赖，查过 tauri-plugin-updater 2.14.0 源码后更正）。

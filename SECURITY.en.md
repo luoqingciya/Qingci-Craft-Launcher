@@ -44,10 +44,9 @@ risk, not as an empty promise on a wishlist.
    downloaded; remote file names are rejected if they contain path separators or `..`, so nothing is
    written outside `mods/`. **Dependencies installed automatically go through the same path** — being
    a convenience is not a reason to skip verification.
-5. **Signed update packages**: the updater reads the manifest from two endpoints in order —
-   GitHub Releases (`https://github.com/luoqingciya/Qingci-Craft-Launcher/releases/latest/download/latest.json`,
-   primary) and COS (`https://qcl.luoqingciya.cn/releases/latest.json`, the fallback that clients
-   ≤ 0.1.14 still rely on) — and verifies the downloaded package against a
+5. **Signed update packages**: the updater only reads
+   `https://github.com/luoqingciya/Qingci-Craft-Launcher/releases/latest/download/latest.json`
+   (the COS channel was shut down on 2026-11-10), and verifies the downloaded package against a
    **public key compiled into the binary** (minisign). A signature mismatch aborts the install. The
    version announced in the manifest must also match the version recorded inside the signature —
    otherwise a validly signed but older build could be paired with a forged version number to force a

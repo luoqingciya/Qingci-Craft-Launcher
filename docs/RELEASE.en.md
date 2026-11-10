@@ -15,7 +15,7 @@ tag v0.1.14           ← 0.1.14 as the worked example
 GitHub Actions
    ├─ prepare   verify the three version strings + the signing key
    ├─ build     matrix: Windows → NSIS / Linux → AppImage + deb / macOS → dmg + .app.tar.gz (all signed)
-   └─ publish   merge artifacts → write latest.json → create the Release → upload to COS
+   └─ publish   merge artifacts → write latest.json → create the Release
                    │
                    └─ GitHub Release (everything)
                         ├─ QingciCraftLauncher_0.1.14_x64-setup.exe + .sig
@@ -36,12 +36,15 @@ The manifest covers **three platforms, four targets**: `windows-x86_64` (NSIS), 
 managed by the system package manager and the portable build does not self-update, so neither has an
 entry.
 
-## Two channels and a transition period
+## Update channel
 
-GitHub Release is the primary channel; **COS has not been retired** — it still serves `latest.json`
-and the Windows installer. Reason: clients ≤ 0.1.14 have **only COS** in their endpoint list and will
-never look at GitHub; dropping the channel would leave every existing user stranded. After the old
-versions have drained away, retire COS by removing the upload step and the fallback endpoint.
+GitHub Release is the only channel. COS (`qcl.luoqingciya.cn`) was shut down on 2026-11-10 and has
+been removed from the workflow and the endpoint list — `scripts/publish-cos.mjs` was deleted with it;
+the repository carries no COS configuration any more.
+
+**The cost, stated plainly**: clients ≤ 0.1.14 have only COS in their endpoint list and will
+**never see** a newer release. That is the accepted price of shutting COS down, not a defect;
+affected users need one manual download from GitHub Releases.
 
 ## One-time setup
 
@@ -105,56 +108,8 @@ needed. Add it if you ever regenerate with a password.
 > the password adds no real protection there. It only matters if you keep the key file
 > somewhere else, e.g. offline.
 
-### 3. COS
-
-- Bucket `qcl-1331847184`, region `ap-guangzhou`, **private read/write**, prefix `releases/`
-- Custom domain `qcl.luoqingciya.cn`, **HTTPS required** — the client rejects http endpoints
-- The bucket must not enable a referer allowlist, or the client cannot fetch the manifest
-
-**How read access is granted.** The bucket is **private read/write**; `releases/` is anonymously
-readable because two layers both hold:
-
-| Layer | Current state | Evidence |
-| --- | --- | --- |
-| Object ACL | set to `public-read` on upload | `ACL: "public-read"` in `scripts/publish-cos.mjs` |
-| Bucket policy | anonymous read on the `releases/*` prefix, **"list objects" not granted** | `releases/nope.txt` answers 404, not 403 |
-
-The redundancy is deliberate, but when debugging a 403 remember there are **two** places to look —
-fixing only one may change nothing.
-
-Do not set the bucket itself to "public-read": that would make **everything** in the bucket
-anonymously readable, while only `releases/` needs to be public.
-
-Two preconditions:
-
-1. **The bucket must not disable object-level ACLs.** If it does, `putObject` with an ACL fails
-   outright and every upload breaks; in that case the bucket policy is the only layer, and the object
-   ACL must be dropped.
-2. The policy resource is `qcl-1331847184/releases/*` (**plural `releases`**). A one-letter typo in
-   the prefix matches nothing and **does not fail loudly** — the object ACL still serves the files,
-   and the mistake only surfaces as a 403 once that ACL layer stops working.
-
-These four probes tell whether the permissions are really what the table above claims (verified
-2026-10-27):
-
-```bash
-# 1. the manifest itself: 200 means it works
-curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/releases/latest.json
-# 2. a missing key inside the prefix: 404 = anonymous read allowed here
-curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/releases/nope.txt
-# 3. a missing key outside the prefix: 403 = the bucket really is private
-curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/nope.txt
-# 4. anonymous listing: 403 means listing is not open (otherwise anyone can enumerate releases)
-curl -s -o /dev/null -w "%{http_code}\n" "https://qcl.luoqingciya.cn/?prefix=releases/"
-```
-
-The key insight: **a private bucket answers 403 for a missing object, while a readable prefix answers
-404**. Testing only probe 1 cannot distinguish "permissions are wrong" from "the file is not uploaded
-yet".
-
-Probe 4 is easy to miss: `/releases/` (with the trailing slash) returning 200 is COS's directory
-placeholder and does **not** mean the bucket can be listed; a real listing carries a `?prefix=` query
-string, and only a 403 there proves listing is closed.
+The COS configuration (bucket, custom domain, anonymous-read policy) was retired together with
+COS on 2026-11-10 and is no longer needed — see "Platform status" below.
 
 ## Releasing
 
@@ -181,17 +136,16 @@ Step 2 is easy to forget — both v0.1.1 and v0.1.2 skipped it, leaving the chan
 project's first five PRs until it was repaired afterwards. The reason is mundane: the rule lived in
 CONTRIBUTING as "generate before a release" without being tied to any concrete step.
 
-The `Release` workflow then builds, signs, generates the manifest, uploads to COS and
-creates a GitHub Release with the installer and `.sig` attached.
+The `Release` workflow then builds, signs, generates the manifest and
+creates a GitHub Release with the installers and `.sig` files attached.
 
 **Never reuse a tag.** Clients compare against the version in `latest.json`; republishing
 the same version means users who already upgraded will not update again. Bump the version.
 
 ### Verify before publishing
 
-`workflow_dispatch` defaults to `dry_run = true`: it builds and prints `latest.json` plus
-the objects it would upload, without touching COS or creating a Release. Run it once
-after configuring secrets.
+A manual `workflow_dispatch` run only builds and prints `latest.json` — it does **not** create a
+Release, which makes it suitable for validating a build before tagging.
 
 ### Pre-release smoke (install pipeline)
 
@@ -218,17 +172,17 @@ cargo run -p qcl-cli -- 1.20.1 --dir /tmp/qcl-smoke-fabric --fresh \
 
 ## Platform status
 
-GitHub Release is the primary channel; COS is a transitional manifest fallback:
+GitHub Release is the only distribution and update channel:
 
-| Channel | Contents | Purpose |
-| --- | --- | --- |
-| GitHub Releases (primary) | installers for all three platforms + `.sig` + `latest.json`, portable build | **the auto-update channel**, and the manual download page |
-| COS (`qcl.luoqingciya.cn/releases/`) | Windows NSIS installer + `.sig` + `latest.json` | **manifest fallback for clients ≤ 0.1.14**, retired after migration |
+| Artifact | Purpose |
+| --- | --- |
+| Windows NSIS installer + `.sig` | auto-update (`windows-x86_64`) |
+| Linux AppImage + `.sig` | auto-update (`linux-x86_64`); deb does not participate |
+| macOS universal `.app.tar.gz` + `.sig` | auto-update (one entry each for `darwin-aarch64` and `darwin-x86_64`) |
+| macOS dmg, Windows portable, Linux deb | manual download only |
 
-`latest.json` covers four targets: `windows-x86_64`, `linux-x86_64` (AppImage),
-`darwin-aarch64` and `darwin-x86_64` (the same universal `.app.tar.gz`). Every download URL points
-at GitHub Release — including the URLs inside the COS copy of the manifest, so once a client has
-migrated to GitHub, new versions no longer depend on COS.
+`latest.json` itself is published as a Release asset and read by clients through
+`releases/latest/download/latest.json`.
 
 Sizes below are measured from the 0.1.5 artifacts and drift a little between versions (more so when
 the frontend changes) — trust the actual artifacts, not these numbers.
@@ -260,8 +214,8 @@ the frontend changes) — trust the actual artifacts, not these numbers.
   exists. Network failures stay silent — a "check failed" banner on a freshly opened
   launcher just makes people think the app is broken
 - The About page also has a manual "Check for updates" that surfaces the error
-- Endpoints are tried in order: GitHub first, COS as the fallback — GitHub's
-  `releases/latest/download/` is a 302 redirect, and an occasional failure falls through to COS
+- There is a single endpoint (GitHub Release); its `releases/latest/download/` is a 302
+  redirect that finally lands on the assets of that Release
 - A signature mismatch **blocks installation** (`requireSignedVersion` additionally
   rejects a downgrade attack where the manifest version disagrees with the signed version)
 
@@ -270,7 +224,9 @@ the frontend changes) — trust the actual artifacts, not these numbers.
 | Symptom | Check |
 | --- | --- |
 | About page always says "up to date" | `curl -L https://github.com/luoqingciya/Qingci-Craft-Launcher/releases/latest/download/latest.json` — 200? version higher than local? |
-| Check fails | are both endpoints (GitHub, COS) reachable; is `latest.json` actually an asset of that Release |
+| Check fails | is `latest.json` actually an asset of that Release; is GitHub reachable (use a proxy if direct
+  connection fails) |
+| ≤ 0.1.14 no longer prompts for updates | expected — they only read the shut-down COS; download once manually |
 | Reaches 100% then fails | signature mismatch: private key and `pubkey` are not a pair, or `signature` is not the raw `.sig` content |
 | Linux update fails | only the AppImage flavour self-updates; deb installs update through the package manager |
 | Version unchanged after install | installed into a different directory (portable build treated as installed), or an older MSI install is also present |

@@ -1,14 +1,14 @@
 name: Release
 
-# 发版流程：打 tag → 构建（三平台）→ 签名 → 建 GitHub Release → 推送 COS。
+# 发版流程：打 tag → 构建（三平台）→ 签名 → 建 GitHub Release。
 #
-# 主更新通道是 GitHub Release：客户端从
+# 更新通道只有 GitHub Release：客户端从
 #   https://github.com/luoqingciya/Qingci-Craft-Launcher/releases/latest/download/latest.json
-# 读清单，按里面的地址（也指向 GitHub）下载，并用内置公钥校验 minisign 签名。
+# 读清单，按里面的地址（同样指向 GitHub）下载，并用内置公钥校验 minisign 签名。
 # 所以这里必须用同一个私钥签名——换了私钥，所有已发布的客户端都会拒绝后续更新。
 #
-# COS 仍然继续发布 latest.json 与 Windows 安装包：0.1.14 及更早的客户端只会读
-# COS（它们的端点列表里还没有 GitHub），不保留这条通道，老用户就永远收不到更新。
+# COS（qcl.luoqingciya.cn）已于 2026-11-10 关闭。0.1.14 及更早的客户端端点列表里
+# 只有 COS，它们收不到后续更新——这是切换通道的既定代价，不是缺陷。
 
 on:
   push:
@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "只构建并生成 latest.json，不推送 COS、不创建 Release"
+        description: "手动触发：构建并生成 latest.json，不创建 Release"
         type: boolean
         default: true
 
@@ -29,10 +29,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # 桶名与地域不是机密：它们出现在每一个下载地址里。机密是下面两个 secret。
-  COS_BUCKET: qcl-1331847184
-  COS_REGION: ap-guangzhou
-  COS_PREFIX: releases
 
 jobs:
   # 先做一次性校验。独立成 job 是为了让「三处版本不一致」在两台机器开始编译
@@ -199,9 +195,7 @@ jobs:
               copy "target/release/bundle/nsis/*-setup.exe"     "QingciCraftLauncher_${VERSION}_x64-setup.exe"
               copy "target/release/bundle/nsis/*-setup.exe.sig" "QingciCraftLauncher_${VERSION}_x64-setup.exe.sig"
               # 便携版：就是安装包里的那个 exe，不安装、双击即用，游戏目录落在 exe 旁边。
-              # 它**不进 COS**，也不参与自动更新——自更新要替换正在运行的 exe，Windows 不允许。
-              # 名字刻意不含 `x64-setup`：COS 的上传清单按 `*x64-setup.exe` 过滤，
-              # 这样便携版不会被顺带传上去。
+              # 收到更新提示时装的是 NSIS 版，等于升级成安装版；这个目录本身不会被替换。
               copy "target/release/qcl-desktop.exe"             "QingciCraftLauncher_${VERSION}_x64-portable.exe"
               ;;
             linux)
@@ -231,17 +225,13 @@ jobs:
           path: out/*
           if-no-files-found: error
 
-  # 合并各平台产物、生成清单、推送 COS、建 Release。
-  # 单独成 job 而不是塞进 build：latest.json 要同时包含两个平台的签名，
+  # 合并各平台产物、生成清单、建 Release。
+  # 单独成 job 而不是塞进 build：latest.json 要同时包含三个平台的签名，
   # 只有拿到全部产物之后才写得出来。
-  #
-  # 用 windows-latest 而不是 ubuntu：到 COS 广州是国际链路，COS 会在带宽不达标时
-  # 直接回 400 UserNetworkTooSlow。目前唯一一次成功的大文件上传是在 Windows runner
-  # 上发生的，先沿用它；脚本里另有退避重试兜底。
   publish:
     name: 发布
     needs: [prepare, build]
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
@@ -252,22 +242,10 @@ jobs:
           path: out
           merge-multiple: true
 
-      # 上传脚本要 import cos-nodejs-sdk-v5，所以这个 job 也得装依赖。
-      # 只是装依赖，不编译任何东西。
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - name: 安装依赖
-        run: pnpm install --frozen-lockfile
-
       - name: 生成更新清单
         shell: bash
         env:
-          # 所有平台的下载地址都指向 GitHub Release：主更新通道从 COS 换到这里。
-          # COS 仍然继续发布 latest.json（见下一步），作为 0.1.14 及更早客户端的
-          # 清单源——它们只会读 COS，不迁移就永远看不到新版本。
+          # 所有平台的下载地址都指向 GitHub Release——这是唯一的更新通道。
           DOWNLOAD_BASE_URL: "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}"
         run: |
           set -euo pipefail
@@ -306,39 +284,6 @@ jobs:
 
           cat out/latest.json
           ls -l out
-
-      # COS 只放「自动更新需要的东西」：Windows 安装包、它的签名、清单。
-      # Linux 的 AppImage 与 deb 只进 GitHub Release——AppImage 有 80 MB，
-      # 传 COS 又慢又占带宽，而它本来就不参与自动更新。
-      - name: 预览将要上传的对象（dry run）
-        if: github.event_name != 'push' && github.event.inputs.dry_run != 'false'
-        shell: bash
-        run: |
-          set -euo pipefail
-          args=()
-          for file in out/*x64-setup.exe out/*x64-setup.exe.sig out/latest.json; do
-            if [ -f "$file" ]; then args+=(--file "$file"); fi
-          done
-          node scripts/publish-cos.mjs \
-            --bucket "$COS_BUCKET" --region "$COS_REGION" --prefix "$COS_PREFIX" \
-            "${args[@]}" --dry-run
-
-      # 清单最后上传（脚本里保证顺序）：它一可读，客户端就会照着里面的地址下载。
-      - name: 推送 COS
-        if: github.event_name == 'push' || github.event.inputs.dry_run == 'false'
-        shell: bash
-        env:
-          TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
-          TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
-        run: |
-          set -euo pipefail
-          args=()
-          for file in out/*x64-setup.exe out/*x64-setup.exe.sig out/latest.json; do
-            if [ -f "$file" ]; then args+=(--file "$file"); fi
-          done
-          node scripts/publish-cos.mjs \
-            --bucket "$COS_BUCKET" --region "$COS_REGION" --prefix "$COS_PREFIX" \
-            "${args[@]}"
 
       - name: 创建 GitHub Release
         if: github.event_name == 'push'
