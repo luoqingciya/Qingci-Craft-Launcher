@@ -45,7 +45,8 @@ risk, not as an empty promise on a wishlist.
    written outside `mods/`. **Dependencies installed automatically go through the same path** — being
    a convenience is not a reason to skip verification.
 5. **Signed update packages**: the updater only reads
-   `https://qcl.luoqingciya.cn/releases/latest.json`, and verifies the downloaded package against a
+   `https://github.com/luoqingciya/Qingci-Craft-Launcher/releases/latest/download/latest.json`
+   (the COS channel was shut down on 2026-11-10), and verifies the downloaded package against a
    **public key compiled into the binary** (minisign). A signature mismatch aborts the install. The
    version announced in the manifest must also match the version recorded inside the signature —
    otherwise a validly signed but older build could be paired with a forged version number to force a

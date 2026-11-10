@@ -1,10 +1,14 @@
 name: Release
 
-# 发版流程：打 tag → 构建（Windows / Linux）→ 签名 → 推送 COS → 建 GitHub Release。
+# 发版流程：打 tag → 构建（三平台）→ 签名 → 建 GitHub Release。
 #
-# 客户端启动后从 https://qcl.luoqingciya.cn/releases/latest.json 读清单，
-# 按里面的地址下载安装包，并用内置公钥校验 minisign 签名。所以这里必须
-# 用同一个私钥签名——换了私钥，所有已发布的客户端都会拒绝后续更新。
+# 更新通道只有 GitHub Release：客户端从
+#   https://github.com/luoqingciya/Qingci-Craft-Launcher/releases/latest/download/latest.json
+# 读清单，按里面的地址（同样指向 GitHub）下载，并用内置公钥校验 minisign 签名。
+# 所以这里必须用同一个私钥签名——换了私钥，所有已发布的客户端都会拒绝后续更新。
+#
+# COS（qcl.luoqingciya.cn）已于 2026-11-10 关闭。0.1.14 及更早的客户端端点列表里
+# 只有 COS，它们收不到后续更新——这是切换通道的既定代价，不是缺陷。
 
 on:
   push:
@@ -12,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "只构建并生成 latest.json，不推送 COS、不创建 Release"
+        description: "手动触发：构建并生成 latest.json，不创建 Release"
         type: boolean
         default: true
 
@@ -25,11 +29,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # 桶名与地域不是机密：它们出现在每一个下载地址里。机密是下面两个 secret。
-  COS_BUCKET: qcl-1331847184
-  COS_REGION: ap-guangzhou
-  COS_PREFIX: releases
-  PUBLIC_BASE_URL: https://qcl.luoqingciya.cn/releases
 
 jobs:
   # 先做一次性校验。独立成 job 是为了让「三处版本不一致」在两台机器开始编译
@@ -117,12 +116,12 @@ jobs:
           - name: macOS
             # 通用二进制：一次构建同时含 arm64 与 x86_64，用户不必挑。
             #
-            # 用独立的 release 配置：macOS 不参与自动更新，所以不生成 updater 产物。
-            # 那条路径要求构建时提供签名私钥，而 `.app.tar.gz` 的解压又依赖 updater
-            # 的 `zip` 特性——它因 RUSTSEC-2026-0367/0368 关着（见 src-tauri/Cargo.toml）。
+            # 与另外两个平台一样生成 updater 产物（.app.tar.gz + .sig）：
+            # 它的解压走 tar+gz，不依赖被关掉的 zip 特性（查过
+            # tauri-plugin-updater 2.14.0 的源码，见 src-tauri/Cargo.toml）。
             os: macos-latest
             kind: macos
-            build: --bundles dmg --config src-tauri/tauri.release-macos.json --target universal-apple-darwin
+            build: --bundles dmg,app --config src-tauri/tauri.release-macos.json --target universal-apple-darwin
     steps:
       - uses: actions/checkout@v7
 
@@ -196,9 +195,7 @@ jobs:
               copy "target/release/bundle/nsis/*-setup.exe"     "QingciCraftLauncher_${VERSION}_x64-setup.exe"
               copy "target/release/bundle/nsis/*-setup.exe.sig" "QingciCraftLauncher_${VERSION}_x64-setup.exe.sig"
               # 便携版：就是安装包里的那个 exe，不安装、双击即用，游戏目录落在 exe 旁边。
-              # 它**不进 COS**，也不参与自动更新——自更新要替换正在运行的 exe，Windows 不允许。
-              # 名字刻意不含 `x64-setup`：COS 的上传清单按 `*x64-setup.exe` 过滤，
-              # 这样便携版不会被顺带传上去。
+              # 收到更新提示时装的是 NSIS 版，等于升级成安装版；这个目录本身不会被替换。
               copy "target/release/qcl-desktop.exe"             "QingciCraftLauncher_${VERSION}_x64-portable.exe"
               ;;
             linux)
@@ -208,8 +205,11 @@ jobs:
               ;;
             macos)
               # 指定了 --target，产物落在 target/<triple>/ 下而不是 target/release/。
-              # 没有 .sig：macOS 不生成 updater 产物（见 tauri.release-macos.json）。
+              # `.app.tar.gz` 是 updater 用的格式（dmg 只用于首次安装）；
+              # universal 一份产物同时服务 darwin-aarch64 与 darwin-x86_64。
               copy "target/universal-apple-darwin/release/bundle/dmg/*.dmg" "QingciCraftLauncher_${VERSION}_universal.dmg"
+              copy "target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz"     "QingciCraftLauncher_${VERSION}_universal.app.tar.gz"
+              copy "target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig" "QingciCraftLauncher_${VERSION}_universal.app.tar.gz.sig"
               ;;
             *)
               echo "::error::未知平台 $KIND"
@@ -225,17 +225,13 @@ jobs:
           path: out/*
           if-no-files-found: error
 
-  # 合并各平台产物、生成清单、推送 COS、建 Release。
-  # 单独成 job 而不是塞进 build：latest.json 要同时包含两个平台的签名，
+  # 合并各平台产物、生成清单、建 Release。
+  # 单独成 job 而不是塞进 build：latest.json 要同时包含三个平台的签名，
   # 只有拿到全部产物之后才写得出来。
-  #
-  # 用 windows-latest 而不是 ubuntu：到 COS 广州是国际链路，COS 会在带宽不达标时
-  # 直接回 400 UserNetworkTooSlow。目前唯一一次成功的大文件上传是在 Windows runner
-  # 上发生的，先沿用它；脚本里另有退避重试兜底。
   publish:
     name: 发布
     needs: [prepare, build]
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
@@ -246,18 +242,11 @@ jobs:
           path: out
           merge-multiple: true
 
-      # 上传脚本要 import cos-nodejs-sdk-v5，所以这个 job 也得装依赖。
-      # 只是装依赖，不编译任何东西。
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - name: 安装依赖
-        run: pnpm install --frozen-lockfile
-
       - name: 生成更新清单
         shell: bash
+        env:
+          # 所有平台的下载地址都指向 GitHub Release——这是唯一的更新通道。
+          DOWNLOAD_BASE_URL: "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}"
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -268,11 +257,10 @@ jobs:
             notes="Qingci Craft Launcher ${VERSION} (manual build, not a published release)"
           fi
 
-          # 清单里只有 Windows。Linux 的 AppImage 不上 COS（80 MB，而且只是自包含的
-          # 打包结果），所以清单里没有 linux 条目——Linux 用户从 GitHub Release 手动下载。
-          # macOS 同理，而且它还是未签名的，更不该走自动更新。
-          # 客户端那边也会据此把 Linux 与 macOS 判为「不支持自动更新」，
-          # 不会给出一个点了就报错的按钮。
+          # 每个桌面平台一项。签名是构建时用同一个 minisign 私钥生成的，
+          # 客户端换平台也用同一把内置公钥校验。
+          # macOS 的 universal 产物写两条（darwin-aarch64 / darwin-x86_64），
+          # 指向同一个文件；Linux 只写 AppImage——deb 由包管理器管，不该自更新。
           platforms=()
           add() {  # $1=目标 $2=glob
             local files=($2)
@@ -283,49 +271,19 @@ jobs:
             platforms+=(--platform "$1=${files[0]}=${files[0]}.sig")
           }
           add windows-x86_64 "out/*x64-setup.exe"
+          add linux-x86_64   "out/*x86_64.AppImage"
+          add darwin-aarch64 "out/*universal.app.tar.gz"
+          add darwin-x86_64  "out/*universal.app.tar.gz"
 
           node scripts/make-latest-json.mjs \
             --version "$VERSION" \
-            --base-url "$PUBLIC_BASE_URL" \
+            --base-url "$DOWNLOAD_BASE_URL" \
             --notes "$notes" \
             "${platforms[@]}" \
             --out out/latest.json
 
           cat out/latest.json
           ls -l out
-
-      # COS 只放「自动更新需要的东西」：Windows 安装包、它的签名、清单。
-      # Linux 的 AppImage 与 deb 只进 GitHub Release——AppImage 有 80 MB，
-      # 传 COS 又慢又占带宽，而它本来就不参与自动更新。
-      - name: 预览将要上传的对象（dry run）
-        if: github.event_name != 'push' && github.event.inputs.dry_run != 'false'
-        shell: bash
-        run: |
-          set -euo pipefail
-          args=()
-          for file in out/*x64-setup.exe out/*x64-setup.exe.sig out/latest.json; do
-            if [ -f "$file" ]; then args+=(--file "$file"); fi
-          done
-          node scripts/publish-cos.mjs \
-            --bucket "$COS_BUCKET" --region "$COS_REGION" --prefix "$COS_PREFIX" \
-            "${args[@]}" --dry-run
-
-      # 清单最后上传（脚本里保证顺序）：它一可读，客户端就会照着里面的地址下载。
-      - name: 推送 COS
-        if: github.event_name == 'push' || github.event.inputs.dry_run == 'false'
-        shell: bash
-        env:
-          TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
-          TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
-        run: |
-          set -euo pipefail
-          args=()
-          for file in out/*x64-setup.exe out/*x64-setup.exe.sig out/latest.json; do
-            if [ -f "$file" ]; then args+=(--file "$file"); fi
-          done
-          node scripts/publish-cos.mjs \
-            --bucket "$COS_BUCKET" --region "$COS_REGION" --prefix "$COS_PREFIX" \
-            "${args[@]}"
 
       - name: 创建 GitHub Release
         if: github.event_name == 'push'

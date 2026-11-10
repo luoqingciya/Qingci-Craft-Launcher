@@ -2,35 +2,43 @@
 
 **中文** | [English](RELEASE.en.md)
 
-Qingci Craft Launcher 的更新走「GitHub Actions 构建 → 腾讯云 COS 分发」：CI 打出 NSIS 安装包并用
-私钥签名，连同更新清单 `latest.json` 一起推到 COS；客户端启动后读清单，发现新版本
-就下载安装包，**先用内置公钥校验签名，校验通过才安装**。
+Qingci Craft Launcher 的更新走「GitHub Actions 构建 → GitHub Release 分发」：CI 打出三平台的
+安装包并用私钥签名，连同更新清单 `latest.json` 一起发布到 GitHub Release；客户端启动后读清单，
+发现新版本就下载安装包，**先用内置公钥校验签名，校验通过才安装**。
 
 ```
-tag v0.1.4            ← 以 0.1.4 为例
+tag v0.1.14           ← 以 0.1.14 为例
    │
    ▼
 GitHub Actions
    ├─ prepare   校验三处版本号 + 签名密钥（不一致就不让两台机器白编译）
-   ├─ build     matrix：Windows 出 NSIS / Linux 出 AppImage + deb（都签名）
-   └─ publish   合并产物 → 生成 latest.json → 推 COS → 建 GitHub Release
-                   │
-                   ├─ COS（只放自动更新需要的）
-                   │    ├─ QingciCraftLauncher_0.1.4_x64-setup.exe
-                   │    ├─ ...exe.sig
-                   │    └─ latest.json            ← 最后传
+   ├─ build     matrix：Windows NSIS / Linux AppImage + deb / macOS dmg + .app.tar.gz（都签名）
+   └─ publish   合并产物 → 生成 latest.json → 建 GitHub Release
                    │
                    └─ GitHub Release（全部产物）
-                        └─ 上面三个 + AppImage + AppImage.sig + deb
+                        ├─ QingciCraftLauncher_0.1.14_x64-setup.exe + .sig
+                        ├─ ..._x86_64.AppImage + .sig
+                        ├─ ..._universal.app.tar.gz + .sig
+                        ├─ ..._universal.dmg / ..._amd64.deb / 便携版
+                        └─ latest.json
    │
    ▼
-客户端启动 → GET https://qcl.luoqingciya.cn/releases/latest.json
+客户端启动 → GET github.com/.../releases/latest/download/latest.json
    ├─ 版本不新 → 什么都不做（不打扰）
    └─ 有新版本 → 「关于」页提示 → 用户点「下载并安装」→ 校验签名 → 静默安装 → 自动重启
 ```
 
-清单里只有 `windows-x86_64` 一条：Linux 的 AppImage 有 83.5 MB，又不参与自动更新，
-放 COS 上只是白占带宽，所以它和 deb 一起只留在 GitHub Release。
+清单覆盖**三个平台四条目标**：`windows-x86_64`（NSIS）、`linux-x86_64`（AppImage）、
+`darwin-aarch64` 与 `darwin-x86_64`（同一个 universal `.app.tar.gz`）。deb 由包管理器管，
+便携版不参与自更新，所以没有它们的条目。
+
+## 更新通道
+
+只有 GitHub Release。COS（`qcl.luoqingciya.cn`）已于 2026-11-10 关闭并从工作流与
+端点列表中移除——`scripts/publish-cos.mjs` 一并删除，仓库里不再有 COS 的任何配置。
+
+**代价要写明**：0.1.14 及更早的客户端端点列表里只有 COS，它们**收不到**后续更新。
+这是关闭 COS 的既定代价，不是缺陷；受影响的用户需要从 GitHub Release 手动下载一次。
 
 ## 一次性配置
 
@@ -61,8 +69,6 @@ Settings → Secrets and variables → Actions：
 
 | 名称 | 值 |
 | --- | --- |
-| `TENCENT_SECRET_ID` | 腾讯云 API 密钥 |
-| `TENCENT_SECRET_KEY` | 同上 |
 | `TAURI_SIGNING_PRIVATE_KEY` | **私钥文件的全部内容**：一整行 base64，没有换行 |
 | `QCL_MS_CLIENT_ID` | Azure 应用注册里的「应用程序(客户端) ID」 |
 
@@ -87,50 +93,8 @@ ID 在每次请求的表单里明文出现。编译期注入只解决「仓库�
 > 为什么密码可有可无：私钥和密码都放在同一个 secret 存储里，多一个密码并不增加
 > 实际防护。只有在把私钥文件放到别处（比如离线保存）时，密码才有意义。
 
-### 3. COS 侧
-
-- 桶：`qcl-1331847184`，地域 `ap-guangzhou`，访问权限**私有读写**，路径前缀 `releases/`
-- 自定义域名：`qcl.luoqingciya.cn`，**必须启用 HTTPS**——客户端拒绝 http 端点
-- 桶不能开启「防盗链」白名单，否则客户端拿不到清单
-
-**读权限怎么给**。桶是**私有读写**，`releases/` 能被匿名读靠两层同时成立：
-
-| 机制 | 现状 | 依据 |
-| --- | --- | --- |
-| 对象 ACL | 上传时显式设 `public-read` | `scripts/publish-cos.mjs` 里的 `ACL: "public-read"` |
-| 桶策略 | 允许匿名读 `releases/*` 前缀，**不勾「列出对象列表」** | `releases/nope.txt` 返回 404 而非 403 |
-
-两层冗余是有意的，但排查 403 时要知道**有两处**——只改一处可能看不出任何变化。
-
-不要把桶直接设成「公有读私有写」：那会让桶里**任何**东西都可匿名读，而实际只有
-`releases/` 需要公开。
-
-两个前提：
-
-1. **桶不能开「禁止对象级 ACL」**。开了之后 `putObject` 带 ACL 会直接报错，上传全挂；
-   那种情况下只能靠桶策略，把对象 ACL 那一层去掉。
-2. 桶策略的资源写 `qcl-1331847184/releases/*`（**注意是复数 `releases`**）。
-   前缀写错一个字母就一条都匹配不上，而且**不会立刻暴露**——对象 ACL 还在，文件照样
-   能读，直到 ACL 那层失效才会以 403 的形式出现。
-
-任何时候都可以用这四条命令核对权限是否真的如上面所述（2026-10-27 实测通过）：
-
-```bash
-# 1. 清单本身：200 才算通
-curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/releases/latest.json
-# 2. 前缀内的不存在的键：404 = 这个前缀允许匿名读
-curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/releases/nope.txt
-# 3. 前缀外的不存在的键：403 = 桶确实是私有的
-curl -o /dev/null -w "%{http_code}\n" https://qcl.luoqingciya.cn/nope.txt
-# 4. 匿名列举：403 才算没开放（否则任何人都能枚举发布历史）
-curl -s -o /dev/null -w "%{http_code}\n" "https://qcl.luoqingciya.cn/?prefix=releases/"
-```
-
-关键判读：**私有桶对不存在的对象返回 403，允许匿名读的前缀下返回 404**。
-只测第 1 条分不清「权限没配好」和「文件还没上传」；几条一起测才能定位。
-
-第 4 条容易被忽略：`/releases/`（带尾斜杠）返回 200 是 COS 的目录占位，**不代表**能列目录；
-真正的列举请求带 `?prefix=` 查询串，它返回 403 才说明列表权限没开。
+COS 的配置（桶、自定义域名、匿名读策略）随 2026-11-10 关闭 COS 一并退役，
+不再需要——见下面的「平台现状」。
 
 ## 发版
 
@@ -155,7 +119,7 @@ git push origin main --tags
 第 2 步容易漏——v0.1.1 和 v0.1.2 都漏了，日志停在项目最初 5 个 PR 上，事后才补回来。
 原因很朴素：规则只写在 CONTRIBUTING 里说「发布前生成」，没落到具体某一步，就一定会忘。
 
-标签推上去后 `Release` workflow 自动跑：构建 → 签名 → 生成清单 → 推 COS → 建
+标签推上去后 `Release` workflow 自动跑：构建 → 签名 → 生成清单 → 建
 GitHub Release（附安装包与 `.sig`）。
 
 **不要复用已存在的标签**：客户端按 `latest.json` 里的版本号判断新旧，同一个版本号
@@ -163,8 +127,8 @@ GitHub Release（附安装包与 `.sig`）。
 
 ### 先验证再发布
 
-`workflow_dispatch` 默认 `dry_run = true`：只构建并打印 `latest.json` 与将要上传的
-对象，不碰 COS、不建 Release。第一次配好之后建议先这样跑一遍。
+`workflow_dispatch`（手动触发）只构建并打印 `latest.json`，**不创建 Release**——
+适合在正式打标签前验证构建与签名。
 
 ### 发版前冒烟（安装链路）
 
@@ -188,43 +152,45 @@ cargo run -p qcl-cli -- 1.20.1 --dir /tmp/qcl-smoke-fabric --fresh \
 
 ## 平台现状
 
-两条分发通道，故意分开：
+唯一的分发与更新通道是 GitHub Release：
 
-| 通道 | 内容 | 用途 |
-| --- | --- | --- |
-| COS（`qcl.luoqingciya.cn/releases/`） | Windows NSIS 安装包 + `.sig` + `latest.json` | **自动更新通道** |
-| GitHub Releases | 上面那些，外加 Windows 便携版、macOS 的 dmg、Linux 的 AppImage 与 deb | 人工下载 |
+| 产物 | 用途 |
+| --- | --- |
+| Windows NSIS 安装包 + `.sig` | 自动更新（`windows-x86_64`） |
+| Linux AppImage + `.sig` | 自动更新（`linux-x86_64`）；deb 不参与 |
+| macOS universal `.app.tar.gz` + `.sig` | 自动更新（`darwin-aarch64` 与 `darwin-x86_64` 各一条） |
+| macOS dmg、Windows 便携版、Linux deb | 仅人工下载 |
 
-所以 `latest.json` 里**只有** `windows-x86_64` 一条。macOS 与 Linux 产物留在
-GitHub Releases：AppImage 有 83 MB、dmg 有 12 MB，又都不参与自动更新，
-放 COS 上只是白占带宽。
+`latest.json` 本身作为 Release 资产发布，客户端经
+`releases/latest/download/latest.json` 读取。
 
 体积取自 0.1.5 的实测产物，版本之间会有小幅浮动（前端改动大时更明显）——发布前以实际产物为准，
 不要照抄这几个数字。
 
 - **Windows 安装版**：NSIS 3.8 MB，复用系统 WebView2，自动更新走静默安装 + 重启。
 - **Windows 便携版**：12.7 MB，就是安装包里那个 exe，双击即用，游戏目录落在 exe 旁边。
-  不参与自动更新——自更新要替换正在运行的 exe，Windows 不允许。
-- **macOS 通用 dmg**：12.1 MB，`--target universal-apple-darwin`，一次构建同时含 arm64 与 x86_64，
-  用户不必挑架构。**未签名、未公证**：没有付费开发者账号，用户首次打开要右键「打开」
-  或 `xattr -dr com.apple.quarantine`，README 里写了三种方式。
-- **macOS 走独立的 release 配置**（`tauri.release-macos.json`），把
-  `createUpdaterArtifacts` 关掉。两个理由：打开它会要求构建时提供签名私钥；
-  而 `.app.tar.gz` 的解压依赖 updater 的 `zip` 特性，那个特性因两个解压漏洞
-  （RUSTSEC-2026-0367 / 0368）被关着（见 `src-tauri/Cargo.toml`）。
+  会收到更新提示，安装的是 NSIS 版（等于升级成安装版）；便携版目录本身不会被替换。
+- **macOS 通用 dmg + `.app.tar.gz`**：12.1 MB，`--target universal-apple-darwin`，
+  一次构建同时含 arm64 与 x86_64，用户不必挑架构。**未签名、未公证**：没有付费开发者账号，
+  用户首次打开要右键「打开」或 `xattr -dr com.apple.quarantine`，README 里写了三种方式。
+  dmg 用于首次安装；自动更新走 `.app.tar.gz`——它的解压走 tar+gz，**不依赖**
+  因 RUSTSEC-2026-0367/0368 关掉的 `zip` 特性（曾误以为依赖，查过
+  tauri-plugin-updater 2.14.0 的源码后更正，见 `src-tauri/Cargo.toml`）。
 - **Linux AppImage**：83.5 MB。自包含，把 WebKitGTK + JavaScriptCore + GTK3 整套塞进去了
-  （解出来 530 个文件），所以体积是 deb 的十几倍。
-- **Linux deb**：5.3 MB，依赖发行版的 `libwebkit2gtk-4.1`。
-- **macOS 与 Linux 都不提供自动更新**。「关于」页按 UA 识别（Linux / Macintosh），
-  直接引导到下载页，而不是给一个点了就报错的按钮。
+  （解出来 530 个文件），所以体积是 deb 的十几倍。自动更新直接替换 AppImage 文件。
+- **Linux deb**：5.3 MB，依赖发行版的 `libwebkit2gtk-4.1`。**没有更新条目**：
+  deb 的文件由包管理器管，updater 替换 `/usr/bin` 下的文件既越权也会和 dpkg 打架，
+  所以 deb 用户保持手动更新。
+- macOS 的产物仍未做 Apple 签名/公证（无付费开发者账号）；minisign 签名照常生成，
+  更新安装不受 Gatekeeper 影响（quarantine 属性只出现在浏览器下载的文件上）。
 
 ## 客户端行为
 
 - 启动后静默查一次；查到新版本才在「关于」标签上点红点，查不到或网络失败**什么都不显示**
   （一个「检查更新失败」的红条出现在刚打开的启动器上，只会让人以为程序坏了）
 - 关于页可以手动「检查更新」，失败时会显示原因
-- **只支持安装版自动更新**：便携版没有 `uninstall.exe`，Windows 不允许替换正在运行的
-  exe，界面改为引导用户去下载页
+- 端点只有一个（GitHub Release）；它的 `releases/latest/download/` 是 302 跳转，
+  最终指向该 Release 的资产
 - 安装包签名对不上时**拒绝安装**（`requireSignedVersion` 还会拒绝「清单里的版本号与
   签名里的版本号不一致」的降级攻击）
 
@@ -232,8 +198,10 @@ GitHub Releases：AppImage 有 83 MB、dmg 有 12 MB，又都不参与自动更�
 
 | 现象 | 查什么 |
 | --- | --- |
-| 关于页一直是「已是最新版本」 | `curl https://qcl.luoqingciya.cn/releases/latest.json` 是否 200、版本号是否比本地大 |
-| 提示检查失败 | 域名证书、桶权限、`latest.json` 是否真的在 `releases/` 下 |
+| 关于页一直是「已是最新版本」 | `curl -L https://github.com/luoqingciya/Qingci-Craft-Launcher/releases/latest/download/latest.json` 是否 200、版本号是否比本地大 |
+| 提示检查失败 | `latest.json` 是否真的在该 Release 的资产里；GitHub 是否可达（直连不通时开代理） |
+| 0.1.14 及更早版本不再提示更新 | 它们只读已关闭的 COS，属预期；请手动下载一次 |
 | 下载到 100% 后失败 | 签名不匹配：私钥与 `pubkey` 不是一对，或清单里的 `signature` 不是 `.sig` 原文 |
 | 安装后版本没变 | 装到了另一个目录（便携版被当成了安装版），或同时存在 MSI 装的旧版本 |
+| Linux 上更新失败 | 只支持 AppImage 方式运行；deb 安装的请走包管理器 |
 | 切到 BMCLAPI 后没变快，甚至仍报网络错误 | 镜像失败会**自动回落官方**。BMCLAPI 的元数据端点会 302 到它自己的 CDN（`bmclapi*.sakura.sld.tw`），部分网络不通；Forge maven 那条线则走 CERNET/USTC，通常可用 |
