@@ -8,11 +8,34 @@
 > 本文件由 git-cliff 依据 Conventional Commits 自动生成，请勿手工编辑。
 > 生成命令见 CONTRIBUTING.md。
 
+## [0.1.15] - 2026-11-10
+
+### 新增
+
+- **update**：更新通道改为 GitHub Release，补全 macOS / Linux 自动更新 (#141)
+
+### 持续集成
+
+- **deps**：bump the actions group with 2 updates (#135)
+
+### 依赖更新
+
+- **deps**：bump the js-minor-patch group with 4 updates (#136)
+- **deps**：bump the rust-minor-patch group with 4 updates (#137)
+- **deps**：bump zip from 9.2.1 to 9.4.1 in the rust-minor-patch group across 1 directory (#138)
+- **deps**：bump the js-minor-patch group across 1 directory with 5 updates (#139)
+- **deps**：bump jsdom from 30.1.3 to 31.0.0（修复 #140 的锁文件） (#142)
+
 ## [0.1.14] - 2026-10-30
 
 ### 修复
 
 - **neoforge**：列表改走镜像接口；读取失败不再伪装成「没有可用」 (#132)
+- **ui**：版本清单与模组搜索的「失败」不再显示成「空结果」 (#134)
+
+### 其他
+
+- **release**：0.1.14 (#133)
 
 ## [0.1.13] - 2026-10-30
 
