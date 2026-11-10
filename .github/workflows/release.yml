@@ -244,11 +244,13 @@ jobs:
 
       - name: 生成更新清单
         shell: bash
-        env:
-          # 所有平台的下载地址都指向 GitHub Release——这是唯一的更新通道。
-          DOWNLOAD_BASE_URL: "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}"
         run: |
           set -euo pipefail
+
+          # 所有平台的下载地址都指向 GitHub Release——这是唯一的更新通道。
+          # 必须在 run 里拼而不是放 step 级 env：Actions 的 env 值是字面传递的，
+          # `${GITHUB_REPOSITORY}` 不会被展开（dry run 实测踩过，URL 原样进了清单）。
+          DOWNLOAD_BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}"
           shopt -s nullglob
 
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
