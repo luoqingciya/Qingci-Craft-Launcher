@@ -3239,7 +3239,7 @@ dependencies = [
 
 [[package]]
 name = "qcl-auth"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "qcl-core",
  "qcl-net",
@@ -3253,7 +3253,7 @@ dependencies = [
 
 [[package]]
 name = "qcl-cli"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "qcl-core",
  "qcl-install",
@@ -3267,7 +3267,7 @@ dependencies = [
 
 [[package]]
 name = "qcl-core"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "insta",
  "regex-lite",
@@ -3278,7 +3278,7 @@ dependencies = [
 
 [[package]]
 name = "qcl-desktop"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "dunce",
  "keyring",
@@ -3305,7 +3305,7 @@ dependencies = [
 
 [[package]]
 name = "qcl-install"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "dunce",
  "qcl-core",
@@ -3321,7 +3321,7 @@ dependencies = [
 
 [[package]]
 name = "qcl-java"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "qcl-net",
  "serde",
@@ -3334,7 +3334,7 @@ dependencies = [
 
 [[package]]
 name = "qcl-mods"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "qcl-net",
  "serde",
@@ -3347,7 +3347,7 @@ dependencies = [
 
 [[package]]
 name = "qcl-net"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -3364,14 +3364,14 @@ dependencies = [
 
 [[package]]
 name = "qcl-platform"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "qcl-core",
 ]
 
 [[package]]
 name = "qcl-runtime"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "qcl-core",
  "tempfile",
